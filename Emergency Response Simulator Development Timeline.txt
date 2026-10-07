@@ -1,0 +1,427 @@
+# Emergency Response Simulator — Development Timeline
+
+**Assumption:** A small full-time team (4–6 developers, 1–2 designers, 1 subject-matter expert). Durations are indicative and assume sequential dependencies. Many phases can run in parallel. Calendar time can be reduced by parallel tracks.
+
+**Ordering principle:** Start with the foundational data and simulation architecture, then build the core COP/C2 loop, then layer on the high-impact training features (communications, human factors, AAR, multi-agency, instructor tools), then add advanced realism and supporting systems.
+
+---
+
+## Phase 0 — Architecture & Foundations  
+**Weeks 1–4 | 4 weeks**
+
+**Focus:** Define the data model, event stream, simulation tick, and module boundaries.
+
+**Deliverables:**
+- Core entity model: Unit, Incident, Resource, Report, Alert, Event, Zone, GISLayer, User, Agency, IAP, OperationalPeriod.
+- Append-only time-stamped event stream architecture.
+- Simulation engine skeleton: true world state vs perceived state.
+- Database schema: PostgreSQL + PostGIS for static/dynamic GIS.
+- API contracts between modules: COP, C2, IAP, GIS, AVL, Plume, Comms, AAR.
+- UI shell: main dashboard layout, top/left/right pop-out panels, map placeholder.
+- Technical stack decision: C# .NET for UI/engine, Python for hazard models, PostGIS.
+
+**Dependencies:** None.
+
+---
+
+## Phase 1 — GIS & Map Core  
+**Weeks 5–10 | 6 weeks**
+
+**Focus:** Geographic foundation and map rendering.
+
+**Deliverables:**
+- Static GIS ingestion: roads, buildings, rivers, railways, terrain, hospitals, fire/police stations, shelters, critical infrastructure.
+- Dynamic GIS objects: road closures, evacuation zones, incident perimeters, search areas, operational zones.
+- Map rendering: base map, zoom/pan, layer toggles.
+- Top panel: satellite, weather, traffic, terrain views; area code toggles.
+- Left panel: toggle emergency vehicles, resources, incidents, zones.
+- Coordinate systems, projections, spatial indexing.
+
+**Dependencies:** Phase 0.
+
+---
+
+## Phase 2 — COP Core & Situational Data  
+**Weeks 11–16 | 6 weeks**
+
+**Focus:** The Common Operating Picture as a shared information system.
+
+**Deliverables:**
+- Incident objects: type, location, priority, status, threats, casualties, assigned resources, IC.
+- Resource objects: callsign, type, location, status, assignment, crew, equipment, ETA, comms.
+- Status dynamics: AVAILABLE → DISPATCHED → EN ROUTE → ON SCENE → OPERATING → TRANSPORTING → AVAILABLE.
+- Reports & alerts: source, timestamp, confidence, location accuracy, verification status (Known/Reported/Estimated/Suspected/Confirmed).
+- COP display: incident status board, resource board, alerts/intelligence feed.
+- Time dimension: history log, event timeline, replay foundation.
+- Attention management: critical alerts, resource shortages, situation changes, communication failures.
+- Operational boundaries: Hot/Warm/Cold zones, evacuation zones, command posts, staging areas.
+
+**Dependencies:** Phase 1.
+
+---
+
+## Phase 3 — AVL & Resource Tracking  
+**Weeks 17–22 | 6 weeks**
+
+**Focus:** Real-time location and status of mobile resources.
+
+**Deliverables:**
+- AVL feed simulation: vehicle ID, lat/long, timestamp, speed, heading, status.
+- Map icons with movement, heading, ETA.
+- Resource detail panel: location, speed, heading, crew, assignment, ETA, last update.
+- ETA calculation using GIS routing and traffic.
+- Derived alerts: stopped movement, route deviation, communication loss.
+- AVL + GIS integration: distance to incident, routing complications, road closures.
+
+**Dependencies:** Phase 2.
+
+---
+
+## Phase 4 — C2 Dispatch & Command  
+**Weeks 23–28 | 6 weeks**
+
+**Focus:** Command and control execution — “Make it happen.”
+
+**Deliverables:**
+- Dispatch interface: assign units to incidents, reassign, cancel.
+- Orders, requests, notifications, approvals.
+- ICS command structure: Incident Commander, Operations, Planning, Logistics, Finance/Admin.
+- Span of control mechanics: cognitive/organizational penalty for unwieldy structures.
+- Resource request: mutual aid, additional resources, specialist teams.
+- Integration with COP and resource board.
+
+**Dependencies:** Phase 3.
+
+---
+
+## Phase 5 — IAP Builder & ICS  
+**Weeks 29–34 | 6 weeks**
+
+**Focus:** Incident Action Plan creation and ICS compliance.
+
+**Deliverables:**
+- ICS organization chart builder.
+- Objective builder: strategic → operational → tactical.
+- Resource assignment board: unit → assignment.
+- Communications plan, medical plan, safety plan.
+- Operational periods: define, reassess, version IAP.
+- IAP approval workflow.
+- Integration with COP: pull current state, push assignments.
+
+**Dependencies:** Phase 4.
+
+---
+
+## Phase 6 — Simulation Engine & Basic AI  
+**Weeks 35–42 | 8 weeks**
+
+**Focus:** The world beyond the player’s perception.
+
+**Deliverables:**
+- Agent-based modeling: responders, civilians, vehicles.
+- Basic hazard models: fire spread, flood, simple plume.
+- Traffic simulation: gridlock, road closures, route changes.
+- Cascading effects: power failure → traffic signal failure → ambulance delay.
+- Dynamic scenario updates: wind, release rate, road closures, casualty count, hospital capacity.
+- AI-controlled agencies: other fire/EMS/police units.
+- Separation of true world state from COP perceived state.
+
+**Dependencies:** Phase 5.
+
+---
+
+## Phase 7 — Communications Realism  
+**Weeks 43–48 | 6 weeks**  
+**High-impact training feature #2**
+
+**Focus:** The fog of war through realistic communications.
+
+**Deliverables:**
+- Multi-channel radio: fire, EMS, police, inter-agency.
+- Push-to-talk simulation, call signs, closed-loop communication, read-backs.
+- Channel congestion, radio discipline.
+- Degraded communications: dead zones, cell tower failures, battery life, interoperability patches.
+- Delays, missed calls, corrupted messages.
+- Incoming emergency calls, field reports, inter-agency chats.
+- Language and cultural barriers.
+- Right panel: communication hub toggles and display.
+
+**Dependencies:** Phase 6.
+
+---
+
+## Phase 8 — Human Factors & Crew Management  
+**Weeks 49–54 | 6 weeks**  
+**High-impact training feature #1**
+
+**Focus:** Making resources feel human.
+
+**Deliverables:**
+- Responder fatigue, stress, shift cycles.
+- Crew continuity, handover, briefings, information loss.
+- Personnel Accountability Reports (PAR), Mayday simulation, emergency traffic, evacuation signals.
+- Skill and certification tracking: Hazmat, USAR, ALS, Swiftwater.
+- Psychological first aid, peer support, rotation, rehab.
+
+**Dependencies:** Phase 7.
+
+---
+
+## Phase 9 — After-Action Review & Metrics  
+**Weeks 55–60 | 6 weeks**  
+**High-impact training feature #4**
+
+**Focus:** The key training value — learning from decisions.
+
+**Deliverables:**
+- Decision timelines: replay every action, message, dispatch.
+- Performance metrics: time to dispatch, resource utilization, communication errors, objective completion.
+- Heatmaps and analytics: resource commitment, delays.
+- Branching AAR: compare player decisions to optimal/alternative outcomes.
+- Exportable reports for certification and debriefing.
+
+**Dependencies:** Phase 2 (event stream), Phase 8.
+
+---
+
+## Phase 10 — Multi-Agency & Interoperability  
+**Weeks 61–66 | 6 weeks**  
+**High-impact training feature #3**
+
+**Focus:** Joint command and inter-agency friction.
+
+**Deliverables:**
+- Jurisdictional boundaries: city/county/state/federal.
+- Unified Command: shared command, not just coordination.
+- Liaison and PIO roles.
+- EOC activation levels: normal to full activation.
+- Interagency friction: competing priorities, resource hoarding, information silos.
+- Mutual aid agreements and authority disputes.
+
+**Dependencies:** Phase 9.
+
+---
+
+## Phase 11 — Instructor Tools & Multiplayer  
+**Weeks 67–72 | 6 weeks**  
+**High-impact training feature #5**
+
+**Focus:** Turning it into a team trainer.
+
+**Deliverables:**
+- Instructor console: control injects, monitor player actions, role-play.
+- Multiplayer roles: IC, Operations, Planning, Logistics, PIO, Safety, Liaison.
+- AI-driven role players: other agencies, civilians, media, politicians.
+- Voice communication: simulated radio with push-to-talk, channels, recording.
+- Observer mode for assessment.
+
+**Dependencies:** Phase 10.
+
+---
+
+## Phase 12 — Plume & Hazard Models  
+**Weeks 73–78 | 6 weeks**
+
+**Focus:** Advanced dispersion prediction.
+
+**Deliverables:**
+- Python integration for plume models.
+- Chemical release, smoke, toxic gas, biological aerosols, radioactive material.
+- Inputs: chemical, quantity, release rate, temperature, pressure, weather, terrain.
+- Output: geographic zones (low, moderate, high concentration).
+- GIS overlay: schools, hospitals, residential areas inside plume.
+- Alerts: “School within projected hazard area.”
+- Dynamic updates: wind shifts, revised release rate.
+
+**Dependencies:** Phase 6.
+
+---
+
+## Phase 13 — Public, Media, Political & Legal  
+**Weeks 79–84 | 6 weeks**
+
+**Focus:** External pressures.
+
+**Deliverables:**
+- Media and social media: press conferences, rumours, misinformation.
+- Political pressure: elected officials, agency heads, community leaders.
+- Legal and liability: documentation, negligence, evacuation authority.
+- Public behaviour: evacuation compliance, panic, looting, spontaneous volunteers, convergence.
+- Vulnerable populations: elderly, disabled, homeless, pets, non-English speakers.
+- Family reunification and victim assistance.
+
+**Dependencies:** Phase 11.
+
+---
+
+## Phase 14 — Logistics & Resource Sustainment  
+**Weeks 85–90 | 6 weeks**
+
+**Focus:** Supporting the operation over time.
+
+**Deliverables:**
+- Supply chain: fuel, food, water, foam, medical supplies, batteries, PPE, sanitation.
+- Base camp and staging area management.
+- Equipment maintenance and failure: apparatus breakdowns, repair timelines.
+- Cost tracking and finance: personnel time, equipment costs, contracts, reimbursement.
+- Mutual aid and resource ordering: local, state, federal.
+
+**Dependencies:** Phase 13.
+
+---
+
+## Phase 15 — Medical, Mass Casualty & Public Health  
+**Weeks 91–96 | 6 weeks**
+
+**Focus:** Health and medical surge.
+
+**Deliverables:**
+- Triage and patient tracking: tags, transport destinations, hospital capacities.
+- Specialty centres: trauma, burn, pediatric, psychiatric.
+- Blood, morgue, mass fatality: surge capacity, family assistance.
+- Public health interventions: quarantine, isolation, mass prophylaxis, points of dispensing.
+- Behavioural health: crisis counselling, psychological triage.
+
+**Dependencies:** Phase 14.
+
+---
+
+## Phase 16 — Evacuation, Shelter & Infrastructure  
+**Weeks 97–102 | 6 weeks**
+
+**Focus:** Population protection and critical systems.
+
+**Deliverables:**
+- Evacuation modelling: zones, routes, traffic control, transportation assets, re-entry.
+- Shelter management: capacity, registration, supplies, security.
+- Critical infrastructure interdependencies: power, water, gas, telecom, transportation.
+- Cyber and GPS degradation: jamming, spoofing, ransomware.
+- Environmental impact: air, water, soil, wildlife.
+
+**Dependencies:** Phase 15.
+
+---
+
+## Phase 17 — Documentation & ICS Forms  
+**Weeks 103–108 | 6 weeks**
+
+**Focus:** Standardized documentation.
+
+**Deliverables:**
+- ICS forms: 201–215, 215A, 220, situation reports.
+- IAP versioning and operational periods.
+- Decision logs: every order, request, approval time-stamped.
+- Safety and medical plans embedded in IAP.
+
+**Dependencies:** Phase 5, Phase 9.
+
+---
+
+## Phase 18 — Scenario Design & Adaptive Training  
+**Weeks 109–114 | 6 weeks**
+
+**Focus:** Reusable, dynamic training content.
+
+**Deliverables:**
+- Scenario editor: triggers, injects, branching, dynamic events.
+- Adaptive difficulty based on player performance.
+- Randomized events: weather shifts, equipment failures, new incidents.
+- Real-world data integration: historical incidents, weather APIs, GIS data.
+- Incident-within-incident: responder down, active shooter, secondary device.
+
+**Dependencies:** Phase 17.
+
+---
+
+## Phase 19 — Data Standards & Integration  
+**Weeks 115–118 | 4 weeks**
+
+**Focus:** Interoperability and external systems.
+
+**Deliverables:**
+- NIMS/ICS compliance: terminology, forms, organization.
+- Data standards: CAP, EDXL, NIEM, HL7 for hospital data.
+- API-first architecture: external tools feed/consume data.
+- Modular services: COP, IAP, C2, GIS, AVL, Plume, Comms, AAR as separate systems.
+
+**Dependencies:** Phase 18.
+
+---
+
+## Phase 20 — UI/UX & Accessibility  
+**Weeks 119–122 | 4 weeks**
+
+**Focus:** Usability under pressure.
+
+**Deliverables:**
+- Customizable dashboards: multi-monitor, hotkeys, voice commands.
+- Accessibility: color-blind modes, screen readers, dyslexia-friendly fonts, localization.
+- Dark mode and night operations.
+- Mobile companion app for field reports and check-ins.
+
+**Dependencies:** Phase 19.
+
+---
+
+## Phase 21 — Ethical & Psychological Considerations  
+**Weeks 123–124 | 2 weeks**
+
+**Focus:** Responsible training.
+
+**Deliverables:**
+- Content warnings and debrief support.
+- Avoid glorifying trauma: focus on decision-making.
+- Bias awareness: scenarios don’t reinforce stereotypes.
+- Psychological safety: allow failure without humiliation.
+
+**Dependencies:** Phase 20.
+
+---
+
+## Critical Path & Minimum Viable Product
+
+**Critical path:**  
+Phase 0 → Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6 → Phase 7 → Phase 8 → Phase 9 → Phase 10 → Phase 11.
+
+**Minimum Viable Product (MVP):**  
+Phases 0–6 plus a basic version of Phase 9 (AAR). This gives a functional COP, GIS/AVL, C2 dispatch, IAP builder, simulation engine with basic AI, and after-action replay. It is enough to train core decision-making under uncertainty.
+
+**Parallelization opportunities:**
+- Phase 12 (Plume) can run alongside Phases 7–11 with a dedicated Python developer.
+- Phase 17 (Documentation) can start after Phase 5.
+- Phase 18 (Scenario Editor) can start after Phase 6.
+- Phase 20 (UI/UX) should be ongoing throughout, not left to the end.
+- Phase 21 (Ethics) can be integrated into design reviews from Phase 0.
+
+**Total estimated duration:** ~124 weeks (~2.4 years) sequential. With parallel tracks and a larger team, calendar time can be reduced to 18–24 months for a full-featured release, or 9–12 months for a strong MVP.
+
+---
+
+## Gantt Overview (Text)
+
+```
+Phase 0  ████
+Phase 1      ██████
+Phase 2            ██████
+Phase 3                  ██████
+Phase 4                        ██████
+Phase 5                              ██████
+Phase 6                                    ████████
+Phase 7                                            ██████
+Phase 8                                                  ██████
+Phase 9                                                        ██████
+Phase 10                                                             ██████
+Phase 11                                                                   ██████
+Phase 12        ██████ (parallel with 7–11)
+Phase 13                                                                         ██████
+Phase 14                                                                               ██████
+Phase 15                                                                                     ██████
+Phase 16                                                                                           ██████
+Phase 17                              ██████ (parallel after 5)
+Phase 18                                    ██████ (parallel after 6)
+Phase 19                                                                                                 ████
+Phase 20      ████████████████████████████████████████████████████████████████████████████████████████████████
+Phase 21      ████████████████████████████████████████████████████████████████████████████████████████████████
+```
+
+This timeline prioritizes the foundational systems first, then the core command-and-control loop, then the high-impact training features that differentiate the simulator, and finally the advanced realism and supporting systems that complete the experience.

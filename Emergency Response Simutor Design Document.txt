@@ -1,0 +1,1318 @@
+# Emergency Response Simulator — Complete Design Document
+
+**Version:** 1.0  
+**Status:** Design Specification  
+**Purpose:** To define the architecture, features, and operational concepts for a Command and Control (C2) emergency-response training simulator that places the user in the role of an Incident Commander, dispatcher, or agency chief.
+
+---
+
+## Table of Contents
+
+1. Executive Summary
+2. Vision and Objectives
+3. Target Users and Use Cases
+4. Core Concepts and Terminology
+5. System Architecture Overview
+6. Common Operating Picture (COP)
+7. GIS, AVL, and Plume Models
+8. Incident Action Plan (IAP) and ICS
+9. Command and Control (C2)
+10. Simulation Engine and AI
+11. Information, Uncertainty, and Fog of War
+12. Human Factors and Crew Management
+13. Communications Realism
+14. Multi-Agency and Interoperability
+15. Public, Media, Political, and Legal Pressures
+16. Logistics and Resource Sustainment
+17. Medical, Mass Casualty, and Public Health
+18. Evacuation, Shelter, and Infrastructure
+19. Documentation and ICS Forms
+20. Scenario Design and Adaptive Training
+21. Instructor Tools and Multiplayer
+22. Assessment, Metrics, and After-Action Review
+23. Data Standards and Integration
+24. UI/UX and Accessibility
+25. Ethical and Psychological Considerations
+26. Technical Architecture and Recommended Stack
+27. Development Roadmap and Priorities
+28. Appendices
+
+---
+
+## 1. Executive Summary
+
+The **Emergency Response Simulator** is a Command and Control (C2) training platform focused on high-level cognitive and organizational skill development for dispatchers, incident commanders, and agency chiefs. It recreates the high-stress, information-heavy environment of an Emergency Operations Centre (EOC) or mobile command post, forcing leaders to manage logistics, communication, and overall crisis strategy.
+
+The simulator is not a video game. Its interface resembles a high-tech data dashboard, centred on a **Common Operating Picture (COP)** that aggregates live simulated GIS data, weather, plume models, and real-time vehicle tracking. Supporting modules include resource and status boards, multi-channel communication hubs, and an **Incident Action Plan (IAP) Builder** based on the FEMA Incident Command System (ICS).
+
+The system injects controlled chaos into a digital control room. The trainee assesses the COP, dispatches resources, and adapts as the simulation dynamically updates. The core training value lies in **managing the fog of war**, optimising limited resources, enabling inter-agency interoperability, and conducting detailed after-action reviews.
+
+---
+
+## 2. Vision and Objectives
+
+### 2.1 Vision
+
+To create the definitive C2 simulator that builds **cognitive and organizational muscle memory** for emergency response leaders, enabling them to make better decisions under pressure, with incomplete information, and across multiple agencies.
+
+### 2.2 Primary Objectives
+
+- **Manage the Fog of War:** Train leaders to make critical, life-or-death decisions using incomplete, delayed, or contradictory information.
+- **Resource Optimization:** Teach users to balance limited resources, hold back reserves, and trigger mutual-aid agreements.
+- **Interoperability & Joint Command:** Force different branches (Police, Fire, EMS, Coast Guard) to communicate through unified channels, preventing siloed operations.
+- **After-Action Review (AAR):** Log every keystroke, radio transmission, and dispatch decision to generate precise data timelines showing where decision-making broke down.
+
+### 2.3 Design Principles
+
+- The COP is **not** a “truth screen.” It is the best available representation of what the organisation currently believes is happening.
+- The player should sometimes make the correct decision with incomplete information and still have an incident deteriorate. The objective is not perfection; it is good decision-making under uncertainty.
+- Reality diverges from the plan. The system must model friction, failure, and changing conditions.
+
+---
+
+## 3. Target Users and Use Cases
+
+### 3.1 Primary Users
+
+- Emergency dispatchers
+- Incident commanders
+- Agency chiefs (Fire, EMS, Police)
+- EOC staff (Operations, Planning, Logistics, Finance/Admin)
+- Multi-agency command teams
+
+### 3.2 Use Cases
+
+- Individual training for dispatch and command decision-making
+- Team training for Unified Command and multi-agency response
+- Certification and assessment for incident management
+- After-action review and debriefing
+- Scenario rehearsal for real-world events
+
+---
+
+## 4. Core Concepts and Terminology
+
+| Term | Definition | Key Question |
+|------|------------|--------------|
+| **COP** | Common Operating Picture — a continuously updated, shared representation of the current situation. | What is happening? |
+| **C2** | Command and Control — the system that enables decisions and actions. | What are we going to do? |
+| **IAP** | Incident Action Plan — the formal plan for an operational period. | What should we do? |
+| **ICS** | Incident Command System — the organisational framework. | Who is responsible for what? |
+| **GIS** | Geographic Information System — geographically referenced data. | What exists where? |
+| **AVL** | Automatic Vehicle Location — real-time tracking of mobile resources. | Where are my resources now? |
+| **Plume Model** | Prediction of hazard dispersion through the environment. | Where is the hazard going? |
+| **Simulation Engine** | The backend that maintains the true state of the world. | What is actually happening? |
+
+---
+
+## 5. System Architecture Overview
+
+The simulator should **not** be built as one monolithic system. It is a modular architecture where the simulation engine can change the world independently of what the player sees.
+
+### 5.1 High-Level Architecture
+
+```
+                    C2 / SIMULATION ENGINE
+                             │
+             ┌───────────────┼───────────────┐
+             │               │               │
+            GIS          HAZARD MODEL       AVL
+             │               │               │
+      ┌──────┼──────┐       │        ┌──────┼──────┐
+      │      │      │       │        │      │      │
+   Roads Buildings Terrain  │      Fire   EMS   Police
+                             │
+                       Plume Model
+                             │
+                             ▼
+                    COMMON OPERATING
+                         PICTURE
+                             │
+             ┌───────────────┼───────────────┐
+             │               │               │
+           MAP            ALERTS          STATUS
+             │               │               │
+             └───────────────┼───────────────┘
+                             │
+                           USER
+```
+
+### 5.2 Core Modules
+
+1. **Simulation Engine** — Maintains the true world state: weather, fire spread, chemical release, traffic, casualties, hospital capacity, resource movement.
+2. **Common Operating Picture (COP)** — The user-facing representation of the perceived world.
+3. **Command & Control (C2)** — Dispatch, orders, reassignments, requests, approvals.
+4. **IAP Builder** — Structured forms for objectives, organisation, assignments, communications, medical, safety.
+5. **GIS Service** — Static and dynamic geographic data.
+6. **AVL Service** — Vehicle location, status, speed, heading.
+7. **Plume/Hazard Model** — Dispersion predictions.
+8. **Communications Hub** — Simulated radio, chat, emergency calls, field reports.
+9. **After-Action Review (AAR)** — Event timeline, metrics, replay.
+10. **Instructor Console** — Scenario control, injects, role-playing.
+
+### 5.3 Data Flow
+
+The COP is the central nervous system. Almost every subsystem feeds information into it or consumes information from it. Underneath all of it is a **time-stamped event stream**:
+
+```
+14:31:04  CALL RECEIVED          "Explosion reported."
+14:31:18  INCIDENT CREATED       INC-00241, Priority: High
+14:31:31  UNIT DISPATCHED        Engine 12
+14:33:12  UNIT STATUS            Engine 12 → En Route
+14:36:42  UNIT STATUS            Engine 12 → On Scene
+14:36:59  FIELD REPORT           "Multiple casualties."
+14:37:04  INCIDENT UPDATE        Priority: Critical
+14:37:12  RESOURCE REQUEST       4 additional ambulances
+```
+
+The current COP is the current state generated from that event history. This allows reconstruction, replay, delayed information, and evaluation.
+
+---
+
+## 6. Common Operating Picture (COP)
+
+### 6.1 Definition
+
+A COP is the central visual representation of an incident that lets everyone answer: **“What is happening right now, where is it happening, what resources are involved, and what do we know about it?”**
+
+It is a **shared operational information system**, not merely a map screen. It combines geography, incidents, resources, status, intelligence, communications, and time.
+
+### 6.2 The Map Is the Heart
+
+The geospatial display shows:
+
+- **Base geography:** Roads, buildings, railways, rivers, terrain, bridges, airports, hospitals, fire stations, police stations, shelters, critical infrastructure.
+- **Incident information:** Fire locations, flooding, collapsed buildings, hazmat releases, crime scenes, road accidents, missing persons, evacuation areas, search areas, disaster zones.
+- **Operational boundaries:** Incident perimeter, evacuation zone, shelter zone, search area, police cordon, fire exclusion zone, Hot/Warm/Cold zones, traffic-control areas, staging areas, command posts, landing zones.
+
+Example of operational zones:
+
+```
+              WIND →
+       ┌──────────────────────────┐
+       │       HOT ZONE            │
+       │          🔥               │
+       │         FIRE              │
+       └──────────────────────────┘
+       ┌──────────────────────────┐
+       │       WARM ZONE          │
+       │   🚒    🚑    🚒         │
+       └──────────────────────────┘
+       ┌──────────────────────────┐
+       │       COLD ZONE          │
+       │ 🚓   COMMAND   🚑        │
+       └──────────────────────────┘
+```
+
+The COP doesn’t merely show where things are. It shows **what those locations mean operationally**.
+
+### 6.3 Resources
+
+The COP tracks who and what is available.
+
+**Fire:** Engines, ladder trucks, tankers, rescue units, hazmat units, command vehicles, wildland units, water tenders.  
+**EMS:** Ambulances, ALS/BLS units, medical supervisors, mass-casualty units, helicopters, medevac teams.  
+**Police:** Patrol units, traffic units, SWAT, motorcycle units, supervisors, search teams, prisoner transport.  
+**Specialized:** Search-and-rescue, engineers, utility crews, hazmat specialists, bomb disposal, drones, helicopters, heavy machinery.
+
+Each resource has a **state**:
+
+| Unit | Location | Status |
+|------|----------|--------|
+| Engine 12 | Incident | Operating |
+| Engine 7 | En route | Assigned |
+| Engine 4 | Station 3 | Available |
+| Ambulance 21 | Hospital | Transporting |
+| Police 14 | Evacuation zone | Operating |
+| Hazmat 2 | Highway | En route |
+| Ladder 3 | Station 8 | Out of service |
+
+The dispatcher must know not just “there are six fire engines,” but “four are committed, one is out of service, one is available.”
+
+### 6.4 Status Dynamics
+
+A unit moving across the map changes state:
+
+```
+AVAILABLE → DISPATCHED → EN ROUTE → ON SCENE → OPERATING → TRANSPORTING → AVAILABLE
+```
+
+Or:
+
+```
+AVAILABLE → DISPATCHED → EN ROUTE → CANCELLED → AVAILABLE
+```
+
+Each resource can be modelled as:
+
+```
+Unit:
+    Callsign: Engine 14
+    Type: Fire Engine
+    Location: 53.28, -6.14
+    Status: En Route
+    Assignment: Structure Fire #1842
+    Crew: 5
+    Equipment: Structural / Breathing Apparatus
+    ETA: 04:32
+    Communications: Connected
+```
+
+### 6.5 Incidents as Objects
+
+Incidents are not just map markers. They are parent objects tying together resources, alerts, reports, tasks, and decisions.
+
+```
+INCIDENT #1842
+Type: Structure Fire
+Location: 14 Industrial Road
+Priority: Critical
+Reported: 14:22
+Last Updated: 14:36
+Status: Active / Uncontrolled
+Threats: Fire, Smoke, Possible chemical storage
+Casualties: 17 reported, 5 confirmed
+Evacuation: Required
+Assigned Resources: 6 Fire, 4 EMS, 8 Police
+Incident Commander: Chief Murphy
+```
+
+### 6.6 Time Dimension
+
+The COP retains history. It answers not only “Where is everything?” but “How did we get here?”
+
+```
+14:22  Fire reported
+14:24  Engine 12 dispatched
+14:26  First crew arrives
+14:27  Fire upgraded to "major"
+14:29  Second alarm requested
+14:31  Chemical storage discovered
+14:32  Evacuation ordered
+14:34  Hazmat requested
+14:36  Wind shifts northeast
+14:37  Hospital declares mass-casualty status
+```
+
+This enables reconstruction, replay, and evaluation of decisions under incomplete information.
+
+### 6.7 Information Is Not Necessarily True
+
+A real COP is a **best-known representation of reality**, not a truth screen. Reports carry source, confidence, location accuracy, and timestamp.
+
+```
+REPORT #271
+Source: 911 caller
+Claim: "Explosion at warehouse."
+Confidence: LOW
+Location accuracy: ±150 m
+Timestamp: 14:22:13
+
+REPORT #272
+Source: Police Unit 14
+Claim: "Large fire visible from Industrial Road."
+Confidence: HIGH
+Timestamp: 14:24:51
+```
+
+The COP progressively refines understanding through distinctions:
+
+- **Known:** Engine 12 is at the incident.
+- **Reported:** There may be 20 trapped workers.
+- **Estimated:** Approximately 800 people are within the evacuation zone.
+- **Suspected:** Chemical storage may be involved.
+- **Confirmed:** Chlorine-containing chemicals are burning.
+
+This creates decision-making under uncertainty, a major part of incident command.
+
+### 6.8 Layers
+
+The COP uses layers to prevent unreadability. Example toggles:
+
+```
+MAP LAYERS
+☑ Incidents
+☑ Emergency Units
+☑ Hospitals
+☑ Roads
+☑ Evacuation Zones
+☑ Command Zones
+☐ Utilities
+☐ Weather
+☐ CCTV
+☐ Traffic
+☐ Terrain
+☐ Critical Infrastructure
+☐ Population Density
+☐ Hazardous Materials
+☐ Communications
+```
+
+A dispatcher might enable: Fire → Evacuation → Wind → Hospitals.  
+An incident commander might enable: Fire → Units → Hazmat → Operational Zones → Water Supply.
+
+**UI Panels:**
+- **Top panel (hover pop-out):** Map views — satellite, weather, traffic, terrain; toggles for area codes.
+- **Left panel:** Toggle map icons — emergency vehicles, resources, incidents, zones.
+- **Right panel:** Communication hubs — fire, EMS, police, inter-agency chats, incoming emergency calls/reports, field reports; display below.
+
+### 6.9 Alerts and Attention Management
+
+The COP tells the operator: **“Something requires your attention.”**
+
+Examples:
+
+```
+⚠ CRITICAL
+Hospital St. Mary's: Emergency Department capacity exhausted. 14:37
+
+⚠ RESOURCE SHORTAGE
+Only 1 ALS ambulance remains available within the operational area.
+
+⚠ SITUATION CHANGE
+Wind direction changed. Previous: NW → SE. Current: W → E.
+Evacuation Zone potentially affected.
+
+⚠ COMMUNICATION FAILURE
+Engine 7 has not transmitted for 4 minutes.
+Last known position: Industrial Road.
+```
+
+This makes the COP an **attention-management system**, not merely a database.
+
+### 6.10 COP vs C2
+
+- **COP:** What is happening?
+- **C2:** What are we going to do about it?
+
+Example:
+
+**COP:**
+> Three buildings are burning. 17 casualties reported. Wind moving toward residential area. Six fire units committed. Hospital A has 12 beds available.
+
+**C2:**
+> Send Engine 14 to Building C. Establish evacuation perimeter. Request second-alarm resources. Divert ambulances to Hospital B. Deploy hazmat team.
+
+```
+                    C2 SYSTEM
+                       │
+          ┌────────────┴────────────┐
+          │                         │
+     COMMON OPERATING          COMMAND /
+        PICTURE                CONTROL
+          │                         │
+     "What's happening?"       "What do we do?"
+          │                         │
+    ┌─────┼─────┐            ┌──────┼──────┐
+    │     │     │            │      │      │
+  Map   Units  Reports     Orders  Tasks  Dispatch
+```
+
+### 6.11 COP Architecture: Seven Information Domains
+
+```
+                 COMMON OPERATING PICTURE
+                           │
+       ┌───────────┬───────┴───────┬───────────┐
+       │           │               │           │
+    INCIDENTS   RESOURCES       HAZARDS     GEOGRAPHY
+       │           │               │           │
+       └───────────┴───────┬───────┴───────────┘
+                           │
+                    SITUATION DATA
+                           │
+             ┌─────────────┼─────────────┐
+             │             │             │
+          REPORTS       ALERTS        HISTORY
+             │             │             │
+             └─────────────┴─────────────┘
+                           │
+                     C2 INTERFACE
+                           │
+                    COMMAND DECISIONS
+```
+
+---
+
+## 7. GIS, AVL, and Plume Models
+
+These three concepts represent three kinds of information in a COP:
+
+- **GIS data** tells the system what exists where.
+- **Plume models** estimate where a hazard is going or may go.
+- **AVL** tells the system where its own mobile resources are right now.
+
+Together, they turn a static map into a dynamic operational picture.
+
+### 7.1 GIS Data
+
+**GIS = Geographic Information System.** It answers: “What is physically located at this place?”
+
+**Basic geography:** Roads, buildings, rivers, lakes, railways, bridges, terrain, property boundaries, administrative boundaries.  
+**Emergency infrastructure:** Fire stations, police stations, hospitals, ambulance stations, emergency shelters, helipads, command posts, water sources.  
+**Critical infrastructure:** Power stations, substations, gas pipelines, water treatment plants, telecommunications, rail stations, airports, factories, chemical facilities, fuel storage.  
+**Population information:** Population density, schools, nursing homes, residential areas, industrial areas, commercial areas.
+
+**GIS Layers:**
+
+```
+       ┌───────────────────────────┐
+       │ Population                │
+       ├───────────────────────────┤
+       │ Critical Infrastructure   │
+       ├───────────────────────────┤
+       │ Hospitals                 │
+       ├───────────────────────────┤
+       │ Roads                     │
+       ├───────────────────────────┤
+       │ Buildings                 │
+       ├───────────────────────────┤
+       │ Terrain                   │
+       └───────────────────────────┘
+```
+
+The appropriate layers depend on the incident:
+
+- **Building fire:** Buildings, Roads, Fire stations, Hydrants, Emergency units.
+- **Flood:** Terrain, Rivers, Roads, Population, Critical infrastructure, Flood zones.
+- **Chemical release:** Buildings, Roads, Population, Schools, Hospitals, Chemical facilities, Weather, Plume.
+
+### 7.2 Static vs Dynamic GIS
+
+- **Static GIS:** Roads, buildings, rivers, hospitals — relatively unchanging.
+- **Dynamic GIS:** Road closures, evacuation zones, incident perimeters, search areas, operational zones — created temporarily on top of the static database.
+
+```
+STATIC GIS
+    │
+    ├── Roads
+    ├── Buildings
+    ├── Rivers
+    └── Hospitals
+          │
+          ▼
+DYNAMIC GIS
+    │
+    ├── Road closures
+    ├── Evacuation zones
+    ├── Incident perimeters
+    ├── Search areas
+    └── Operational zones
+```
+
+### 7.3 Plume Models
+
+A plume model answers: **“If something hazardous is released here, where might it travel?”**
+
+It models dispersion of smoke, toxic gases, chemical vapours, biological aerosols, radioactive material, volcanic ash, industrial pollutants.
+
+**Inputs:**
+- Release information: Chemical, quantity, release rate, temperature, pressure, liquid/gas state, duration, location.
+- Weather: Wind speed, direction, temperature, humidity, atmospheric stability, precipitation.
+- Terrain: Elevation, valleys, buildings, urban density, obstructions.
+
+**Output:** Estimated geographic distribution, often shown as zones:
+
+```
+                    WIND →
+             ┌───────────────────┐
+          ┌──┘                   └──┐
+        ┌─┘      LOW CONC.          └─┐
+      ┌─┘                              └─┐
+     │       MODERATE CONCENTRATION      │
+     │            ┌──────────┐           │
+     │            │  HIGH    │           │
+     │            │  CONC.   │           │
+     │            └────●─────┘           │
+     │                 RELEASE           │
+     └────────────────────────────────────┘
+```
+
+**Plumes are predictions, not facts.** If wind changes, the COP updates. If release rate is revised, the model expands. The player might initially see “Projected affected population: 430” and later “Updated release rate — Projected affected population: 1,800.”
+
+### 7.4 AVL — Automatic Vehicle Location
+
+AVL answers: **“Where are my resources right now?”**
+
+A vehicle transmits:
+
+```
+Vehicle ID
+Latitude
+Longitude
+Timestamp
+Speed
+Heading
+Status
+```
+
+The C2 system places the vehicle on the COP. Instead of just “Engine 12: En Route,” the dispatcher sees:
+
+```
+          🚒
+          ↓
+      Engine 12
+      En Route
+      72 km/h
+      ETA 04:31
+```
+
+**AVL is not just a dot on the map.** It provides:
+
+```
+ENGINE 12
+Location: Industrial Road / 4th Avenue
+Status: En Route
+Speed: 61 km/h
+Heading: NE
+Crew: 5
+Assignment: Incident #1842
+ETA: 03:42
+Last update: 14:36:21
+```
+
+Derived information: distance to incident, stopped movement, route deviation.
+
+### 7.5 AVL + GIS
+
+GIS says: “The road network looks like this.”  
+AVL says: “Engine 12 is here.”  
+Routing calculates: “Engine 12 can reach the incident in approximately 6 minutes.”
+
+Complications can be introduced:
+
+```
+ROAD CLOSED
+     ↓
+Engine 12 cannot use normal route
+     ↓
+ETA increases from 6 min → 14 min
+```
+
+### 7.6 The Three Systems Working Together
+
+Imagine a tanker overturns on a motorway releasing toxic gas.
+
+**GIS provides:** Roads, buildings, population, schools, hospitals, terrain, bridges, critical infrastructure.  
+**AVL provides:** Fire Engine 7 → 1.2 km away; Hazmat 2 → 14 km away; Ambulance 14 → 3.5 km away; Police 21 → 0.8 km away.  
+**Plume model provides:** Wind → NE; projected plume → NE; school inside projected plume; residential area partially affected; hospital outside plume.
+
+The COP synthesises:
+
+```
+                         WIND →
+                 ╭───────────────────╮
+              ╭──╯     PLUME          ╰──╮
+             ╱                            ╲
+            ╱       🏫 SCHOOL              ╲
+           ╱                               ╲
+          ╱                                 ╲
+         ╱                                  ╲
+        ● 🚒                                 ╲
+     RELEASE                                  
+        │
+      🚓 P21
+                  🚑 A14
+             🏥 HOSPITAL
+```
+
+The commander sees geography, hazard, resources, and relationships.
+
+### 7.7 Separate Systems Architecture
+
+```
+                    C2 / SIMULATION ENGINE
+                             │
+             ┌───────────────┼───────────────┐
+             │               │               │
+            GIS          HAZARD MODEL       AVL
+             │               │               │
+      ┌──────┼──────┐       │        ┌──────┼──────┐
+      │      │      │       │        │      │      │
+   Roads Buildings Terrain  │      Fire   EMS   Police
+                             │
+                       Plume Model
+                             │
+                             ▼
+                    COMMON OPERATING
+                         PICTURE
+```
+
+The simulation engine can change the world independently of what the player sees. The COP updates its representation. This separation is essential for imperfect information.
+
+---
+
+## 8. Incident Action Plan (IAP) and ICS
+
+### 8.1 Incident Command System (ICS)
+
+ICS is the standardized organisational framework for managing emergencies. It is scalable from a small vehicle accident to a major disaster.
+
+**Basic Structure:**
+
+```
+                    INCIDENT COMMANDER
+                           │
+       ┌───────────────────┼───────────────────┐
+       │                   │                   │
+ OPERATIONS            PLANNING             LOGISTICS
+       │                   │                   │
+ "Do the work"      "Understand & plan"   "Support the work"
+                           │
+                     FINANCE / ADMIN
+                     "Track the money"
+```
+
+**Operations:** What are we physically doing? Suppressing fire, evacuating, searching, treating casualties, controlling traffic.  
+**Planning:** What is happening, what do we expect, what should we do next? Collects information, develops plans, maintains situation status, prepares IAP.  
+**Logistics:** What do responders need? Vehicles, fuel, food, radios, medical supplies, personnel, facilities, communications equipment.  
+**Finance/Admin:** What does the incident cost? Personnel time, equipment costs, contracts, procurement, compensation, damage documentation.
+
+For a tiny incident, one person may perform several roles. For a huge disaster, each becomes a substantial organisation.
+
+**Operations can expand:**
+
+```
+                     OPERATIONS
+                          │
+            ┌─────────────┼─────────────┐
+            │             │             │
+         FIRE          MEDICAL        EVACUATION
+         GROUP          GROUP           GROUP
+            │             │             │
+         Engine 1       EMS 4         Police 12
+         Engine 7       EMS 8         Police 19
+         Ladder 2       EMS 11        Police 24
+```
+
+**Span of Control:** A supervisor should not directly manage an enormous number of people. Instead of 20 independent units under one commander, use groups:
+
+```
+                    COMMAND
+                       │
+             ┌─────────┼─────────┐
+             │         │         │
+           GROUP A   GROUP B   GROUP C
+             │         │         │
+          3 units    4 units    3 units
+```
+
+The simulator should impose a cognitive/organizational penalty when the player creates an unwieldy command structure.
+
+### 8.2 Incident Action Plan (IAP)
+
+An IAP is the formal plan for managing an incident during a particular **operational period**. It describes what we are trying to accomplish and how.
+
+Example:
+
+```
+INCIDENT: Northside Chemical Fire
+OPERATIONAL PERIOD: 14:00–18:00
+
+PRIMARY OBJECTIVES:
+1. Protect life.
+2. Establish a safe exclusion zone.
+3. Prevent fire spread to adjacent structures.
+4. Evacuate exposed civilians.
+5. Establish medical triage capability.
+6. Identify chemical hazards.
+7. Maintain responder safety.
+```
+
+The IAP translates strategic objectives into operational objectives:
+
+```
+OBJECTIVE 1
+Evacuate all civilians within the projected hazard area.
+
+TACTICS
+• Establish evacuation perimeter.
+• Deploy police evacuation teams.
+• Establish traffic-control points.
+• Open Shelter A.
+
+RESOURCES
+• 12 police units
+• 2 buses
+• 4 emergency management personnel
+
+PERFORMANCE TARGET
+Initial evacuation completed by 16:00.
+```
+
+The IAP bridges: **Commander's intent → Operational objectives → Assignments → Resources.**
+
+### 8.3 IAP Contents
+
+Under FEMA/NIMS ICS, a complete IAP can contain:
+
+- Incident objectives
+- Organization assignment information
+- Operational assignments
+- Communications information
+- Medical plan
+- Safety information
+- Situation information
+- Maps
+
+### 8.4 IAP Builder
+
+Software that helps planners and commanders create the plan through structured forms.
+
+```
+┌──────────────────────────────────────────┐
+│ INCIDENT ACTION PLAN                     │
+├──────────────────────────────────────────┤
+│ Incident: Northside Chemical Fire        │
+│ Operational Period: 14:00–18:00          │
+│                                          │
+│ OBJECTIVES                               │
+│ [ + Add Objective ]                      │
+│ 1. Protect life                          │
+│ 2. Establish exclusion zone              │
+│ 3. Prevent fire spread                   │
+│ 4. Evacuate exposed civilians            │
+│                                          │
+│ [NEXT] Organization                      │
+└──────────────────────────────────────────┘
+```
+
+Then:
+
+```
+ORGANIZATION
+Incident Commander: Chief Murphy
+Operations: Deputy Chief Byrne
+Planning: Officer Kelly
+Logistics: Officer Walsh
+Safety: Officer O'Connor
+```
+
+Then:
+
+```
+RESOURCE ASSIGNMENTS
+Engine 12     → Building A
+Engine 7      → Exposure protection
+Ladder 3      → Search Group
+Ambulance 14  → Medical Group
+Police 21     → Evacuation Sector
+Hazmat 2      → Chemical identification
+```
+
+### 8.5 IAP Builder + COP
+
+They interact but are not the same:
+
+```
+             CURRENT REALITY
+                   │
+                   ▼
+                 COP
+          "What's happening?"
+                   │
+                   │ information
+                   ▼
+              IAP BUILDER
+          "What should we do?"
+                   │
+                   │ plan
+                   ▼
+              OPERATIONS
+          "Execute the plan."
+                   │
+                   │ observations
+                   ▼
+                 COP
+```
+
+This creates a continuous feedback loop.
+
+### 8.6 Reality Diverges from the Plan
+
+The IAP says Engine 7 → Exposure protection. The COP receives: **Engine 7 reports mechanical failure.** Now:
+
+```
+IAP: Engine 7 → Exposure protection
+COP: Engine 7 → OUT OF SERVICE
+```
+
+The plan is no longer viable. Command must adapt:
+
+```
+Engine 14 → Exposure protection
+Engine 12 → Primary suppression
+Request additional engine
+```
+
+### 8.7 Operational Periods
+
+Instead of one plan for the entire incident, command creates successive plans.
+
+```
+OPERATIONAL PERIOD 1: 08:00–12:00
+Initial response, Rescue, Evacuation, Fire containment
+
+OPERATIONAL PERIOD 2: 12:00–16:00
+Fire suppression, Search, Infrastructure protection
+
+OPERATIONAL PERIOD 3: 16:00–20:00
+Recovery, Re-entry, Investigation
+```
+
+The situation is reassessed at the end of each period. The next IAP reflects the new reality.
+
+### 8.8 Simulation Loop
+
+```
+             ┌─────────────────────┐
+             │   INCIDENT OCCURS   │
+             └──────────┬──────────┘
+                        ↓
+             ┌─────────────────────┐
+             │   INFORMATION       │
+             │   COLLECTION        │
+             └──────────┬──────────┘
+                        ↓
+             ┌─────────────────────┐
+             │        COP          │
+             │ "What's happening?" │
+             └──────────┬──────────┘
+                        ↓
+             ┌─────────────────────┐
+             │   ASSESSMENT        │
+             │ What does it mean?  │
+             └──────────┬──────────┘
+                        ↓
+             ┌─────────────────────┐
+             │     IAP BUILDER     │
+             │ "What should we do?"│
+             └──────────┬──────────┘
+                        ↓
+             ┌─────────────────────┐
+             │       IAP           │
+             │ Objectives +        │
+             │ assignments         │
+             └──────────┬──────────┘
+                        ↓
+             ┌─────────────────────┐
+             │     OPERATIONS      │
+             │ Responders execute  │
+             └──────────┬──────────┘
+                        ↓
+             ┌─────────────────────┐
+             │   NEW INFORMATION   │
+             │ Changes / failures  │
+             └──────────┬──────────┘
+                        │
+                        └───────────────► COP
+```
+
+### 8.9 UI Views
+
+**COP — "What is happening?"**
+Map, Resources, Hazards, Reports, Weather, Casualties, Infrastructure, Alerts.
+
+**IAP Builder — "What are we going to do?"**
+Objectives, Assignments, Organization, Resources, Tactics, Safety, Communications, Medical, Maps.
+
+**C2 / Dispatch — "Make it happen."**
+Dispatch, Orders, Reassignments, Requests, Notifications, Approvals, Communications.
+
+```
+              ┌───────────────┐
+              │      COP      │
+              │ CURRENT STATE │
+              └───────┬───────┘
+                      │
+                  assessment
+                      ↓
+              ┌───────────────┐
+              │  IAP BUILDER  │
+              │ FUTURE STATE  │
+              └───────┬───────┘
+                      │
+                    orders
+                      ↓
+              ┌───────────────┐
+              │      C2       │
+              │   EXECUTION   │
+              └───────┬───────┘
+                      │
+                  field data
+                      ↓
+                    COP
+```
+
+---
+
+## 9. Command and Control (C2)
+
+The C2 system is where the player makes things happen. It includes:
+
+- **Dispatch:** Assign units to incidents.
+- **Orders:** Issue directives to operations, groups, sectors.
+- **Reassignments:** Move resources between incidents.
+- **Requests:** Request mutual aid, additional resources, specialist teams.
+- **Notifications:** Alert hospitals, utilities, government agencies.
+- **Approvals:** Authorise evacuations, requests, spending.
+- **Communications:** Radio, chat, data feeds.
+
+The C2 interface must be tightly integrated with the COP and IAP Builder, forming the command-and-control cycle.
+
+---
+
+## 10. Simulation Engine and AI
+
+### 10.1 World State vs Perceived State
+
+The simulation engine maintains the **true state** of the world: actual fire spread, chemical concentration, civilian locations, hospital capacity, road conditions. The player’s COP only knows what has been reported or detected. This separation enables imperfect information.
+
+### 10.2 Event Stream
+
+Everything that happens is recorded as a time-stamped event. The current COP is generated from the event history. This allows:
+
+- Reconstruction at any point in time.
+- Replay of incidents.
+- Introduction of delayed or erroneous information.
+- Evaluation of player decisions.
+
+### 10.3 Agent-Based Modeling
+
+Model individual behaviours for:
+
+- Responders (fire, EMS, police)
+- Civilians (evacuation, panic, convergence)
+- Vehicles (traffic, routing)
+- Media
+- Politicians
+- AI-controlled agencies
+
+### 10.4 Hazard Models
+
+- Fire spread
+- Flood
+- Plume dispersion
+- Structural collapse
+- Traffic gridlock
+
+### 10.5 Cascading Effects
+
+One failure triggers others. E.g., power failure → traffic signal failure → gridlock → ambulance delay → casualty increase.
+
+### 10.6 Dynamic Scenario Updates
+
+The simulation engine can change:
+
+```
+Wind direction
+Fire spread
+Chemical release rate
+Road closure
+Vehicle movement
+Casualty count
+Hospital capacity
+```
+
+The COP then updates its representation.
+
+---
+
+## 11. Information, Uncertainty, and Fog of War
+
+The COP is not a truth screen. It is the best available representation of what the organisation currently believes.
+
+### 11.1 Provenance and Confidence
+
+Every report carries:
+
+- Source
+- Timestamp
+- Confidence (LOW, MEDIUM, HIGH)
+- Location accuracy
+- Verification status: Known, Reported, Estimated, Suspected, Confirmed.
+
+### 11.2 Conflicting Reports
+
+Two units report different casualty counts. The player must reconcile.
+
+### 11.3 Delays, Missed Calls, Miscommunication
+
+Not every message arrives intact or on time. Radio dead zones, cell tower failures, battery life, interoperability patches, encrypted vs. unencrypted talkgroups.
+
+### 11.4 Decision-Making Under Uncertainty
+
+The player must sometimes make the correct decision with incomplete information and still have an incident deteriorate. The training objective is good decision-making given available information.
+
+---
+
+## 12. Human Factors and Crew Management
+
+- **Responder fatigue, stress, shift cycles:** Crews degrade over time; fatigue affects decision speed, radio discipline, error rates.
+- **Crew continuity and handover:** Shift changes, briefings, information loss during transition.
+- **Responder safety and accountability:** Personnel Accountability Reports (PAR), Mayday simulation, emergency traffic, evacuation signals.
+- **Skill and certification tracking:** Not every unit can perform every task; track qualifications (Hazmat, USAR, ALS, Swiftwater).
+- **Psychological first aid and peer support:** Simulate stress on responders, need for rotation, rehab, mental health support.
+
+---
+
+## 13. Communications Realism
+
+- **Radio discipline and protocols:** Plain language, call signs, closed-loop communication, read-backs, channel congestion.
+- **Degraded communications:** Dead zones, cell tower failures, radio battery life, interoperability patches.
+- **Delays, missed calls, miscommunication:** Messages may arrive intact or corrupted.
+- **Language and cultural barriers:** Limited English proficiency, interpreters, trust issues.
+
+---
+
+## 14. Multi-Agency and Interoperability
+
+- **Jurisdictional boundaries:** City/county/state/federal overlaps, mutual aid agreements, authority disputes.
+- **Unified Command:** Multiple agencies sharing command.
+- **Liaison and PIO roles:** Dedicated officers for external agencies, media, public information.
+- **EOC activation levels:** Normal operations to full activation, with staffing and resource implications.
+- **Interagency friction:** Competing priorities, resource hoarding, information silos.
+
+---
+
+## 15. Public, Media, Political, and Legal Pressures
+
+- **Media and social media:** Press conferences, rumours, misinformation, public perception.
+- **Political pressure:** Elected officials, agency heads, community leaders demanding updates or actions.
+- **Legal and liability:** Documentation, negligence, evacuation authority, use-of-force considerations.
+- **Public behaviour:** Evacuation compliance, panic, looting, spontaneous volunteers, convergence.
+- **Vulnerable populations:** Elderly, disabled, homeless, pets, non-English speakers.
+- **Family reunification and victim assistance:** Call centres, missing persons, family assistance centres.
+
+---
+
+## 16. Logistics and Resource Sustainment
+
+- **Supply chain:** Fuel, food, water, foam, medical supplies, batteries, PPE, sanitation.
+- **Base camp and staging area management:** Setup, security, feeding, rehab.
+- **Equipment maintenance and failure:** Apparatus breakdowns, out-of-service units, repair timelines.
+- **Cost tracking and finance:** Personnel time, equipment costs, contracts, reimbursement.
+- **Mutual aid and resource ordering:** Local, state, federal request processes.
+
+---
+
+## 17. Medical, Mass Casualty, and Public Health
+
+- **Triage and patient tracking:** Tags, tracking, transport destinations, hospital capacities.
+- **Specialty centres:** Trauma, burn, pediatric, psychiatric facilities.
+- **Blood, morgue, mass fatality:** Surge capacity, family assistance.
+- **Public health interventions:** Quarantine, isolation, mass prophylaxis, points of dispensing.
+- **Behavioural health:** Crisis counselling, psychological triage.
+
+---
+
+## 18. Evacuation, Shelter, and Infrastructure
+
+- **Evacuation modelling:** Zones, routes, traffic control, transportation assets (buses, paratransit), re-entry.
+- **Shelter management:** Capacity, registration, supplies, security.
+- **Critical infrastructure interdependencies:** Power, water, gas, telecom, transportation, cascading failures.
+- **Cyber and GPS degradation:** Jamming, spoofing, ransomware, system outages.
+- **Environmental impact:** Air, water, soil, wildlife.
+
+---
+
+## 19. Documentation and ICS Forms
+
+- **Standard ICS forms:** ICS 201–215, 215A, 220, situation reports.
+- **IAP versioning:** Operational periods, objectives, assignments, approvals.
+- **Decision logs:** Every order, request, approval time-stamped for AAR.
+- **Safety and medical plans:** Embedded in the IAP and accessible to responders.
+
+---
+
+## 20. Scenario Design and Adaptive Training
+
+- **Scenario editor:** Triggers, injects, branching, dynamic events.
+- **Adaptive difficulty:** Adjusts based on player performance.
+- **Randomized events:** Weather shifts, equipment failures, new incidents.
+- **Real-world data integration:** Historical incidents, weather APIs, GIS data.
+- **Incident-within-incident:** Responder down, active shooter, secondary device.
+
+---
+
+## 21. Instructor Tools and Multiplayer
+
+- **Instructor console:** Control injects, monitor player actions, communicate as role-players.
+- **Multiplayer roles:** IC, Operations, Planning, Logistics, PIO, Safety, Liaison.
+- **AI-driven role players:** Other agencies, civilians, media, politicians.
+- **Voice communication:** Simulated radio with push-to-talk, channels, recording.
+- **Observer mode:** For assessment and training.
+
+---
+
+## 22. Assessment, Metrics, and After-Action Review
+
+- **Decision timelines:** Replay every action and message.
+- **Performance metrics:** Time to dispatch, resource utilisation, communication errors, objective completion.
+- **Heatmaps and analytics:** Where resources were committed, where delays occurred.
+- **Branching AAR:** Compare player decisions to optimal or alternative outcomes.
+- **Exportable reports:** For certification and debriefing.
+
+---
+
+## 23. Data Standards and Integration
+
+- **NIMS/ICS compliance:** Terminology, forms, organisation.
+- **Data standards:** CAP, EDXL, NIEM, HL7 for hospital data.
+- **API-first architecture:** Allow external tools to feed or consume data.
+- **Modular services:** COP, IAP, C2, GIS, AVL, Plume, Comms, AAR as separate systems.
+
+---
+
+## 24. UI/UX and Accessibility
+
+- **Customizable dashboards:** Multi-monitor, hotkeys, voice commands.
+- **Accessibility:** Color-blind modes, screen readers, dyslexia-friendly fonts, localization.
+- **Dark mode and night operations:** Reduce eye strain.
+- **Mobile companion app:** For field reports and check-ins.
+
+---
+
+## 25. Ethical and Psychological Considerations
+
+- **Content warnings and debrief support:** Simulations can be stressful.
+- **Avoid glorifying trauma:** Focus on decision-making, not spectacle.
+- **Bias awareness:** Ensure scenarios don’t reinforce stereotypes.
+- **Psychological safety:** Allow players to fail without humiliation.
+
+---
+
+## 26. Technical Architecture and Recommended Stack
+
+A hybrid architecture is recommended:
+
+| Component | Recommended Language | Rationale |
+|-----------|----------------------|-----------|
+| User Interface (COP, IAP Builder) | C# (WPF) or TypeScript (React) | Best for data-dense, interactive dashboards and maps. |
+| Simulation Engine (Logic, AI, Event Stream) | C# | Excellent balance of performance, concurrency handling, development speed. |
+| Hazard/Dispersion Modeling | Python | Unmatched library support for scientific and atmospheric modeling. |
+| GIS Data Backend | PostgreSQL + PostGIS | Industry standard for spatial relationships. |
+| Web-based COP (if needed) | JavaScript/TypeScript | Dominant for WebGIS (OpenLayers, Leaflet, Mapbox GL JS). |
+
+**Why not C++ or Ada?** C++ is overkill for UI-heavy development. Ada/SPARK is for safety-critical systems, not training tools.
+
+---
+
+## 27. Development Roadmap and Priorities
+
+### 27.1 High-Impact Priorities
+
+1. **Human factors and crew management** — makes resources feel real.
+2. **Communications realism** — the core of fog of war.
+3. **Multi-agency and public/media pressures** — adds political and social complexity.
+4. **After-action review with decision timelines** — the key training value.
+5. **Instructor tools and multiplayer** — turns it into a team trainer.
+
+### 27.2 Phased Approach
+
+- **Phase 1:** Core COP, GIS, AVL, resource tracking, basic incident objects.
+- **Phase 2:** C2 dispatch, IAP Builder, event stream, AAR.
+- **Phase 3:** Plume models, communications realism, human factors.
+- **Phase 4:** Multi-agency, instructor console, multiplayer, adaptive scenarios.
+- **Phase 5:** Advanced AI, cascading effects, public/media/political pressures.
+
+---
+
+## 28. Appendices
+
+### Appendix A: Glossary
+
+| Term | Definition |
+|------|------------|
+| COP | Common Operating Picture |
+| C2 | Command and Control |
+| IAP | Incident Action Plan |
+| ICS | Incident Command System |
+| GIS | Geographic Information System |
+| AVL | Automatic Vehicle Location |
+| AAR | After-Action Review |
+| EOC | Emergency Operations Centre |
+| PAR | Personnel Accountability Report |
+| PIO | Public Information Officer |
+
+### Appendix B: Example Event Stream
+
+```
+14:31:04  CALL RECEIVED          "Explosion reported."
+14:31:18  INCIDENT CREATED       INC-00241, Priority: High
+14:31:31  UNIT DISPATCHED        Engine 12
+14:33:12  UNIT STATUS            Engine 12 → En Route
+14:36:42  UNIT STATUS            Engine 12 → On Scene
+14:36:59  FIELD REPORT           "Multiple casualties."
+14:37:04  INCIDENT UPDATE        Priority: Critical
+14:37:12  RESOURCE REQUEST       4 additional ambulances
+```
+
+### Appendix C: Example IAP
+
+```
+INCIDENT: Northside Chemical Fire
+OPERATIONAL PERIOD: 14:00–18:00
+
+PRIMARY OBJECTIVES:
+1. Protect life.
+2. Establish a safe exclusion zone.
+3. Prevent fire spread to adjacent structures.
+4. Evacuate exposed civilians.
+5. Establish medical triage capability.
+6. Identify chemical hazards.
+7. Maintain responder safety.
+
+ORGANIZATION:
+Incident Commander: Chief Murphy
+Operations: Deputy Chief Byrne
+Planning: Officer Kelly
+Logistics: Officer Walsh
+Safety: Officer O'Connor
+
+RESOURCE ASSIGNMENTS:
+Engine 12     → Building A
+Engine 7      → Exposure protection
+Ladder 3      → Search Group
+Ambulance 14  → Medical Group
+Police 21     → Evacuation Sector
+Hazmat 2      → Chemical identification
+```
+
+### Appendix D: Example COP Layout
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ INCIDENT: NORTHSIDE CHEMICAL FIRE          14:37:22         │
+│ Status: CRITICAL     Incident Commander: O. Byrne           │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│                       [MAP]                                 │
+│                                                             │
+│       🚒 F12       🔥🔥🔥                                   │
+│                     🔥                                      │
+│             🚑 A21        🚒 F07                            │
+│                                                             │
+│       ─────── EVACUATION ZONE ───────                       │
+│                                                             │
+│                 ⚠ HAZMAT                                 │
+│                                                             │
+│       🚓 P14                       🏥 Hospital               │
+│                                                             │
+├──────────────────────┬──────────────────────────────────────┤
+│ INCIDENT STATUS      │ RESOURCES                            │
+│ Fire: Uncontrolled   │ Fire Engines     6 / 8 available    │
+│ Hazmat: Confirmed    │ Ambulances       4 / 7 available    │
+│ Injured: 17 est.     │ Police Units     11 / 15 available  │
+│ Evacuating: 800      │ Hazmat Teams     1 / 2 available    │
+├──────────────────────┴──────────────────────────────────────┤
+│ ALERTS / INTELLIGENCE                                      │
+│ 14:36 Smoke moving NE                                      │
+│ 14:35 Chemical identified as chlorine derivative            │
+│ 14:34 Hospital reports 12 casualty capacity remaining       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+**End of Design Document**
