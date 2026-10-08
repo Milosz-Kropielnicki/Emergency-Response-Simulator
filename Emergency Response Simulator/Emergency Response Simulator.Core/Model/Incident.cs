@@ -38,6 +38,9 @@ public class Incident
     public User? IncidentCommander { get; set; }
 
     public List<Unit> AssignedUnits { get; set; } = [];
+
+    /// <summary>The ICS organisation for this incident (COP state, not stored in the database).</summary>
+    public IncidentCommand Command { get; } = new();
     public List<Report> Reports { get; set; } = [];
     public List<Alert> Alerts { get; set; } = [];
     public List<Zone> Zones { get; set; } = [];

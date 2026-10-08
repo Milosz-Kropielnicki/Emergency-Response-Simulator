@@ -39,6 +39,18 @@
             </DataTemplate.Triggers>
         </DataTemplate>
 
+        <!-- A unit with a drop-down to move it between ICS groups. -->
+        <DataTemplate x:Key="UnitPlacementTemplate" DataType="{x:Type vm:UnitPlacementRow}">
+            <DockPanel Margin="0,1">
+                <ComboBox DockPanel.Dock="Right" ItemsSource="{Binding Options}" SelectedItem="{Binding Placement}"
+                          DisplayMemberPath="Name" Width="140" FontSize="11" />
+                <TextBlock VerticalAlignment="Center">
+                    <Run Text="{Binding Callsign, Mode=OneWay}" />
+                    <Run Text="{Binding Status, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" FontSize="11" />
+                </TextBlock>
+            </DockPanel>
+        </DataTemplate>
+
         <Style x:Key="EmptyHint" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
             <Setter Property="FontStyle" Value="Italic" />
@@ -429,6 +441,95 @@
                             </StackPanel>
                         </Grid>
                     </TabItem>
+                    <TabItem Header="ICS">
+                        <Grid DataContext="{Binding Ics}">
+                            <TextBlock Style="{StaticResource EmptyHint}" Margin="4,8"
+                                       Text="Select an incident to build its command structure."
+                                       Visibility="{Binding HasIncident, Converter={x:Static vm:Converters.FalseToVisible}}" />
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          Visibility="{Binding HasIncident, Converter={StaticResource BoolToVisibility}}">
+                                <StackPanel Margin="4">
+                                    <TextBlock Text="POSITIONS" Style="{StaticResource PanelHeader}" />
+                                    <ItemsControl ItemsSource="{Binding Positions}" Margin="0,0,0,12">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:PositionRow}">
+                                                <DockPanel Margin="0,2">
+                                                    <Button DockPanel.Dock="Right" Content="Assign" Padding="6,0" FontSize="11" Margin="4,0,0,0"
+                                                            Command="{Binding AssignCommand}" />
+                                                    <StackPanel DockPanel.Dock="Left" Width="128">
+                                                        <TextBlock Text="{Binding Label}" />
+                                                        <TextBlock Text="{Binding Staff}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                    </StackPanel>
+                                                    <TextBox Text="{Binding NewHolder, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"
+                                                             ToolTip="{Binding Holder, TargetNullValue='Vacant'}" />
+                                                </DockPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <TextBlock Text="SPAN OF CONTROL (recommended 3–7)" Style="{StaticResource PanelHeader}" />
+                                    <ItemsControl ItemsSource="{Binding Spans}" Margin="0,0,0,12">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:SpanRow}">
+                                                <DockPanel Margin="0,1">
+                                                    <TextBlock x:Name="Rating" DockPanel.Dock="Right" Text="{Binding Rating}" Width="44" TextAlignment="Right"
+                                                               FontWeight="SemiBold" Foreground="{StaticResource OkBrush}" />
+                                                    <TextBlock DockPanel.Dock="Right" Text="{Binding DirectReports}" Width="30" TextAlignment="Right"
+                                                               FontFamily="Consolas" />
+                                                    <TextBlock Text="{Binding Supervisor}" TextTrimming="CharacterEllipsis" />
+                                                </DockPanel>
+                                                <DataTemplate.Triggers>
+                                                    <DataTrigger Binding="{Binding Rating}" Value="Over">
+                                                        <Setter TargetName="Rating" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Rating}" Value="Under">
+                                                        <Setter TargetName="Rating" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Rating}" Value="Idle">
+                                                        <Setter TargetName="Rating" Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                                                    </DataTrigger>
+                                                </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <TextBlock Text="GROUPS &amp; DIVISIONS (under Operations)" Style="{StaticResource PanelHeader}" />
+                                    <ItemsControl ItemsSource="{Binding Groups}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:GroupRow}">
+                                                <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="3" Padding="8,6" Margin="0,0,0,6">
+                                                    <StackPanel>
+                                                        <DockPanel>
+                                                            <Button DockPanel.Dock="Right" Content="Disband" Padding="6,0" FontSize="11" Margin="0"
+                                                                    Command="{Binding DataContext.Ics.DisbandGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                    CommandParameter="{Binding Id}" />
+                                                            <TextBlock>
+                                                                <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
+                                                                <Run Text="{Binding Kind, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" FontSize="11" />
+                                                            </TextBlock>
+                                                        </DockPanel>
+                                                        <TextBlock Text="{Binding Supervisor}" Foreground="{StaticResource MutedTextBrush}" FontSize="11" />
+                                                        <ItemsControl ItemsSource="{Binding Members}" ItemTemplate="{StaticResource UnitPlacementTemplate}" Margin="0,4,0,0" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,12">
+                                        <ComboBox ItemsSource="{Binding GroupKinds}" SelectedItem="{Binding NewGroupKind}" Width="78" />
+                                        <TextBox Text="{Binding NewGroupName, UpdateSourceTrigger=PropertyChanged}" Width="104" Margin="4,0,0,0"
+                                                 ToolTip="Name, e.g. Fire Group, Medical Group, Division A" />
+                                        <TextBox Text="{Binding NewGroupSupervisor, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="4,0,0,0"
+                                                 ToolTip="Supervisor" />
+                                        <Button Content="Form" Command="{Binding FormGroupCommand}" Padding="6,1" />
+                                    </StackPanel>
+
+                                    <TextBlock Text="REPORTING DIRECTLY TO COMMAND" Style="{StaticResource PanelHeader}" />
+                                    <ItemsControl ItemsSource="{Binding Ungrouped}" ItemTemplate="{StaticResource UnitPlacementTemplate}" />
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Grid>
+                    </TabItem>
                 </TabControl>
             </Border>
         </Grid>
@@ -545,6 +646,11 @@
                                                             ToolTip="Dispatch to the selected incident"
                                                             Visibility="{Binding CanDispatch, Converter={StaticResource BoolToVisibility}}"
                                                             Command="{Binding DataContext.DispatchUnitCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding Id}" />
+                                                    <Button Content="Reassign" Padding="6,0" FontSize="11"
+                                                            ToolTip="Move to the selected incident"
+                                                            Visibility="{Binding CanReassign, Converter={StaticResource BoolToVisibility}}"
+                                                            Command="{Binding DataContext.ReassignUnitCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                             CommandParameter="{Binding Id}" />
                                                     <Button Content="Stand down" Padding="6,0" FontSize="11"
                                                             Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibility}}"
@@ -666,6 +772,190 @@
                                 </TextBlock>
                             </Grid>
                         </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem>
+                <TabItem.Header>
+                    <TextBlock>
+                        <Run Text="COMMAND &amp; CONTROL" />
+                        <Run Text="{Binding Command.PendingApprovals, Mode=OneWay, StringFormat=' · {0} awaiting decision'}" Foreground="{StaticResource WarningBrush}" />
+                    </TextBlock>
+                </TabItem.Header>
+                <Grid DataContext="{Binding Command}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Orders -->
+                    <Border Grid.Column="0" Style="{StaticResource Panel}" BorderThickness="0,0,1,0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="ORDERS (selected incident)" Style="{StaticResource PanelHeader}" />
+                            <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                                <ComboBox ItemsSource="{Binding OrderTargets}" SelectedItem="{Binding OrderTarget}" DisplayMemberPath="Label"
+                                          ToolTip="Units, groups and staffed positions of the selected incident" />
+                                <DockPanel Margin="0,4,0,0">
+                                    <Button DockPanel.Dock="Right" Content="Issue" Command="{Binding IssueOrderCommand}" Margin="4,0,0,0" />
+                                    <TextBox Text="{Binding OrderText, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="e.g. Set up exposure protection on unit 4" />
+                                </DockPanel>
+                            </StackPanel>
+                            <ListBox ItemsSource="{Binding Orders}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:OrderRow}">
+                                        <StackPanel Margin="0,0,0,8">
+                                            <TextBlock TextWrapping="Wrap">
+                                                <Run Text="{Binding Time, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                <Run Text="{Binding Target, Mode=OneWay}" FontWeight="SemiBold" />
+                                                <Run Text="·" Foreground="{StaticResource MutedTextBrush}" />
+                                                <Run x:Name="State" Text="{Binding Status, Mode=OneWay}" />
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding Text, StringFormat=“{0}”}" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding ReadBack}" TextWrapping="Wrap" FontStyle="Italic"
+                                                       Foreground="{StaticResource MutedTextBrush}" />
+                                            <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
+                                                        Visibility="{Binding IsOpen, Converter={StaticResource BoolToVisibility}}">
+                                                <Button Content="Complete" Padding="6,0" FontSize="11" Margin="0,0,4,0"
+                                                        Command="{Binding DataContext.Command.CompleteOrderCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding Id}" />
+                                                <Button Content="Cancel" Padding="6,0" FontSize="11"
+                                                        Command="{Binding DataContext.Command.CancelOrderCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding Id}" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding AwaitingReadBack}" Value="True">
+                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                <Setter TargetName="State" Property="Text" Value="Awaiting read-back" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Resource requests -->
+                    <Border Grid.Column="1" Style="{StaticResource Panel}" BorderThickness="0,0,1,0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="RESOURCE REQUESTS (selected incident)" Style="{StaticResource PanelHeader}" />
+                            <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                                <DockPanel>
+                                    <TextBox DockPanel.Dock="Right" Text="{Binding RequestQuantity, UpdateSourceTrigger=PropertyChanged}" Width="36"
+                                             Margin="4,0,0,0" ToolTip="Quantity" />
+                                    <ComboBox DockPanel.Dock="Left" ItemsSource="{Binding RequestKinds}" SelectedItem="{Binding RequestKind}" Width="150" />
+                                    <ComboBox ItemsSource="{Binding RequestableTypes}" SelectedItem="{Binding RequestType}" DisplayMemberPath="Label"
+                                              Margin="4,0,0,0" />
+                                </DockPanel>
+                                <DockPanel Margin="0,4,0,0">
+                                    <Button DockPanel.Dock="Right" Content="Request" Command="{Binding RequestResourcesCommand}" Margin="4,0,0,0" />
+                                    <TextBox Text="{Binding RequestJustification, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="Justification (required for mutual aid and specialist teams)" />
+                                </DockPanel>
+                            </StackPanel>
+                            <ListBox ItemsSource="{Binding Requests}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:RequestRow}">
+                                        <StackPanel Margin="0,0,0,8">
+                                            <TextBlock TextWrapping="Wrap">
+                                                <Run Text="{Binding Time, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                <Run x:Name="State" Text="{Binding Status, Mode=OneWay}" FontWeight="SemiBold" />
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Detail}" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                        </StackPanel>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding Status}" Value="Denied">
+                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Status}" Value="Approved">
+                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource OkBrush}" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Approvals -->
+                    <Border Grid.Column="2" Style="{StaticResource Panel}" BorderThickness="0,0,1,0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="APPROVALS (decisions for command)" Style="{StaticResource PanelHeader}" />
+                            <TextBox DockPanel.Dock="Top" Text="{Binding DecisionNote, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"
+                                     ToolTip="Optional note sent with your decision" />
+                            <Grid>
+                                <ListBox ItemsSource="{Binding Approvals}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:ApprovalRow}">
+                                            <StackPanel Margin="0,0,0,10">
+                                                <TextBlock TextWrapping="Wrap">
+                                                    <Run Text="{Binding Time, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <Run x:Name="Subject" Text="{Binding Subject, Mode=OneWay}" FontWeight="SemiBold" />
+                                                </TextBlock>
+                                                <TextBlock Text="{Binding RequestedBy}" Foreground="{StaticResource MutedTextBrush}" />
+                                                <TextBlock Text="{Binding Details}" TextWrapping="Wrap" />
+                                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
+                                                            Visibility="{Binding IsPending, Converter={StaticResource BoolToVisibility}}">
+                                                    <Button Content="Approve" Padding="8,1" FontSize="11" Margin="0,0,4,0"
+                                                            Command="{Binding DataContext.Command.ApproveCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding Id}" />
+                                                    <Button Content="Deny" Padding="8,1" FontSize="11"
+                                                            Command="{Binding DataContext.Command.DenyCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding Id}" />
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding Status}" Foreground="{StaticResource MutedTextBrush}"
+                                                           Visibility="{Binding IsPending, Converter={x:Static vm:Converters.FalseToVisible}}" />
+                                            </StackPanel>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding IsPending}" Value="True">
+                                                    <Setter TargetName="Subject" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <TextBlock Style="{StaticResource EmptyHint}" Text="Nothing is waiting for a decision.">
+                                    <TextBlock.Visibility>
+                                        <Binding Path="Approvals.Count" Converter="{x:Static vm:Converters.ZeroToVisible}" />
+                                    </TextBlock.Visibility>
+                                </TextBlock>
+                            </Grid>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Notifications -->
+                    <Border Grid.Column="3" Style="{StaticResource Panel}" BorderThickness="0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="NOTIFICATIONS (outside organisations)" Style="{StaticResource PanelHeader}" />
+                            <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                                <ComboBox ItemsSource="{Binding Recipients}" Text="{Binding Recipient, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEditable="True" ToolTip="Pick or type a recipient" />
+                                <DockPanel Margin="0,4,0,0">
+                                    <Button DockPanel.Dock="Right" Content="Send" Command="{Binding NotifyCommand}" Margin="4,0,0,0" />
+                                    <TextBox Text="{Binding NotificationText, UpdateSourceTrigger=PropertyChanged}" />
+                                </DockPanel>
+                            </StackPanel>
+                            <ListBox ItemsSource="{Binding Notifications}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:NotificationRow}">
+                                        <StackPanel Margin="0,0,0,8">
+                                            <TextBlock>
+                                                <Run Text="{Binding Time, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                <Run Text="{Binding Recipient, Mode=OneWay}" FontWeight="SemiBold" />
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding Message, StringFormat=“{0}”}" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Reply}" TextWrapping="Wrap" FontStyle="Italic"
+                                                       Foreground="{StaticResource MutedTextBrush}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
                     </Border>
                 </Grid>
             </TabItem>

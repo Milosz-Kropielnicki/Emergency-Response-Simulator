@@ -55,6 +55,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAvlService>(sp => sp.GetRequiredService<AvlService>());
 
         services.AddSingleton<ISimulationSystem>(sp => new UnitResponseSystem(sp.GetRequiredService<RoutingService>()));
+        services.AddSingleton<ISimulationSystem, CommandResponseSystem>();
         services.AddSingleton<ISimulationSystem>(sp => new AttentionMonitor(
             sp.GetRequiredService<ICopService>(), sp.GetRequiredService<AttentionOptions>(), sp.GetRequiredService<IRoutingService>()));
         if (configuration[$"{SimulationOptions.SectionName}:Scenario"] == BarrowStreetScenario.Key)

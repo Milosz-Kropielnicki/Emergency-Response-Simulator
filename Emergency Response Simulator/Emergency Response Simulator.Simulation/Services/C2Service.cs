@@ -8,7 +8,7 @@ namespace Emergency_Response_Simulator.Simulation.Services;
 
 /// <summary>
 /// Validates commands against the COP (what command believes, not ground truth) and records
-/// accepted ones in the event stream. Phase 0 covers the core commands; Phase 4 extends this.
+/// accepted ones in the event stream.
 /// </summary>
 public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2Service
 {
@@ -56,18 +56,21 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2S
     }
 
     public async Task<CommandResult> RequestResourcesAsync(
-        Guid incidentId, string description, int quantity, Guid? requestedBy = null,
+        Guid incidentId, ResourceRequestKind kind, UnitType unitType, int quantity, string? justification = null,
         CancellationToken cancellationToken = default)
     {
-        if (cop.FindIncident(incidentId) is null)
+        if (cop.FindIncident(incidentId) is not { } incident)
             return CommandResult.Fail("Unknown incident.");
-        if (quantity < 1)
-            return CommandResult.Fail("Quantity must be at least 1.");
-        if (string.IsNullOrWhiteSpace(description))
-            return CommandResult.Fail("Describe what is being requested.");
+        if (quantity is < 1 or > 20)
+            return CommandResult.Fail("Request between 1 and 20 resources.");
+        if (kind != ResourceRequestKind.AdditionalResources && string.IsNullOrWhiteSpace(justification))
+            return CommandResult.Fail("Mutual aid and specialist teams need a justification for the approver.");
 
-        return await PublishAsync(
-            new ResourceRequested(Guid.NewGuid(), incidentId, description.Trim(), quantity, requestedBy), cancellationToken);
+        var requestId = Guid.NewGuid();
+        var description = $"{quantity} × {ResourceGroups.Label(unitType)} ({EventDescriber.Humanize(kind).ToLowerInvariant()}) for {incident.Number}";
+        var result = await PublishAsync(new ResourceRequested(requestId, incidentId, description, quantity, null,
+            kind, unitType, justification?.Trim()), cancellationToken);
+        return result with { EntityId = requestId };
     }
 
     public async Task<CommandResult> DeclareZoneAsync(
@@ -211,6 +214,125 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2S
             return CommandResult.Fail("Already acknowledged.");
 
         return await PublishAsync(new AlertAcknowledged(alertId, userId), cancellationToken);
+    }
+
+    public async Task<CommandResult> AssignIcsPositionAsync(
+        Guid incidentId, IcsRole role, string name, CancellationToken cancellationToken = default)
+    {
+        if (cop.FindIncident(incidentId) is not { } incident)
+            return CommandResult.Fail("Unknown incident.");
+        if (string.IsNullOrWhiteSpace(name))
+            return CommandResult.Fail("Name the person taking the position.");
+        if (incident.Command.Positions.GetValueOrDefault(role) == name.Trim())
+            return CommandResult.Fail("Nothing changed.");
+
+        return await PublishAsync(new IcsPositionAssigned(incidentId, role, name.Trim()), cancellationToken);
+    }
+
+    public async Task<CommandResult> FormGroupAsync(
+        Guid incidentId, string name, IcsGroupKind kind, string? supervisor = null, CancellationToken cancellationToken = default)
+    {
+        if (cop.FindIncident(incidentId) is not { } incident)
+            return CommandResult.Fail("Unknown incident.");
+        if (string.IsNullOrWhiteSpace(name))
+            return CommandResult.Fail("Name the group or division.");
+        if (incident.Command.Groups.Any(g => string.Equals(g.Name, name.Trim(), StringComparison.OrdinalIgnoreCase)))
+            return CommandResult.Fail($"{incident.Number} already has a \"{name.Trim()}\".");
+
+        var groupId = Guid.NewGuid();
+        var result = await PublishAsync(new IcsGroupFormed(incidentId, groupId, name.Trim(), kind,
+            string.IsNullOrWhiteSpace(supervisor) ? null : supervisor.Trim()), cancellationToken);
+        return result with { EntityId = groupId };
+    }
+
+    public async Task<CommandResult> DisbandGroupAsync(Guid incidentId, Guid groupId, CancellationToken cancellationToken = default)
+    {
+        if (cop.FindIncident(incidentId) is not { } incident || incident.Command.Groups.All(g => g.Id != groupId))
+            return CommandResult.Fail("Unknown group.");
+        return await PublishAsync(new IcsGroupDisbanded(incidentId, groupId), cancellationToken);
+    }
+
+    public async Task<CommandResult> AssignUnitToGroupAsync(Guid unitId, Guid? groupId, CancellationToken cancellationToken = default)
+    {
+        if (cop.FindUnit(unitId) is not { } unit)
+            return CommandResult.Fail("Unknown unit.");
+        if (unit.AssignedIncident is not { } incident)
+            return CommandResult.Fail($"{unit.Callsign} is not committed to an incident.");
+        if (groupId is { } id && incident.Command.Groups.All(g => g.Id != id))
+            return CommandResult.Fail($"That group belongs to a different incident than {unit.Callsign}'s.");
+        if (incident.Command.GroupOf(unitId)?.Id == groupId)
+            return CommandResult.Fail("Nothing changed.");
+
+        return await PublishAsync(new UnitAssignedToGroup(unitId, incident.Id, groupId), cancellationToken);
+    }
+
+    public async Task<CommandResult> IssueOrderAsync(
+        Guid? incidentId, OrderTargetKind targetKind, Guid? targetId, string text, IcsRole? position = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return CommandResult.Fail("Write the order.");
+        var incident = incidentId is { } iid ? cop.FindIncident(iid) : null;
+        if (incidentId is not null && incident is null)
+            return CommandResult.Fail("Unknown incident.");
+
+        string? targetName = targetKind switch
+        {
+            OrderTargetKind.Unit => targetId is { } u ? cop.FindUnit(u)?.Callsign : null,
+            OrderTargetKind.Group => incident?.Command.Groups.FirstOrDefault(g => g.Id == targetId) is { } g
+                ? g.Supervisor is { } supervisor ? $"{g.Name} ({supervisor})" : g.Name
+                : null,
+            OrderTargetKind.Position => position is { } role && incident?.Command.Positions.TryGetValue(role, out var holder) == true
+                ? $"{EventDescriber.Humanize(role)} ({holder})"
+                : null,
+            _ => null,
+        };
+        if (targetName is null)
+            return CommandResult.Fail(targetKind == OrderTargetKind.Position
+                ? "That position is not staffed for this incident."
+                : $"Unknown {targetKind.ToString().ToLowerInvariant()}.");
+
+        var orderId = Guid.NewGuid();
+        var result = await PublishAsync(new OrderIssued(orderId, incidentId, targetKind,
+            targetKind == OrderTargetKind.Position ? null : targetId, targetName, text.Trim()), cancellationToken);
+        return result with { EntityId = orderId };
+    }
+
+    public async Task<CommandResult> CloseOrderAsync(Guid orderId, bool completed, CancellationToken cancellationToken = default)
+    {
+        if (cop.Orders.FirstOrDefault(o => o.Id == orderId) is not { } order)
+            return CommandResult.Fail("Unknown order.");
+        if (order.Status is OrderStatus.Completed or OrderStatus.Cancelled)
+            return CommandResult.Fail("That order is already closed.");
+
+        return await PublishAsync(new OrderClosed(orderId, completed), cancellationToken);
+    }
+
+    public async Task<CommandResult> DecideApprovalAsync(Guid approvalId, bool approve, string? note = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (cop.Approvals.FirstOrDefault(a => a.Id == approvalId) is not { } approval)
+            return CommandResult.Fail("Unknown approval request.");
+        if (approval.Status != ApprovalStatus.Pending)
+            return CommandResult.Fail("That request has already been decided.");
+
+        return await PublishAsync(new ApprovalDecided(approvalId, approve, string.IsNullOrWhiteSpace(note) ? null : note.Trim()),
+            cancellationToken);
+    }
+
+    public async Task<CommandResult> NotifyAsync(string recipient, string message, Guid? incidentId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(recipient))
+            return CommandResult.Fail("Choose who to notify.");
+        if (string.IsNullOrWhiteSpace(message))
+            return CommandResult.Fail("Write the message.");
+        if (incidentId is { } id && cop.FindIncident(id) is null)
+            return CommandResult.Fail("Unknown incident.");
+
+        var notificationId = Guid.NewGuid();
+        var result = await PublishAsync(new NotificationSent(notificationId, incidentId, recipient.Trim(), message.Trim()), cancellationToken);
+        return result with { EntityId = notificationId };
     }
 
     /// <summary>The new value if it differs from the current one, otherwise null (no change).</summary>

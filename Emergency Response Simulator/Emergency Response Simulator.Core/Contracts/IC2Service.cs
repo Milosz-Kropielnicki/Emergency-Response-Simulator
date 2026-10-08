@@ -6,7 +6,6 @@ namespace Emergency_Response_Simulator.Core.Contracts;
 /// <summary>
 /// Command and Control: "Make it happen" (Design Document §9).
 /// Every accepted command is appended to the event stream, so it is visible on the COP and in the AAR.
-/// Orders, notifications and approvals are added in Phase 4.
 /// </summary>
 public interface IC2Service
 {
@@ -20,9 +19,12 @@ public interface IC2Service
     Task<CommandResult> ReassignAsync(
         Guid unitId, Guid newIncidentId, Guid? orderedBy = null, CancellationToken cancellationToken = default);
 
-    /// <summary>Mutual aid, additional resources or specialist teams.</summary>
+    /// <summary>
+    /// Additional resources, mutual aid or specialist teams (Design Document §9, §16). Mutual aid and
+    /// specialist teams need an outside approval; approved resources arrive and join the roster.
+    /// </summary>
     Task<CommandResult> RequestResourcesAsync(
-        Guid incidentId, string description, int quantity, Guid? requestedBy = null,
+        Guid incidentId, ResourceRequestKind kind, UnitType unitType, int quantity, string? justification = null,
         CancellationToken cancellationToken = default);
 
     Task<CommandResult> DeclareZoneAsync(
@@ -69,6 +71,33 @@ public interface IC2Service
     Task<CommandResult> LinkReportAsync(Guid reportId, Guid incidentId, CancellationToken cancellationToken = default);
 
     Task<CommandResult> AcknowledgeAlertAsync(Guid alertId, Guid? userId = null, CancellationToken cancellationToken = default);
+
+    // ---- ICS structure (Design Document §8.1) ----
+
+    Task<CommandResult> AssignIcsPositionAsync(
+        Guid incidentId, IcsRole role, string name, CancellationToken cancellationToken = default);
+
+    /// <summary>Forms a group or division under Operations; <see cref="CommandResult.EntityId"/> is its id.</summary>
+    Task<CommandResult> FormGroupAsync(
+        Guid incidentId, string name, IcsGroupKind kind, string? supervisor = null, CancellationToken cancellationToken = default);
+
+    Task<CommandResult> DisbandGroupAsync(Guid incidentId, Guid groupId, CancellationToken cancellationToken = default);
+
+    /// <summary>Places a committed unit under a group's supervisor (or, with null, directly under Operations / the IC).</summary>
+    Task<CommandResult> AssignUnitToGroupAsync(Guid unitId, Guid? groupId, CancellationToken cancellationToken = default);
+
+    // ---- Orders, approvals, notifications (Design Document §9) ----
+
+    /// <summary>A directive to a unit, group or ICS position; the recipient reads it back.</summary>
+    Task<CommandResult> IssueOrderAsync(
+        Guid? incidentId, OrderTargetKind targetKind, Guid? targetId, string text, IcsRole? position = null,
+        CancellationToken cancellationToken = default);
+
+    Task<CommandResult> CloseOrderAsync(Guid orderId, bool completed, CancellationToken cancellationToken = default);
+
+    Task<CommandResult> DecideApprovalAsync(Guid approvalId, bool approve, string? note = null, CancellationToken cancellationToken = default);
+
+    Task<CommandResult> NotifyAsync(string recipient, string message, Guid? incidentId = null, CancellationToken cancellationToken = default);
 }
 
 /// <param name="EntityId">Id of anything the command created, e.g. a new incident.</param>

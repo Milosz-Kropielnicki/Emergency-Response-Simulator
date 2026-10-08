@@ -31,6 +31,12 @@ public interface ICopService
     /// <summary>Latest weather report received, or null if none yet. Not the true weather.</summary>
     PerceivedWeather? Weather { get; }
 
+    // Command and control (Design Document §9)
+    IReadOnlyList<Order> Orders { get; }
+    IReadOnlyList<ResourceRequest> ResourceRequests { get; }
+    IReadOnlyList<ApprovalRequest> Approvals { get; }
+    IReadOnlyList<Notification> Notifications { get; }
+
     Incident? FindIncident(Guid incidentId);
     Unit? FindUnit(Guid unitId);
 }

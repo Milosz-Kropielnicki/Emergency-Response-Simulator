@@ -44,6 +44,10 @@ public sealed partial class UnitRow(MainViewModel owner, Unit unit, DateTimeOffs
     public bool CanDispatch => Status == UnitStatus.Available && owner.SelectedIncidentId is not null;
     public bool CanCancel => Status is UnitStatus.Dispatched or UnitStatus.EnRoute;
 
+    /// <summary>Committed elsewhere and an incident is selected: offer to move it there.</summary>
+    public bool CanReassign => owner.SelectedIncidentId is { } selected && unit.AssignedIncidentId is { } current
+                               && current != selected && Status != UnitStatus.OutOfService;
+
     public IReadOnlyList<StatusOption> NextStatuses { get; } =
         UnitStatusRules.NextStatuses(unit.Status)
             // Dispatch and cancellation go through their own commands so the assignment is recorded.

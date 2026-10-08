@@ -201,7 +201,8 @@ public static class MapStyles
                 {
                     LabelColumn = LabelField, ForeColor = Color.White, BackColor = new Brush(Color.FromArgb(190, 15, 20, 25)),
                     Font = new Font { Size = 10 }, Offset = new Offset(0, -18), CornerRounding = 3,
-                    CollisionDetection = false, MaxVisible = ResolutionAtZoom(13),
+                    // Units converge on a scene; overlapping labels become unreadable, so drop the clashing ones.
+                    CollisionDetection = true, MaxVisible = ResolutionAtZoom(13),
                 },
             },
         };

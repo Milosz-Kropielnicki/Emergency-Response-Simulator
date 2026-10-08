@@ -20,6 +20,10 @@ public sealed class PerceivedState : ICopService
     private readonly Dictionary<Guid, Report> _reports = [];
     private readonly Dictionary<Guid, Alert> _alerts = [];
     private readonly Dictionary<Guid, Zone> _zones = [];
+    private readonly Dictionary<Guid, Order> _orders = [];
+    private readonly Dictionary<Guid, ResourceRequest> _requests = [];
+    private readonly Dictionary<Guid, ApprovalRequest> _approvals = [];
+    private readonly Dictionary<Guid, Notification> _notifications = [];
 
     public event EventHandler? Changed;
 
@@ -33,6 +37,10 @@ public sealed class PerceivedState : ICopService
     public IReadOnlyList<Alert> Alerts => Snapshot(_alerts);
     public IReadOnlyList<Zone> Zones => Snapshot(_zones);
     public PerceivedWeather? Weather { get; private set; }
+    public IReadOnlyList<Order> Orders => Snapshot(_orders);
+    public IReadOnlyList<ResourceRequest> ResourceRequests => Snapshot(_requests);
+    public IReadOnlyList<ApprovalRequest> Approvals => Snapshot(_approvals);
+    public IReadOnlyList<Notification> Notifications => Snapshot(_notifications);
 
     public Incident? FindIncident(Guid incidentId)
     {
@@ -149,7 +157,98 @@ public sealed class PerceivedState : ICopService
             case IncidentCommanderAssigned e when _incidents.TryGetValue(e.IncidentId, out var commanded):
                 commanded.IncidentCommanderName = e.Name;
                 commanded.IncidentCommanderId = e.UserId;
+                commanded.Command.Apply(e);
                 commanded.LastUpdatedAt = at;
+                break;
+
+            case IcsPositionAssigned e when _incidents.TryGetValue(e.IncidentId, out var staffed):
+                staffed.Command.Apply(e);
+                if (e.Role == IcsRole.IncidentCommander)
+                    staffed.IncidentCommanderName = e.Name;
+                staffed.LastUpdatedAt = at;
+                break;
+
+            case IcsGroupFormed e when _incidents.TryGetValue(e.IncidentId, out var organised):
+                organised.Command.Apply(e);
+                break;
+
+            case IcsGroupDisbanded e when _incidents.TryGetValue(e.IncidentId, out var reorganised):
+                reorganised.Command.Apply(e);
+                break;
+
+            case UnitAssignedToGroup e when _incidents.TryGetValue(e.IncidentId, out var grouped):
+                grouped.Command.Apply(e);
+                break;
+
+            case OrderIssued e:
+                _orders[e.OrderId] = new Order
+                {
+                    Id = e.OrderId, IncidentId = e.IncidentId, TargetKind = e.TargetKind, TargetId = e.TargetId,
+                    TargetName = e.TargetName, Text = e.Text, IssuedAt = at,
+                };
+                break;
+
+            case OrderAcknowledged e when _orders.TryGetValue(e.OrderId, out var acknowledgedOrder):
+                acknowledgedOrder.Status = OrderStatus.Acknowledged;
+                acknowledgedOrder.AcknowledgedAt = at;
+                acknowledgedOrder.ReadBack = e.ReadBack;
+                if (acknowledgedOrder.TargetKind == OrderTargetKind.Unit && acknowledgedOrder.TargetId is { } ackUnit
+                    && _units.TryGetValue(ackUnit, out var answering))
+                {
+                    Contact(answering, at);
+                }
+                break;
+
+            case OrderClosed e when _orders.TryGetValue(e.OrderId, out var closedOrder):
+                closedOrder.Status = e.Completed ? OrderStatus.Completed : OrderStatus.Cancelled;
+                closedOrder.ClosedAt = at;
+                break;
+
+            case ResourceRequested e:
+                _requests[e.RequestId] = new ResourceRequest
+                {
+                    Id = e.RequestId, IncidentId = e.IncidentId, Kind = e.Kind, UnitType = e.UnitType, Quantity = e.Quantity,
+                    Description = e.Description, Justification = e.Justification, RequestedAt = at,
+                };
+                break;
+
+            case ResourceRequestDecided e when _requests.TryGetValue(e.RequestId, out var decided):
+                decided.Status = e.Approved ? ResourceRequestStatus.Approved : ResourceRequestStatus.Denied;
+                decided.DecidedBy = e.DecidedBy;
+                decided.DecisionReason = e.Reason;
+                decided.DecidedAt = at;
+                decided.ExpectedAt = e.ExpectedAt;
+                break;
+
+            case ResourceRequestFulfilled e when _requests.TryGetValue(e.RequestId, out var fulfilled):
+                fulfilled.Status = ResourceRequestStatus.Fulfilled;
+                fulfilled.FulfilledBy.AddRange(e.UnitIds);
+                break;
+
+            case ApprovalRequested e:
+                _approvals[e.ApprovalId] = new ApprovalRequest
+                {
+                    Id = e.ApprovalId, IncidentId = e.IncidentId, Subject = e.Subject, Details = e.Details,
+                    RequestedBy = e.RequestedBy, RequestedAt = at,
+                };
+                break;
+
+            case ApprovalDecided e when _approvals.TryGetValue(e.ApprovalId, out var approval):
+                approval.Status = e.Approved ? ApprovalStatus.Approved : ApprovalStatus.Denied;
+                approval.Note = e.Note;
+                approval.DecidedAt = at;
+                break;
+
+            case NotificationSent e:
+                _notifications[e.NotificationId] = new Notification
+                {
+                    Id = e.NotificationId, IncidentId = e.IncidentId, Recipient = e.Recipient, Message = e.Message, SentAt = at,
+                };
+                break;
+
+            case NotificationAnswered e when _notifications.TryGetValue(e.NotificationId, out var answered):
+                answered.Reply = e.Reply;
+                answered.RepliedAt = at;
                 break;
 
             case IncidentCreated e:
@@ -194,6 +293,8 @@ public sealed class PerceivedState : ICopService
 
             case UnitDispatchCancelled e when _units.TryGetValue(e.UnitId, out var unit):
                 // CANCELLED → AVAILABLE (Design Document §6.4)
+                if (_incidents.TryGetValue(e.IncidentId, out var stoodDownFrom))
+                    stoodDownFrom.Command.Apply(e);
                 Unassign(unit);
                 unit.Status = UnitStatus.Available;
                 unit.Eta = null;

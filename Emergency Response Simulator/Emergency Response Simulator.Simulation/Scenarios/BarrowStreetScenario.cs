@@ -100,6 +100,13 @@ public static class BarrowStreetScenario
                     ? [Truth(new UnitRadioFailed(engine7, Failed: true))]
                     : []),
 
+            new(TimeSpan.FromMinutes(8.5), "Garda inspector asks for authority to evacuate (decision for the trainee)",
+                _ => [Perceived(new ApprovalRequested(Guid.NewGuid(), null,
+                    "Authority to evacuate Barrow Street apartments",
+                    "Approx. 200 residents in the apartment block north-east of the fire; smoke is now drifting over it. " +
+                    "Request authority to evacuate to the community centre on Pearse Street.",
+                    "Garda Inspector, Pearse Street"))]),
+
             new(TimeSpan.FromMinutes(10), "Hospital reports pressure on the emergency department",
                 _ => [Perceived(new AlertRaised(Guid.NewGuid(), AlertCategory.Critical, AlertSeverity.Critical,
                     "St. James's Hospital: ED near capacity",

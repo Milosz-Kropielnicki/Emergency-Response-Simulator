@@ -35,6 +35,9 @@ public partial class MainViewModel : ObservableObject
         _c2 = c2;
         _routing = routing;
         UnitDetail = new UnitDetailViewModel(routing);
+        Command = new CommandViewModel(this, c2, cop);
+        Command.InitialiseDefaults();
+        Ics = new IcsViewModel(this, c2);
         Timeline = timeline;
         ZoneDrawing = new ZoneDrawingViewModel(c2, this);
         IncidentDetail = new IncidentDetailViewModel(this, c2);
@@ -63,6 +66,12 @@ public partial class MainViewModel : ObservableObject
 
     public UnitDetailViewModel UnitDetail { get; }
 
+    /// <summary>Orders, resource requests, approvals and notifications.</summary>
+    public CommandViewModel Command { get; }
+
+    /// <summary>The selected incident's ICS organisation and span of control.</summary>
+    public IcsViewModel Ics { get; }
+
     public bool IsReplay => _cop.IsReplay;
 
     // ---- Header ----
@@ -86,7 +95,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _isRightPanelOpen = true;
     [ObservableProperty] private bool _isTopPanelOpen;
 
-    /// <summary>0 = comms hub, 1 = incident detail, 2 = unit detail.</summary>
+    /// <summary>0 = comms hub, 1 = incident detail, 2 = unit detail, 3 = ICS organisation.</summary>
     [ObservableProperty] private int _rightPanelTab;
 
     /// <summary>
@@ -295,6 +304,8 @@ public partial class MainViewModel : ObservableObject
         }
         RefreshResourceBoard();
         RefreshIntelligence();
+        Command.Refresh();
+        Ics.Load(incident);
         _ = RankClosestUnitsAsync();
     }
 
@@ -338,6 +349,14 @@ public partial class MainViewModel : ObservableObject
         }
         var callsign = _cop.FindUnit(unitId)?.Callsign;
         await RunCommandAsync(() => _c2.DispatchAsync(unitId, incidentId), $"{callsign} dispatched");
+    }
+
+    [RelayCommand]
+    private async Task ReassignUnitAsync(Guid unitId)
+    {
+        if (SelectedIncidentId is not { } incidentId) return;
+        await RunCommandAsync(() => _c2.ReassignAsync(unitId, incidentId),
+            $"{_cop.FindUnit(unitId)?.Callsign} reassigned to {_cop.FindIncident(incidentId)?.Number}");
     }
 
     [RelayCommand]
@@ -478,6 +497,8 @@ public partial class MainViewModel : ObservableObject
         RefreshZones();
         RefreshWeather();
         IncidentDetail.Load(SelectedIncidentId is { } selected ? _cop.FindIncident(selected) : null, selectionChanged: false);
+        Command.Refresh();
+        Ics.Load(SelectedIncidentId is { } forIcs ? _cop.FindIncident(forIcs) : null);
     }
 
     private void RefreshZones()

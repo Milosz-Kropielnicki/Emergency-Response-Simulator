@@ -15,6 +15,18 @@ public static class ResourceGroups
         _ => type.ToString(),
     };
 
+    /// <summary>Which kind of agency runs a unit type.</summary>
+    public static AgencyType AgencyFor(UnitType type) => type switch
+    {
+        UnitType.Engine or UnitType.Ladder or UnitType.Tanker or UnitType.Rescue or UnitType.Hazmat or UnitType.Command
+            or UnitType.Wildland or UnitType.WaterTender => AgencyType.Fire,
+        UnitType.AmbulanceAls or UnitType.AmbulanceBls or UnitType.MedicalSupervisor or UnitType.MassCasualtyUnit
+            or UnitType.MedevacHelicopter => AgencyType.Ems,
+        UnitType.Patrol or UnitType.Traffic or UnitType.Swat or UnitType.Motorcycle or UnitType.Supervisor
+            or UnitType.SearchTeam or UnitType.PrisonerTransport => AgencyType.Police,
+        _ => AgencyType.EmergencyManagement,
+    };
+
     /// <summary>Display name for a unit type, e.g. AmbulanceAls → "ALS ambulance".</summary>
     public static string Label(UnitType type) => type switch
     {

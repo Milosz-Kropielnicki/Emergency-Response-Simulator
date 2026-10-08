@@ -31,6 +31,20 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(RouteReported), nameof(RouteReported))]
 [JsonDerivedType(typeof(ReportAssessed), nameof(ReportAssessed))]
 [JsonDerivedType(typeof(ReportLinked), nameof(ReportLinked))]
+// Command and control (Phase 4)
+[JsonDerivedType(typeof(IcsPositionAssigned), nameof(IcsPositionAssigned))]
+[JsonDerivedType(typeof(IcsGroupFormed), nameof(IcsGroupFormed))]
+[JsonDerivedType(typeof(IcsGroupDisbanded), nameof(IcsGroupDisbanded))]
+[JsonDerivedType(typeof(UnitAssignedToGroup), nameof(UnitAssignedToGroup))]
+[JsonDerivedType(typeof(OrderIssued), nameof(OrderIssued))]
+[JsonDerivedType(typeof(OrderAcknowledged), nameof(OrderAcknowledged))]
+[JsonDerivedType(typeof(OrderClosed), nameof(OrderClosed))]
+[JsonDerivedType(typeof(ResourceRequestDecided), nameof(ResourceRequestDecided))]
+[JsonDerivedType(typeof(ResourceRequestFulfilled), nameof(ResourceRequestFulfilled))]
+[JsonDerivedType(typeof(ApprovalRequested), nameof(ApprovalRequested))]
+[JsonDerivedType(typeof(ApprovalDecided), nameof(ApprovalDecided))]
+[JsonDerivedType(typeof(NotificationSent), nameof(NotificationSent))]
+[JsonDerivedType(typeof(NotificationAnswered), nameof(NotificationAnswered))]
 // Truth: the world as it really is
 [JsonDerivedType(typeof(WorldIncidentStarted), nameof(WorldIncidentStarted))]
 [JsonDerivedType(typeof(WorldIncidentChanged), nameof(WorldIncidentChanged))]
@@ -163,7 +177,61 @@ public sealed record ResourceRequested(
     Guid IncidentId,
     string Description,
     int Quantity,
-    Guid? RequestedBy) : DomainEvent;
+    Guid? RequestedBy,
+    ResourceRequestKind Kind = ResourceRequestKind.AdditionalResources,
+    UnitType? UnitType = null,
+    string? Justification = null) : DomainEvent;
+
+// ---- Command and control (Phase 4) ----
+
+/// <summary>Someone takes an ICS position for an incident (§8.1).</summary>
+public sealed record IcsPositionAssigned(Guid IncidentId, IcsRole Role, string Name) : DomainEvent;
+
+public sealed record IcsGroupFormed(Guid IncidentId, Guid GroupId, string Name, IcsGroupKind Kind, string? Supervisor) : DomainEvent;
+
+public sealed record IcsGroupDisbanded(Guid IncidentId, Guid GroupId) : DomainEvent;
+
+/// <summary>Puts a unit under a group's supervisor, or (null group) back under Operations / the IC.</summary>
+public sealed record UnitAssignedToGroup(Guid UnitId, Guid IncidentId, Guid? GroupId) : DomainEvent;
+
+public sealed record OrderIssued(
+    Guid OrderId,
+    Guid? IncidentId,
+    OrderTargetKind TargetKind,
+    Guid? TargetId,
+    string TargetName,
+    string Text) : DomainEvent;
+
+/// <summary>The recipient's read-back closes the loop; a garbled read-back must be corrected (§13).</summary>
+public sealed record OrderAcknowledged(Guid OrderId, string ReadBack, bool Garbled = false) : DomainEvent;
+
+/// <summary>An order is marked completed or cancelled by command.</summary>
+public sealed record OrderClosed(Guid OrderId, bool Completed) : DomainEvent;
+
+/// <param name="ExpectedAt">When the provider says the resources will be on scene.</param>
+public sealed record ResourceRequestDecided(
+    Guid RequestId,
+    bool Approved,
+    string DecidedBy,
+    string? Reason,
+    DateTimeOffset? ExpectedAt) : DomainEvent;
+
+/// <summary>Requested resources have arrived in the area and are now on the roster.</summary>
+public sealed record ResourceRequestFulfilled(Guid RequestId, IReadOnlyList<Guid> UnitIds) : DomainEvent;
+
+/// <summary>Someone asks command for a decision, e.g. authority to evacuate.</summary>
+public sealed record ApprovalRequested(
+    Guid ApprovalId,
+    Guid? IncidentId,
+    string Subject,
+    string Details,
+    string RequestedBy) : DomainEvent;
+
+public sealed record ApprovalDecided(Guid ApprovalId, bool Approved, string? Note) : DomainEvent;
+
+public sealed record NotificationSent(Guid NotificationId, Guid? IncidentId, string Recipient, string Message) : DomainEvent;
+
+public sealed record NotificationAnswered(Guid NotificationId, string Reply) : DomainEvent;
 
 /// <summary>
 /// Weather as reported to command by a met service or station. May lag or differ from the true

@@ -88,6 +88,7 @@ public class ErsDbContext(DbContextOptions<ErsDbContext> options) : DbContext(op
             b.Property(i => i.Location).HasColumnType(PointColumn);
             b.HasIndex(i => i.Location).HasMethod("gist");
             b.HasOne(i => i.IncidentCommander).WithMany().OnDelete(DeleteBehavior.SetNull);
+            b.Ignore(i => i.Command); // live ICS structure, rebuilt from events
         });
 
         modelBuilder.Entity<Report>(b =>

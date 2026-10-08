@@ -171,6 +171,42 @@ Road closures, evacuation zones, perimeters, search areas and operational zones 
   - From minute 6, the first fire engine still driving breaks down.
   - `--Simulation:DemoAutoResponse=true` makes the scenario open the incident and dispatch a first response itself, for presentations.
 
+## C2 dispatch & command (Phase 4)
+
+Everything below goes through `IC2Service`, is validated against the live COP, and is recorded as events. `CommandResponseSystem` plays everyone on the other end. Chance outcomes are seeded from the event id, so replays are reproducible.
+
+- **Dispatch:**
+  - Dispatch, reassign and stand-down from the resource board.
+  - The incident panel ranks available units by road ETA.
+- **ICS structure** (per incident; `IncidentCommand`, applied identically to the COP and to ground truth):
+  - the Incident Commander
+  - command staff: Safety, Liaison, PIO
+  - general staff: Operations, Planning, Logistics, Finance/Admin
+  - groups and divisions under Operations, each with a supervisor and assigned units
+
+  The ICS tab edits all of it.
+- **Span of control:** `SpanOfControl.Assess` counts direct reports for every supervisor, ICS-recommended 3–7. Units not in a group report to Operations if it is staffed, otherwise to the IC. Over 7 raises an alert and applies a real penalty to orders passing through that supervisor:
+  - read-back takes `1 + 0.5 × (span − 7)` times longer;
+  - `min(50%, 10% × (span − 7))` of orders are lost;
+  - the next band of bad luck produces a garbled read-back.
+- **Orders:** to a unit, group or staffed position. The recipient reads back after 20 s (units) or 35 s (supervisors). A dead radio means no read-back, and "not acknowledged" alerts after 2 min. Orders are closed as completed or cancelled.
+- **Resource requests:**
+
+  | Kind | Decided by | Rule | Arrives after approval |
+  |---|---|---|---|
+  | Additional resources | Our own control room | Always approved, immediately | 8 min |
+  | Mutual aid | Regional Duty Officer (after 2.5 min) | Approved only for High/Critical incidents | 15 min |
+  | Specialist teams | National Directorate (after 3 min) | Approved only for High/Critical incidents | 25 min |
+
+  Mutual aid and specialist teams also need a justification for the approver. Approved resources are registered as new units, under a provider agency where there is one (e.g. "Kildare Fire Service"). They appear at an entry point on the western or southern approach and are dispatched to the incident, driving in by road.
+- **Approvals:** decisions others need from command (the scenario's Garda inspector asks for authority to evacuate). They are approved or denied with a note, the requester acknowledges, and a reminder alert comes after 3 min.
+- **Notifications:** to hospitals, utilities, agencies and government. Replies arrive after 1–2.5 min, depending on the recipient (e.g. ESB offers to isolate supply).
+- **UI:**
+  - a Command & Control tab: orders, requests, approvals, notifications
+  - an ICS tab: positions, span of control, groups, unit placement
+  - a Reassign button on the resource board
+  - a history filter for orders, requests and approvals
+
 ## Local setup
 
 ```powershell

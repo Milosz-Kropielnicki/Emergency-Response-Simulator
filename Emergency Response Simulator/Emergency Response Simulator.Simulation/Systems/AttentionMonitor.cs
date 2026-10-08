@@ -41,6 +41,46 @@ public sealed class AttentionMonitor(ICopService cop, AttentionOptions options, 
         CheckWeather(context);
         CheckCommunications(context);
         CheckAvl(context);
+        CheckCommand(context);
+    }
+
+    /// <summary>
+    /// Command health: supervisors over their span of control (§8.1), orders nobody has read back,
+    /// and decisions waiting on command.
+    /// </summary>
+    private void CheckCommand(SimulationContext context)
+    {
+        foreach (var incident in cop.Incidents.Where(i => i.Status != IncidentStatus.Closed))
+        {
+            var units = incident.AssignedUnits.Select(u => u.Id).ToList();
+            foreach (var span in SpanOfControl.Assess(incident.Command, units))
+            {
+                Track(context, $"span:{incident.Id}:{span.Key}", span.IsOverloaded,
+                    AlertCategory.Safety, AlertSeverity.Warning,
+                    $"{incident.Number}: {span.Supervisor} has {span.DirectReports} direct reports",
+                    $"Span of control exceeded (recommended {SpanOfControl.Minimum}–{SpanOfControl.Maximum}). " +
+                    "Orders through this supervisor will be slower and may be lost. Form groups or staff Operations.",
+                    incident.Id);
+            }
+        }
+
+        foreach (var order in cop.Orders.Where(o => o.Status == OrderStatus.Issued))
+        {
+            Track(context, $"order:{order.Id}", context.SimTime - order.IssuedAt >= options.OrderAcknowledgeTimeout,
+                AlertCategory.CommunicationFailure, AlertSeverity.Warning,
+                $"Order to {order.TargetName} not acknowledged",
+                $"No read-back after {options.OrderAcknowledgeTimeout.TotalMinutes:F0} min: \"{order.Text}\". Repeat the order or check comms.",
+                order.IncidentId, order.TargetKind == OrderTargetKind.Unit ? order.TargetId : null);
+        }
+
+        foreach (var approval in cop.Approvals.Where(a => a.Status == ApprovalStatus.Pending))
+        {
+            Track(context, $"approval:{approval.Id}", context.SimTime - approval.RequestedAt >= options.DecisionReminder,
+                AlertCategory.SituationChange, AlertSeverity.Warning,
+                $"Decision awaited: {approval.Subject}",
+                $"{approval.RequestedBy} has been waiting {(context.SimTime - approval.RequestedAt).TotalMinutes:F0} min for a decision.",
+                approval.IncidentId);
+        }
     }
 
     private void CheckCriticalIncidents(SimulationContext context)
@@ -272,6 +312,8 @@ public sealed class AttentionOptions
     public double WindSpeedChangeMps { get; set; } = 5;
 
     public TimeSpan StoppedAlertAfter { get; set; } = TimeSpan.FromSeconds(90);
+    public TimeSpan OrderAcknowledgeTimeout { get; set; } = TimeSpan.FromMinutes(2);
+    public TimeSpan DecisionReminder { get; set; } = TimeSpan.FromMinutes(3);
     public TimeSpan AvlLossAfter { get; set; } = TimeSpan.FromSeconds(60);
     public double RouteDeviationMeters { get; set; } = 150;
     /// <summary>Alert when a re-route pushes expected arrival back by at least this much.</summary>

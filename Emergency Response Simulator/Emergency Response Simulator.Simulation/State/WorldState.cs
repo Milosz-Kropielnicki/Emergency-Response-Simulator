@@ -38,6 +38,25 @@ public sealed class WorldState
 
     /// <summary>Bumped whenever <see cref="DeclaredNoGoAreas"/> changes, so moving crews re-plan.</summary>
     public int NoGoVersion { get; private set; }
+
+    /// <summary>The priority command has given each incident (approvers judge requests on it).</summary>
+    public Dictionary<Guid, IncidentPriority> ReportedIncidentPriorities { get; } = [];
+
+    /// <summary>Each incident's ICS structure; the span-of-control penalty is applied from it.</summary>
+    public Dictionary<Guid, IncidentCommand> Commands { get; } = [];
+
+    public Dictionary<Guid, (string Name, AgencyType Type)> Agencies { get; } = [];
+
+    // Things waiting for someone in the world to respond (see CommandResponseSystem).
+    public List<PendingOrder> PendingOrders { get; } = [];
+    public List<PendingRequest> PendingRequests { get; } = [];
+    public List<PendingNotification> PendingNotifications { get; } = [];
+    public List<PendingApprovalReply> PendingApprovalReplies { get; } = [];
+    public Dictionary<Guid, string> ApprovalRequesters { get; } = [];
+
+    /// <summary>Units committed to an incident (as ordered), for span-of-control counts.</summary>
+    public IReadOnlyCollection<Guid> UnitsAt(Guid incidentId) =>
+        Units.Values.Where(u => u.OrderedIncidentId == incidentId).Select(u => u.Id).ToList();
     public WorldWeather Weather { get; set; } = new(WindFromDegrees: 270, WindSpeedMps: 4, TemperatureC: 14, RelativeHumidity: 0.7);
 
     /// <summary>
@@ -79,6 +98,48 @@ public sealed class WorldState
 
             case IncidentCreated e:
                 ReportedIncidentLocations[e.IncidentId] = e.Location;
+                ReportedIncidentPriorities[e.IncidentId] = e.Priority;
+                Commands[e.IncidentId] = new IncidentCommand();
+                break;
+
+            case IncidentUpdated { Priority: { } priority } e:
+                ReportedIncidentPriorities[e.IncidentId] = priority;
+                break;
+
+            case AgencyRegistered e:
+                Agencies[e.AgencyId] = (e.Name, e.Type);
+                break;
+
+            case IncidentCommanderAssigned e when Commands.TryGetValue(e.IncidentId, out var c1):
+                c1.Apply(e);
+                break;
+            case IcsPositionAssigned e when Commands.TryGetValue(e.IncidentId, out var c2):
+                c2.Apply(e);
+                break;
+            case IcsGroupFormed e when Commands.TryGetValue(e.IncidentId, out var c3):
+                c3.Apply(e);
+                break;
+            case IcsGroupDisbanded e when Commands.TryGetValue(e.IncidentId, out var c4):
+                c4.Apply(e);
+                break;
+            case UnitAssignedToGroup e when Commands.TryGetValue(e.IncidentId, out var c5):
+                c5.Apply(e);
+                break;
+
+            case OrderIssued e:
+                PendingOrders.Add(new PendingOrder(e, simEvent.SimTime));
+                break;
+            case ResourceRequested e:
+                PendingRequests.Add(new PendingRequest(e, simEvent.SimTime));
+                break;
+            case NotificationSent e:
+                PendingNotifications.Add(new PendingNotification(e, simEvent.SimTime));
+                break;
+            case ApprovalRequested e:
+                ApprovalRequesters[e.ApprovalId] = e.RequestedBy;
+                break;
+            case ApprovalDecided e when ApprovalRequesters.TryGetValue(e.ApprovalId, out var requester):
+                PendingApprovalReplies.Add(new PendingApprovalReply(e, requester, simEvent.SimTime));
                 break;
 
             case UnitDispatched e when Units.TryGetValue(e.UnitId, out var unit):
@@ -88,6 +149,8 @@ public sealed class WorldState
                 break;
 
             case UnitDispatchCancelled e when Units.TryGetValue(e.UnitId, out var unit):
+                if (Commands.TryGetValue(e.IncidentId, out var fromCommand))
+                    fromCommand.Apply(e);
                 unit.OrderedIncidentId = null;
                 unit.Phase = ResponsePhase.Idle;
                 unit.SpeedKph = 0;
@@ -207,5 +270,20 @@ public enum ResponsePhase
     OnScene,
     Operating,
 }
+
+public sealed record PendingOrder(OrderIssued Order, DateTimeOffset IssuedAt);
+
+/// <summary>A resource request moving through approval and delivery.</summary>
+public sealed class PendingRequest(ResourceRequested request, DateTimeOffset requestedAt)
+{
+    public ResourceRequested Request { get; } = request;
+    public DateTimeOffset RequestedAt { get; } = requestedAt;
+    public bool Decided { get; set; }
+    public DateTimeOffset? ArriveAt { get; set; }
+}
+
+public sealed record PendingNotification(NotificationSent Notification, DateTimeOffset SentAt);
+
+public sealed record PendingApprovalReply(ApprovalDecided Decision, string Requester, DateTimeOffset DecidedAt);
 
 public sealed record WorldWeather(double WindFromDegrees, double WindSpeedMps, double TemperatureC, double RelativeHumidity);
