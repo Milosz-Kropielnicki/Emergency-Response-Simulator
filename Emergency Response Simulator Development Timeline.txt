@@ -1,13 +1,11 @@
 # Emergency Response Simulator — Development Timeline
 
-**Assumption:** A small full-time team (4–6 developers, 1–2 designers, 1 subject-matter expert). Durations are indicative and assume sequential dependencies. Many phases can run in parallel. Calendar time can be reduced by parallel tracks.
 
 **Ordering principle:** Start with the foundational data and simulation architecture, then build the core COP/C2 loop, then layer on the high-impact training features (communications, human factors, AAR, multi-agency, instructor tools), then add advanced realism and supporting systems.
 
 ---
 
 ## Phase 0 — Architecture & Foundations  
-**Weeks 1–4 | 4 weeks**
 
 **Focus:** Define the data model, event stream, simulation tick, and module boundaries.
 

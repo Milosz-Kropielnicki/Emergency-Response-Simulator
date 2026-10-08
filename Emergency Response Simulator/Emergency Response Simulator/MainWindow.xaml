@@ -3,10 +3,262 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:Emergency_Response_Simulator"
+        xmlns:vm="clr-namespace:Emergency_Response_Simulator.ViewModels"
+        xmlns:mapsui="clr-namespace:Mapsui.UI.Wpf;assembly=Mapsui.UI.Wpf"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
+        Title="Emergency Response Simulator" Height="900" Width="1500" MinHeight="600" MinWidth="1000"
+        WindowState="Maximized"
+        Background="{StaticResource BackgroundBrush}" Foreground="{StaticResource TextBrush}"
+        FontFamily="Segoe UI" FontSize="13">
 
+    <Window.Resources>
+        <!-- Time · title · detail row used by the incident, alert and comms feeds. -->
+        <DataTemplate x:Key="FeedItemTemplate" DataType="{x:Type vm:FeedItem}">
+            <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="44" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Time}" Foreground="{StaticResource MutedTextBrush}" FontFamily="Consolas" />
+                <StackPanel Grid.Column="1">
+                    <TextBlock x:Name="Title" Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Detail}" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Severity}" Value="Critical">
+                    <Setter TargetName="Title" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Severity}" Value="Warning">
+                    <Setter TargetName="Title" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Severity}" Value="High">
+                    <Setter TargetName="Title" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <Style x:Key="EmptyHint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="FontStyle" Value="Italic" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="210" />
+        </Grid.RowDefinitions>
+
+        <!-- ===== Header: incident, clock, simulation controls ===== -->
+        <Border Grid.Row="0" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,0,0,1" Padding="12,8">
+            <DockPanel LastChildFill="True">
+                <ToggleButton DockPanel.Dock="Left" Content="☰ Layers" ToolTip="Show or hide map layers"
+                              IsChecked="{Binding IsLeftPanelOpen}" Margin="0,0,12,0" />
+
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding EventStoreLabel}" Foreground="{StaticResource MutedTextBrush}"
+                               VerticalAlignment="Center" Margin="0,0,16,0" />
+                    <Button Command="{Binding TogglePlayCommand}" MinWidth="80" ToolTip="Start or pause the simulation">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+                                <Setter Property="Content" Value="▶ Start" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                        <Setter Property="Content" Value="⏸ Pause" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <ItemsControl ItemsSource="{Binding TimeScales}" VerticalAlignment="Center">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Content="{Binding}" ContentStringFormat="{}{0}×" Margin="2,0" Padding="8,4"
+                                        Command="{Binding DataContext.SetTimeScaleCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" ToolTip="Simulation speed" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <StackPanel Margin="16,0,16,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding SimClock}" FontFamily="Consolas" FontSize="22" FontWeight="SemiBold"
+                                   HorizontalAlignment="Right" />
+                        <TextBlock HorizontalAlignment="Right" Foreground="{StaticResource MutedTextBrush}" FontSize="11">
+                            <Run Text="{Binding SimDate, Mode=OneWay}" />
+                            <Run Text="·" />
+                            <Run Text="{Binding TimeScale, Mode=OneWay, StringFormat={}{0}×}" />
+                        </TextBlock>
+                    </StackPanel>
+                    <ToggleButton Content="Comms ☰" ToolTip="Show or hide the communications hub"
+                                  IsChecked="{Binding IsRightPanelOpen}" />
+                </StackPanel>
+
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{Binding IncidentTitle}" FontSize="17" FontWeight="Bold" />
+                    <TextBlock Text="{Binding IncidentSubtitle}" Foreground="{StaticResource MutedTextBrush}" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- ===== Map with left / right / top pop-out panels ===== -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: map icon / layer toggles -->
+            <Border Grid.Column="0" Width="230" Style="{StaticResource Panel}" BorderThickness="0,0,1,0"
+                    Visibility="{Binding IsLeftPanelOpen, Converter={StaticResource BoolToVisibility}}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="MAP LAYERS" Style="{StaticResource PanelHeader}" />
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding MapLayers}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:ToggleItem}">
+                                    <CheckBox Content="{Binding Label}" IsChecked="{Binding IsOn}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+
+            <!-- Centre: the map -->
+            <Grid Grid.Column="1" ClipToBounds="True">
+                <mapsui:MapControl x:Name="MapView" />
+
+                <!-- Hovering the top edge reveals the map-view panel. -->
+                <Border x:Name="TopHoverStrip" VerticalAlignment="Top" HorizontalAlignment="Center"
+                        Background="#CC161D26" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1,0,1,1"
+                        CornerRadius="0,0,4,4" Padding="14,2" MouseEnter="TopHoverStrip_MouseEnter">
+                    <TextBlock Text="▾ Map views" Foreground="{StaticResource MutedTextBrush}" FontSize="11" />
+                </Border>
+
+                <Border x:Name="TopPanel" VerticalAlignment="Top" HorizontalAlignment="Center"
+                        Style="{StaticResource Panel}" BorderThickness="1,0,1,1" CornerRadius="0,0,6,6"
+                        Background="#EE161D26" MouseLeave="TopPanel_MouseLeave"
+                        Visibility="{Binding IsTopPanelOpen, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="MAP VIEW" Style="{StaticResource PanelHeader}" />
+                        <StackPanel Orientation="Horizontal">
+                            <ItemsControl ItemsSource="{Binding MapViews}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:ToggleItem}">
+                                        <RadioButton GroupName="MapView" Content="{Binding Label}" IsChecked="{Binding IsOn}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Rectangle Width="1" Fill="{StaticResource BorderBrush}" Margin="4,0,14,0" />
+                            <CheckBox Content="{Binding AreaCodes.Label}" IsChecked="{Binding AreaCodes.IsOn}" Margin="0" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Right: communications hub -->
+            <Border Grid.Column="2" Width="320" Style="{StaticResource Panel}" BorderThickness="1,0,0,0"
+                    Visibility="{Binding IsRightPanelOpen, Converter={StaticResource BoolToVisibility}}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="COMMUNICATIONS HUB" Style="{StaticResource PanelHeader}" />
+                    <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding CommsChannels}" Margin="0,0,0,8">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:ToggleItem}">
+                                <ToggleButton Content="{Binding Label}" IsChecked="{Binding IsOn}"
+                                              Margin="0,0,4,4" Padding="8,3" FontSize="12" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Rectangle DockPanel.Dock="Top" Height="1" Fill="{StaticResource BorderBrush}" Margin="0,0,0,8" />
+                    <Grid>
+                        <ListBox ItemsSource="{Binding CommsFeed}" ItemTemplate="{StaticResource FeedItemTemplate}" />
+                        <TextBlock Style="{StaticResource EmptyHint}"
+                                   Text="No traffic yet. Calls, field reports and radio will appear here.">
+                            <TextBlock.Visibility>
+                                <Binding Path="CommsFeed.Count" Converter="{x:Static vm:Converters.ZeroToVisible}" />
+                            </TextBlock.Visibility>
+                        </TextBlock>
+                    </Grid>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- ===== Bottom: incident status, resources, alerts (Appendix D) ===== -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="1.4*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource Panel}" BorderThickness="0,1,1,0">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="INCIDENT STATUS" Style="{StaticResource PanelHeader}" />
+                    <Grid>
+                        <ListBox ItemsSource="{Binding IncidentBoard}" ItemTemplate="{StaticResource FeedItemTemplate}" />
+                        <TextBlock Style="{StaticResource EmptyHint}" Text="No incidents reported.">
+                            <TextBlock.Visibility>
+                                <Binding Path="IncidentBoard.Count" Converter="{x:Static vm:Converters.ZeroToVisible}" />
+                            </TextBlock.Visibility>
+                        </TextBlock>
+                    </Grid>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Column="1" Style="{StaticResource Panel}" BorderThickness="0,1,1,0">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="RESOURCES" Style="{StaticResource PanelHeader}" />
+                    <ItemsControl ItemsSource="{Binding ResourceBoard}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:ResourceSummary}">
+                                <Grid Margin="0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Group}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Text}" FontFamily="Consolas"
+                                               Foreground="{StaticResource MutedTextBrush}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Column="2" Style="{StaticResource Panel}" BorderThickness="0,1,0,0">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="ALERTS / INTELLIGENCE" Style="{StaticResource PanelHeader}" />
+                    <Grid>
+                        <ListBox ItemsSource="{Binding AlertFeed}" ItemTemplate="{StaticResource FeedItemTemplate}" />
+                        <TextBlock Style="{StaticResource EmptyHint}" Text="No alerts.">
+                            <TextBlock.Visibility>
+                                <Binding Path="AlertFeed.Count" Converter="{x:Static vm:Converters.ZeroToVisible}" />
+                            </TextBlock.Visibility>
+                        </TextBlock>
+                    </Grid>
+                </DockPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

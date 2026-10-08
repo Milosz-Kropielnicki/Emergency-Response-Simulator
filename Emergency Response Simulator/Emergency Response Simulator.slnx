@@ -1,3 +1,7 @@
 <Solution>
+  <Project Path="Emergency Response Simulator.Core/Emergency Response Simulator.Core.csproj" />
+  <Project Path="Emergency Response Simulator.Data/Emergency Response Simulator.Data.csproj" />
+  <Project Path="Emergency Response Simulator.Simulation/Emergency Response Simulator.Simulation.csproj" />
+  <Project Path="Emergency Response Simulator.Tests/Emergency Response Simulator.Tests.csproj" />
   <Project Path="Emergency Response Simulator/Emergency Response Simulator.csproj" />
 </Solution>

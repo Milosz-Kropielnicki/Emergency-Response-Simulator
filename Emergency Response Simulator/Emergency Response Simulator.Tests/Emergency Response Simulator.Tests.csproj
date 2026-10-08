@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>Emergency_Response_Simulator.Tests</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- Mapsui.Wpf (via the app reference) restores .NET Framework assets; see the app csproj. -->
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Emergency Response Simulator\Emergency Response Simulator.csproj" />
+    <ProjectReference Include="..\Emergency Response Simulator.Core\Emergency Response Simulator.Core.csproj" />
+    <ProjectReference Include="..\Emergency Response Simulator.Simulation\Emergency Response Simulator.Simulation.csproj" />
+    <ProjectReference Include="..\Emergency Response Simulator.Data\Emergency Response Simulator.Data.csproj" />
+  </ItemGroup>
+
+</Project>

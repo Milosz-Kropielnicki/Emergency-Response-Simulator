@@ -1,0 +1,10 @@
+# Hazard / dispersion modelling service (Design Document §7.3, §10.4, §26)
+numpy          # numerical core for plume, fire-spread and flood grids
+scipy          # Gaussian plume integration, interpolation, ODE solvers
+shapely        # plume / zone polygons handed back to the COP
+pyproj         # lat/long <-> metric projections for dispersion maths
+psycopg[binary]  # read terrain/population layers from PostGIS
+fastapi        # HTTP API the C# simulation engine calls
+uvicorn        # ASGI server for the FastAPI service
+pytest         # tests for the models
+httpx          # FastAPI TestClient
