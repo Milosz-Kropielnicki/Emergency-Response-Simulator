@@ -11,6 +11,7 @@ public sealed class SimulationHostedService(
     IEnumerable<IScenario> scenarios,
     // Taken only so the live COP exists and is following the stream before the first event is published.
     ICopService cop,
+    Microsoft.Extensions.Options.IOptions<SimulationOptions> options,
     ILogger<SimulationHostedService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -22,6 +23,9 @@ public sealed class SimulationHostedService(
             logger.LogInformation("Seeding scenario {Scenario} for session {SessionId}", scenario.Name, engine.SessionId);
             await scenario.SeedAsync(engine, stoppingToken);
         }
+
+        if (options.Value.AutoStart)
+            await engine.StartAsync(stoppingToken);
 
         await engine.RunAsync(stoppingToken);
     }

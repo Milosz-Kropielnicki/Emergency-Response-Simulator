@@ -22,6 +22,11 @@ public class Unit : Resource
     public double Heading { get; set; }
 
     public DateTimeOffset? LastAvlUpdate { get; set; }
+
+    /// <summary>Last time anything was heard from the unit: status change, AVL fix or report.</summary>
+    public DateTimeOffset? LastContactAt { get; set; }
+
+    /// <summary>False after a communication-failure alert, until the unit is heard from again.</summary>
     public bool CommsConnected { get; set; } = true;
     public TimeSpan? Eta { get; set; }
 

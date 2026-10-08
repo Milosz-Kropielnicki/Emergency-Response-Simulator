@@ -14,9 +14,14 @@ internal sealed class TestHarness
     public static readonly DateTimeOffset Start = new(2026, 10, 8, 14, 0, 0, TimeSpan.Zero);
     public static readonly GeoPoint Dublin = new(53.344, -6.26);
 
-    public TestHarness(params ISimulationSystem[] systems)
+    public TestHarness(params ISimulationSystem[] systems) : this(_ => systems)
     {
-        Engine = new SimulationEngine(Store, World, systems, new SimulationOptions { StartTime = Start });
+    }
+
+    /// <summary>For systems that need the live COP, such as the attention monitor.</summary>
+    public TestHarness(Func<PerceivedState, ISimulationSystem[]> systems)
+    {
+        Engine = new SimulationEngine(Store, World, systems(Cop), new SimulationOptions { StartTime = Start });
         Cop.Follow(Store, Engine.SessionId);
         C2 = new C2Service(Cop, Engine);
         Aar = new AarService(Store);

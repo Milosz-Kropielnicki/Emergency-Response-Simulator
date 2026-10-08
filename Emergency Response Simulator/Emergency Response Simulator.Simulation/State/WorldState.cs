@@ -18,6 +18,12 @@ public sealed class WorldState
 {
     public Dictionary<Guid, WorldIncident> Incidents { get; } = [];
     public Dictionary<Guid, WorldUnit> Units { get; } = [];
+
+    /// <summary>
+    /// Where command has said each (perceived) incident is. Units drive to the reported location,
+    /// which may not be where the real incident is.
+    /// </summary>
+    public Dictionary<Guid, GeoPoint> ReportedIncidentLocations { get; } = [];
     public WorldWeather Weather { get; set; } = new(WindFromDegrees: 270, WindSpeedMps: 4, TemperatureC: 14, RelativeHumidity: 0.7);
 
     /// <summary>
@@ -51,15 +57,40 @@ public sealed class WorldState
                 break;
 
             case UnitRegistered e:
-                Units[e.UnitId] = new WorldUnit { Id = e.UnitId, Callsign = e.Callsign, Location = e.Location };
+                Units[e.UnitId] = new WorldUnit
+                {
+                    Id = e.UnitId, Callsign = e.Callsign, Type = e.Type, Location = e.Location, Home = e.Location,
+                };
+                break;
+
+            case IncidentCreated e:
+                ReportedIncidentLocations[e.IncidentId] = e.Location;
                 break;
 
             case UnitDispatched e when Units.TryGetValue(e.UnitId, out var unit):
                 unit.OrderedIncidentId = e.IncidentId;
+                unit.Phase = ResponsePhase.TurningOut;
+                unit.PhaseStartedAt = simEvent.SimTime;
                 break;
 
             case UnitDispatchCancelled e when Units.TryGetValue(e.UnitId, out var unit):
                 unit.OrderedIncidentId = null;
+                unit.Phase = ResponsePhase.Idle;
+                unit.SpeedKph = 0;
+                break;
+
+            // Status changes made by command (e.g. "Transporting", "Available") end the automatic response.
+            case UnitStatusChanged e when Units.TryGetValue(e.UnitId, out var unit)
+                                          && e.Status is UnitStatus.Available or UnitStatus.Transporting
+                                              or UnitStatus.OutOfService or UnitStatus.Cancelled:
+                unit.Phase = ResponsePhase.Idle;
+                unit.SpeedKph = 0;
+                if (e.Status != UnitStatus.Transporting)
+                    unit.OrderedIncidentId = null;
+                break;
+
+            case UnitRadioFailed e when Units.TryGetValue(e.UnitId, out var unit):
+                unit.RadioFailed = e.Failed;
                 break;
         }
     }
@@ -83,7 +114,9 @@ public sealed class WorldUnit
 {
     public Guid Id { get; init; }
     public required string Callsign { get; init; }
+    public UnitType Type { get; init; }
     public GeoPoint Location { get; set; }
+    public GeoPoint Home { get; init; }
     public double SpeedKph { get; set; }
     public double Heading { get; set; }
 
@@ -91,6 +124,28 @@ public sealed class WorldUnit
     public Guid? OrderedIncidentId { get; set; }
 
     public bool BrokenDown { get; set; }
+
+    /// <summary>The unit keeps working, but nothing it says reaches command.</summary>
+    public bool RadioFailed { get; set; }
+
+    public ResponsePhase Phase { get; set; }
+    public DateTimeOffset PhaseStartedAt { get; set; }
+
+    /// <summary>Where the current journey started and is heading, and how long it takes.</summary>
+    public GeoPoint TravelFrom { get; set; }
+    public GeoPoint TravelTo { get; set; }
+    public TimeSpan TravelTime { get; set; }
+    public DateTimeOffset LastFixAt { get; set; }
+}
+
+/// <summary>What a responding unit is actually doing, advanced by <c>UnitResponseSystem</c>.</summary>
+public enum ResponsePhase
+{
+    Idle,
+    TurningOut,
+    Travelling,
+    OnScene,
+    Operating,
 }
 
 public sealed record WorldWeather(double WindFromDegrees, double WindSpeedMps, double TemperatureC, double RelativeHumidity);

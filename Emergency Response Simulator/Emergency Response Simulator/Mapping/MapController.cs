@@ -27,6 +27,7 @@ public sealed class MapController
     private const string InfoTitleField = "info:title";
     private const string InfoLinesField = "info:lines";
     private const string RoleField = "role";
+    private const string IncidentIdField = "incident:id";
 
     private readonly MapControl _control;
     private readonly MainViewModel _viewModel;
@@ -38,6 +39,7 @@ public sealed class MapController
 
     private readonly Dictionary<string, MemoryLayer> _staticLayers = [];
     private readonly MemoryLayer _zones = new("Zones");
+    private readonly MemoryLayer _reports = new("Reports");
     private readonly MemoryLayer _incidents = new("Incidents");
     private readonly MemoryLayer _units = new("Units");
     private readonly MemoryLayer _weather = new("Wind");
@@ -70,7 +72,7 @@ public sealed class MapController
             _map.Layers.Add(layer);
         }
 
-        foreach (var layer in new[] { _zones, _incidents, _units, _weather, _drawing })
+        foreach (var layer in new[] { _zones, _reports, _incidents, _units, _weather, _drawing })
         {
             layer.Features = [];
             layer.Style = null; // operational features carry their own styles
@@ -87,6 +89,11 @@ public sealed class MapController
         _control.MapTapped += OnMapTapped;
         _control.MapPointerMoved += OnMapPointerMoved;
         _cop.Changed += (_, _) => QueueOperationalRefresh();
+        _viewModel.FocusRequested += (_, point) =>
+        {
+            var (fx, fy) = WebMercator.FromLonLat(point.Longitude, point.Latitude);
+            _map.Navigator.CenterOn(new MPoint(fx, fy), 400);
+        };
 
         ApplyVisibility();
         RefreshOperational();
@@ -290,6 +297,10 @@ public sealed class MapController
             .Select(ZoneFeature)
             .ToList();
 
+        _reports.Features = IsOn(MapLayerKeys.Reports)
+            ? _cop.Reports.Where(r => r.Location is not null).SelectMany(ReportFeatures).ToList()
+            : [];
+
         _incidents.Features = IsOn(MapLayerKeys.Incidents)
             ? _cop.Incidents.Where(i => i.Status != IncidentStatus.Closed).Select(IncidentFeature).ToList()
             : [];
@@ -301,7 +312,7 @@ public sealed class MapController
 
         _weather.Features = IsOn(MapLayerKeys.Weather) || _view == BaseMaps.Weather ? WindFeatures() : [];
 
-        foreach (var layer in new[] { _zones, _incidents, _units, _weather })
+        foreach (var layer in new[] { _zones, _reports, _incidents, _units, _weather })
             layer.DataHasChanged();
         _map.RefreshGraphics();
     }
@@ -320,6 +331,39 @@ public sealed class MapController
         return feature;
     }
 
+    /// <summary>
+    /// A located report: a marker coloured by confidence plus a circle showing its stated location
+    /// accuracy, so the operator sees how vague an early call really is (Design Document §6.7).
+    /// </summary>
+    private static IEnumerable<IFeature> ReportFeatures(Report report)
+    {
+        var location = GeoPoint.FromPoint(report.Location!);
+        var lines = new[]
+        {
+            $"\"{report.Claim}\"",
+            $"Source: {report.SourceName} ({MainViewModel.Humanize(report.Source)})",
+            $"Confidence: {report.Confidence} · {report.Verification}",
+            $"Location accuracy: {(report.LocationAccuracyMeters is { } m ? $"±{m:F0} m" : "unknown")}",
+            $"Received: {MainViewModel.Time(report.ReceivedAt, seconds: true)}",
+            $"Incident: {report.Incident?.Number ?? "not attributed"}",
+        };
+
+        if (report.LocationAccuracyMeters is { } accuracy and > 5)
+        {
+            var circle = Wgs84.CreatePolygon(Wgs84.Circle(location, accuracy, 36));
+            var area = Tag(new GeometryFeature(WebMercator.FromWgs84(circle)), report.SourceName, lines);
+            AddStyles(area, MapStyles.ReportAccuracy(report.Confidence));
+            yield return area;
+        }
+
+        var (x, y) = WebMercator.FromLonLat(location.Longitude, location.Latitude);
+        var marker = new PointFeature(x, y);
+        marker[InfoTitleField] = report.SourceName;
+        marker[InfoLinesField] = lines;
+        AddStyles(marker, MapStyles.Report(report.Confidence));
+        yield return marker;
+    }
+
     private static IFeature IncidentFeature(Incident incident)
     {
         var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(incident.Location)),
@@ -330,6 +374,7 @@ public sealed class MapController
                 $"Casualties: {incident.CasualtiesReported} reported, {incident.CasualtiesConfirmed} confirmed",
             ],
             label: incident.Number);
+        feature[IncidentIdField] = incident.Id;
         AddStyles(feature, MapStyles.Incident(incident.Priority));
         return feature;
     }
@@ -338,7 +383,7 @@ public sealed class MapController
     {
         var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(unit.Location!)), unit.Callsign,
             [
-                $"{MainViewModel.Humanize(unit.Type)} · {unit.Agency?.ShortName ?? "No agency"}",
+                $"{ResourceGroups.Label(unit.Type)} · {unit.Agency?.ShortName ?? "No agency"}",
                 $"Status: {MainViewModel.Humanize(unit.Status)}",
                 $"Crew: {unit.CrewSize}", $"Station: {unit.HomeStation ?? "—"}",
                 $"Last AVL fix: {(unit.LastAvlUpdate is { } at ? MainViewModel.Time(at) : "—")}",
@@ -396,6 +441,8 @@ public sealed class MapController
         var info = e.GetMapInfo(_map.Layers.Where(l => l.Enabled && l is MemoryLayer && l != _drawing).ToList());
         if (info.Feature is { } feature && feature[InfoTitleField] is string title)
         {
+            if (feature[IncidentIdField] is Guid incidentId)
+                _viewModel.SelectedIncidentId = incidentId;
             _viewModel.ShowInfo(title, feature[InfoLinesField] as string[] ?? []);
             return;
         }

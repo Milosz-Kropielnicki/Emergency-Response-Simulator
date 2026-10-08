@@ -115,6 +115,32 @@ Road closures, evacuation zones, perimeters, search areas and operational zones 
 | Traffic | Esri Dark Gray Canvas | Roads styled by class; congestion arrives with the traffic simulation in Phase 6 |
 | Terrain | OpenTopoMap | Elevation grid |
 
+## COP (Phase 2)
+
+- **Incidents and resources** are edited only through `IC2Service`: create from a report, update, assign an incident commander, update unit status, assess and link reports, acknowledge alerts, establish hot/warm/cold zones. Every edit is an event.
+- **Status dynamics:** `UnitStatusRules` enforces AVAILABLE → DISPATCHED → EN ROUTE → ON SCENE → OPERATING → TRANSPORTING → AVAILABLE, plus cancellation and out of service. `UnitResponseSystem` moves dispatched crews through turnout, travel (straight line × 1.3 detour; Phase 3 adds routing), arrival and work, sending AVL fixes and heartbeats. A unit whose radio has failed (`UnitRadioFailed`, a truth event) keeps working in the world, but command hears nothing from it.
+- **Attention management:** `AttentionMonitor` reads the *live COP* each tick and raises each condition once, re-arming it when the condition clears:
+
+  | Alert | Fires when |
+  |---|---|
+  | Critical | An incident goes critical, or reported casualties reach the mass-casualty threshold |
+  | Resource shortage | A unit type drops to the shortage threshold or below |
+  | Situation change | Reported wind shifts by 45° or more, or its speed changes by 5 m/s or more |
+  | Communication failure | A committed unit has been silent longer than the timeout (4 min) |
+
+  Thresholds are in the `Attention` section of the settings.
+- **Time dimension:** `EventDescriber` turns events into history lines. `CopView` is what the UI displays: either the live COP or a replay snapshot from `IAarService.ReplayToAsync`. C2 always validates against the live COP, and commands are refused while replaying. The history log can show ground-truth events for instructors and AAR.
+- **Scenario:** with `Simulation:Scenario = barrow-street`, `BarrowStreetScenario` plays timed injects:
+  - a vague call, then a better one
+  - a wrong social-media rumour
+  - a police confirmation
+  - a wind shift
+  - a suspected chemical store
+  - Engine 7's radio failing
+  - hospital pressure
+
+  It never creates the incident; that is the trainee's job. `--Simulation:AutoStart=true` starts the clock automatically.
+
 ## Local setup
 
 ```powershell

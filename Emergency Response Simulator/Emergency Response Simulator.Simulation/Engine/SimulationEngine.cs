@@ -26,8 +26,10 @@ public sealed class SimulationEngine : ISimulationControl, IEventPublisher
         WorldState world,
         IEnumerable<ISimulationSystem> systems,
         SimulationOptions options,
-        ILogger<SimulationEngine>? logger = null)
+        ILogger<SimulationEngine>? logger = null,
+        Guid? sessionId = null)
     {
+        SessionId = sessionId ?? Guid.NewGuid();
         _store = store;
         World = world;
         _systems = systems.OrderBy(s => s.Order).ToList();
@@ -40,7 +42,7 @@ public sealed class SimulationEngine : ISimulationControl, IEventPublisher
         TimeScale = options.InitialTimeScale;
     }
 
-    public Guid SessionId { get; } = Guid.NewGuid();
+    public Guid SessionId { get; }
     public DateTimeOffset SimTime { get; private set; }
     public bool IsRunning { get; private set; }
     public double TimeScale { get; private set; }

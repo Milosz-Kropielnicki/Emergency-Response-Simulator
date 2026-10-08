@@ -49,8 +49,10 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="210" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" MinHeight="200" />
+            <RowDefinition Height="5" />
+            <RowDefinition Height="320" MinHeight="120" />
         </Grid.RowDefinitions>
 
         <!-- ===== Header: incident, clock, simulation controls ===== -->
@@ -61,6 +63,19 @@
                               IsChecked="{Binding IsLeftPanelOpen}" Margin="0,0,12,0" />
 
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding CommandMessage}" VerticalAlignment="Center" Margin="0,0,16,0"
+                               MaxWidth="420" TextTrimming="CharacterEllipsis">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CommandFailed}" Value="True">
+                                        <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                     <TextBlock Text="{Binding EventStoreLabel}" Foreground="{StaticResource MutedTextBrush}"
                                VerticalAlignment="Center" Margin="0,0,16,0" />
                     <Button Command="{Binding TogglePlayCommand}" MinWidth="80" ToolTip="Start or pause the simulation">
@@ -98,7 +113,7 @@
                             <Run Text="{Binding TimeScale, Mode=OneWay, StringFormat={}{0}×}" />
                         </TextBlock>
                     </StackPanel>
-                    <ToggleButton Content="Comms ☰" ToolTip="Show or hide the communications hub"
+                    <ToggleButton Content="Comms / Incident ☰" ToolTip="Show or hide the communications hub and incident detail"
                                   IsChecked="{Binding IsRightPanelOpen}" />
                 </StackPanel>
 
@@ -109,8 +124,17 @@
             </DockPanel>
         </Border>
 
+        <!-- ===== Replay banner (the COP is showing the past) ===== -->
+        <Border Grid.Row="1" Background="#7A1F1F" Padding="12,5"
+                Visibility="{Binding Timeline.IsReplay, Converter={StaticResource BoolToVisibility}}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Return to live" Command="{Binding Timeline.ReturnToLiveCommand}" />
+                <TextBlock Text="{Binding Timeline.ReplayLabel}" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </DockPanel>
+        </Border>
+
         <!-- ===== Map with left / right / top pop-out panels ===== -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -252,94 +276,401 @@
                 </Border>
             </Grid>
 
-            <!-- Right: communications hub -->
-            <Border Grid.Column="2" Width="320" Style="{StaticResource Panel}" BorderThickness="1,0,0,0"
+            <!-- Right: communications hub and incident detail -->
+            <Border Grid.Column="2" Width="360" Style="{StaticResource Panel}" BorderThickness="1,0,0,0" Padding="8"
                     Visibility="{Binding IsRightPanelOpen, Converter={StaticResource BoolToVisibility}}">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="COMMUNICATIONS HUB" Style="{StaticResource PanelHeader}" />
-                    <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding CommsChannels}" Margin="0,0,0,8">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="{x:Type vm:ToggleItem}">
-                                <ToggleButton Content="{Binding Label}" IsChecked="{Binding IsOn}"
-                                              Margin="0,0,4,4" Padding="8,3" FontSize="12" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <Rectangle DockPanel.Dock="Top" Height="1" Fill="{StaticResource BorderBrush}" Margin="0,0,0,8" />
-                    <Grid>
-                        <ListBox ItemsSource="{Binding CommsFeed}" ItemTemplate="{StaticResource FeedItemTemplate}" />
-                        <TextBlock Style="{StaticResource EmptyHint}"
-                                   Text="No traffic yet. Calls, field reports and radio will appear here.">
-                            <TextBlock.Visibility>
-                                <Binding Path="CommsFeed.Count" Converter="{x:Static vm:Converters.ZeroToVisible}" />
-                            </TextBlock.Visibility>
-                        </TextBlock>
-                    </Grid>
-                </DockPanel>
+                <TabControl SelectedIndex="{Binding RightPanelTab}">
+                    <TabItem Header="COMMS HUB">
+                        <DockPanel>
+                    
+                            <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding CommsChannels}" Margin="0,0,0,8">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:ToggleItem}">
+                                        <ToggleButton Content="{Binding Label}" IsChecked="{Binding IsOn}"
+                                                      Margin="0,0,4,4" Padding="8,3" FontSize="12" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Rectangle DockPanel.Dock="Top" Height="1" Fill="{StaticResource BorderBrush}" Margin="0,0,0,8" />
+                            <Grid>
+                                <ListBox ItemsSource="{Binding CommsFeed}" ItemTemplate="{StaticResource FeedItemTemplate}" />
+                                <TextBlock Style="{StaticResource EmptyHint}"
+                                           Text="No traffic yet. Calls, field reports and radio will appear here.">
+                                    <TextBlock.Visibility>
+                                        <Binding Path="CommsFeed.Count" Converter="{x:Static vm:Converters.ZeroToVisible}" />
+                                    </TextBlock.Visibility>
+                                </TextBlock>
+                            </Grid>
+                        </DockPanel>
+                    </TabItem>
+                    <TabItem Header="INCIDENT">
+                        <Grid DataContext="{Binding IncidentDetail}">
+                            <TextBlock Style="{StaticResource EmptyHint}" Margin="4,8"
+                                       Text="Select an incident on the board or the map, or open one from a report in the intelligence feed."
+                                       Visibility="{Binding HasIncident, Converter={x:Static vm:Converters.FalseToVisible}}" />
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          Visibility="{Binding HasIncident, Converter={StaticResource BoolToVisibility}}">
+                                <StackPanel Margin="4">
+                                    <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="Bold" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding Summary}" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,2,0,10" />
+
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="130" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+                                            <RowDefinition /><RowDefinition /><RowDefinition />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Text="Priority" Style="{StaticResource FieldLabel}" />
+                                        <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding Priorities}" SelectedItem="{Binding Priority}" Margin="0,2" />
+                                        <TextBlock Grid.Row="1" Text="Status" Style="{StaticResource FieldLabel}" />
+                                        <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Statuses}" SelectedItem="{Binding Status}" Margin="0,2" />
+                                        <TextBlock Grid.Row="2" Text="Casualties reported" Style="{StaticResource FieldLabel}" />
+                                        <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding CasualtiesReported, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" />
+                                        <TextBlock Grid.Row="3" Text="Casualties confirmed" Style="{StaticResource FieldLabel}" />
+                                        <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding CasualtiesConfirmed, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" />
+                                        <TextBlock Grid.Row="4" Text="Threats" Style="{StaticResource FieldLabel}" />
+                                        <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding Threats, UpdateSourceTrigger=PropertyChanged}" Margin="0,2"
+                                                 ToolTip="Comma-separated, e.g. Fire, Smoke, Possible chemical storage" />
+                                        <TextBlock Grid.Row="5" Text="Incident commander" Style="{StaticResource FieldLabel}" />
+                                        <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding Commander, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" />
+                                        <CheckBox Grid.Row="6" Grid.Column="1" Content="Evacuation required" IsChecked="{Binding EvacuationRequired}" />
+                                    </Grid>
+                                    <Button Content="Apply changes" Command="{Binding ApplyCommand}" HorizontalAlignment="Left" Margin="0,8,0,12" />
+
+                                    <TextBlock Text="OPERATIONAL BOUNDARIES" Style="{StaticResource PanelHeader}" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                        <TextBlock Text="Hot" Style="{StaticResource FieldLabel}" Margin="0,0,4,0" />
+                                        <TextBox Text="{Binding HotRadius}" Width="44" />
+                                        <TextBlock Text="Warm" Style="{StaticResource FieldLabel}" Margin="8,0,4,0" />
+                                        <TextBox Text="{Binding WarmRadius}" Width="44" />
+                                        <TextBlock Text="Cold" Style="{StaticResource FieldLabel}" Margin="8,0,4,0" />
+                                        <TextBox Text="{Binding ColdRadius}" Width="44" />
+                                        <TextBlock Text="m" Style="{StaticResource FieldLabel}" Margin="4,0,0,0" />
+                                    </StackPanel>
+                                    <Button Content="Establish hot / warm / cold zones here" Command="{Binding EstablishHazardZonesCommand}"
+                                            HorizontalAlignment="Left" Margin="0,0,0,4" />
+                                    <TextBlock Style="{StaticResource EmptyHint}" FontSize="11" Margin="0,0,0,12"
+                                               Text="Command posts, staging areas, evacuation zones: use Draw zone on the map; they attach to this incident." />
+
+                                    <TextBlock Text="ASSIGNED RESOURCES" Style="{StaticResource PanelHeader}" />
+                                    <ItemsControl ItemsSource="{Binding Units}" Margin="0,0,0,12" />
+                                    <TextBlock Text="REPORTS" Style="{StaticResource PanelHeader}" />
+                                    <ItemsControl ItemsSource="{Binding Reports}" Margin="0,0,0,12">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,0,0,4" Foreground="{StaticResource MutedTextBrush}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Text="ZONES" Style="{StaticResource PanelHeader}" />
+                                    <ItemsControl ItemsSource="{Binding Zones}" />
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Grid>
+                    </TabItem>
+                </TabControl>
             </Border>
         </Grid>
 
-        <!-- ===== Bottom: incident status, resources, alerts (Appendix D) ===== -->
-        <Grid Grid.Row="2">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="1.4*" />
-            </Grid.ColumnDefinitions>
+        <GridSplitter Grid.Row="3" HorizontalAlignment="Stretch" Background="{StaticResource BorderBrush}"
+                      ResizeDirection="Rows" ToolTip="Drag to resize" />
 
-            <Border Grid.Column="0" Style="{StaticResource Panel}" BorderThickness="0,1,1,0">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="INCIDENT STATUS" Style="{StaticResource PanelHeader}" />
-                    <Grid>
-                        <ListBox ItemsSource="{Binding IncidentBoard}" ItemTemplate="{StaticResource FeedItemTemplate}" />
-                        <TextBlock Style="{StaticResource EmptyHint}" Text="No incidents reported.">
-                            <TextBlock.Visibility>
-                                <Binding Path="IncidentBoard.Count" Converter="{x:Static vm:Converters.ZeroToVisible}" />
-                            </TextBlock.Visibility>
-                        </TextBlock>
-                    </Grid>
-                </DockPanel>
-            </Border>
+        <!-- ===== Bottom: status boards and history (Appendix D, §6.6) ===== -->
+        <TabControl Grid.Row="4" Margin="0" Padding="0">
+            <TabItem Header="STATUS BOARDS">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.05*" />
+                        <ColumnDefinition Width="1.6*" />
+                        <ColumnDefinition Width="1.2*" />
+                    </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="1" Style="{StaticResource Panel}" BorderThickness="0,1,1,0">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="RESOURCES" Style="{StaticResource PanelHeader}" />
-                    <ItemsControl ItemsSource="{Binding ResourceBoard}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="{x:Type vm:ResourceSummary}">
-                                <Grid Margin="0,2">
+                    <!-- Incident status board -->
+                    <Border Grid.Column="0" Style="{StaticResource Panel}" BorderThickness="0,0,1,0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="INCIDENT STATUS" Style="{StaticResource PanelHeader}" />
+                            <Grid>
+                                <DataGrid ItemsSource="{Binding IncidentBoard}" SelectedItem="{Binding SelectedIncidentRow}">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Incident" Binding="{Binding Number}" />
+                                        <DataGridTextColumn Header="Type" Binding="{Binding Type}" />
+                                        <DataGridTemplateColumn Header="Priority">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Priority}" Style="{StaticResource PriorityText}" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" />
+                                        <DataGridTextColumn Header="Cas. rep/conf" Binding="{Binding Casualties}" />
+                                        <DataGridTextColumn Header="Units" Binding="{Binding Units}" />
+                                        <DataGridTextColumn Header="IC" Binding="{Binding Commander}" />
+                                        <DataGridTextColumn Header="Location" Binding="{Binding Location}" />
+                                        <DataGridTextColumn Header="Updated" Binding="{Binding Updated}" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <TextBlock Style="{StaticResource EmptyHint}" Margin="4,28,4,0" VerticalAlignment="Top"
+                                           Text="No incidents. Open one from a call or report in the intelligence feed.">
+                                    <TextBlock.Visibility>
+                                        <Binding Path="IncidentBoard.Count" Converter="{x:Static vm:Converters.ZeroToVisible}" />
+                                    </TextBlock.Visibility>
+                                </TextBlock>
+                            </Grid>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Resource board -->
+                    <Border Grid.Column="1" Style="{StaticResource Panel}" BorderThickness="0,0,1,0">
+                        <DockPanel>
+                            <DockPanel DockPanel.Dock="Top">
+                                <ItemsControl DockPanel.Dock="Right" ItemsSource="{Binding ResourceSummary}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:ResourceSummary}">
+                                            <TextBlock FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="10,0,0,0">
+                                                <Run Text="{Binding Group, Mode=OneWay}" />
+                                                <Run Text="{Binding Available, Mode=OneWay}" FontWeight="Bold" Foreground="{StaticResource TextBrush}" /><Run Text="/" /><Run Text="{Binding Total, Mode=OneWay}" />
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="RESOURCES" Style="{StaticResource PanelHeader}" />
+                            </DockPanel>
+                            <DataGrid ItemsSource="{Binding ResourceBoard}">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Unit" Binding="{Binding Callsign}" />
+                                    <DataGridTextColumn Header="Type" Binding="{Binding Type}" />
+                                    <DataGridTemplateColumn Header="Status">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate DataType="{x:Type vm:UnitRow}">
+                                                <TextBlock Text="{Binding StatusText}" Style="{StaticResource UnitStatusText}" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Assignment" Binding="{Binding Assignment}" />
+                                    <DataGridTextColumn Header="ETA" Binding="{Binding Eta}" />
+                                    <DataGridTemplateColumn Header="Comms">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate DataType="{x:Type vm:UnitRow}">
+                                                <TextBlock Text="{Binding Comms}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding CommsOk}" Value="False">
+                                                                    <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                                    <Setter Property="FontWeight" Value="Bold" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Location" Binding="{Binding Location}" />
+                                    <DataGridTextColumn Header="Crew" Binding="{Binding Crew}" />
+                                    <DataGridTextColumn Header="Equipment" Binding="{Binding Equipment}" />
+                                    <DataGridTextColumn Header="Last contact" Binding="{Binding LastContact}" />
+                                    <DataGridTemplateColumn Header="Actions">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate DataType="{x:Type vm:UnitRow}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Button Content="Dispatch" Padding="6,0" FontSize="11"
+                                                            ToolTip="Dispatch to the selected incident"
+                                                            Visibility="{Binding CanDispatch, Converter={StaticResource BoolToVisibility}}"
+                                                            Command="{Binding DataContext.DispatchUnitCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding Id}" />
+                                                    <Button Content="Stand down" Padding="6,0" FontSize="11"
+                                                            Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibility}}"
+                                                            Command="{Binding DataContext.CancelUnitCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding Id}" />
+                                                    <ComboBox ItemsSource="{Binding NextStatuses}" SelectedItem="{Binding RequestedStatus}"
+                                                              DisplayMemberPath="Label" Width="104" FontSize="11" Margin="4,0,0,0"
+                                                              ToolTip="Record a status change reported by the unit" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Alerts and intelligence -->
+                    <Border Grid.Column="2" Style="{StaticResource Panel}" BorderThickness="0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="1.3*" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Style="{StaticResource PanelHeader}">
+                                <Run Text="ALERTS" /><Run Text=" · " /><Run Text="{Binding UnacknowledgedAlerts, Mode=OneWay}" /><Run Text=" unacknowledged" />
+                            </TextBlock>
+                            <Grid Grid.Row="1">
+                                <ListBox ItemsSource="{Binding AlertFeed}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:AlertRow}">
+                                            <DockPanel Margin="0,0,0,6">
+                                                <Button DockPanel.Dock="Right" Content="Ack" Padding="6,0" FontSize="11" VerticalAlignment="Top"
+                                                        Visibility="{Binding Acknowledged, Converter={x:Static vm:Converters.FalseToVisible}}"
+                                                        Command="{Binding DataContext.AcknowledgeAlertCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding Id}" />
+                                                <TextBlock DockPanel.Dock="Left" Text="{Binding Time}" Width="40" FontFamily="Consolas"
+                                                           Foreground="{StaticResource MutedTextBrush}" />
+                                                <StackPanel>
+                                                    <TextBlock x:Name="Title" TextWrapping="Wrap" FontWeight="SemiBold">
+                                                        <Run Text="⚠" /> <Run Text="{Binding Title, Mode=OneWay}" />
+                                                    </TextBlock>
+                                                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Severity}" Value="Critical">
+                                                    <Setter TargetName="Title" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Severity}" Value="Warning">
+                                                    <Setter TargetName="Title" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Acknowledged}" Value="True">
+                                                    <Setter TargetName="Title" Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                                                    <Setter TargetName="Title" Property="FontWeight" Value="Normal" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <TextBlock Style="{StaticResource EmptyHint}" Text="No alerts.">
+                                    <TextBlock.Visibility>
+                                        <Binding Path="AlertFeed.Count" Converter="{x:Static vm:Converters.ZeroToVisible}" />
+                                    </TextBlock.Visibility>
+                                </TextBlock>
+                            </Grid>
+
+                            <TextBlock Grid.Row="2" Text="INTELLIGENCE (calls and reports)" Style="{StaticResource PanelHeader}" Margin="0,8,0,4" />
+                            <Grid Grid.Row="3">
+                                <ListBox ItemsSource="{Binding IntelligenceFeed}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:ReportRow}">
+                                            <DockPanel Margin="0,0,0,8">
+                                                <TextBlock DockPanel.Dock="Left" Text="{Binding Time}" Width="40" FontFamily="Consolas"
+                                                           Foreground="{StaticResource MutedTextBrush}" />
+                                                <StackPanel>
+                                                    <TextBlock TextWrapping="Wrap">
+                                                        <Run Text="{Binding Source, Mode=OneWay}" FontWeight="SemiBold" />
+                                                        <Run Text="·" Foreground="{StaticResource MutedTextBrush}" />
+                                                        <Run Text="{Binding Incident, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    </TextBlock>
+                                                    <TextBlock Text="{Binding Claim, StringFormat=“{0}”}" TextWrapping="Wrap" />
+                                                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                                        <Border Style="{StaticResource Badge}">
+                                                            <TextBlock Text="{Binding Confidence, StringFormat={}{0} confidence}" FontSize="10" />
+                                                        </Border>
+                                                        <Border Style="{StaticResource Badge}">
+                                                            <TextBlock Text="{Binding Verification}" FontSize="10" />
+                                                        </Border>
+                                                        <Border Style="{StaticResource Badge}">
+                                                            <TextBlock Text="{Binding Accuracy}" FontSize="10" />
+                                                        </Border>
+                                                    </StackPanel>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                        <ComboBox ItemsSource="{x:Static vm:ReportRow.Grades}" SelectedItem="{Binding RequestedVerification}"
+                                                                  DisplayMemberPath="Label" Width="96" FontSize="11" ToolTip="Re-grade this report" />
+                                                        <Button Content="Open incident" Padding="6,0" FontSize="11"
+                                                                ToolTip="Create an incident at this report's location"
+                                                                Visibility="{Binding IsUnattributed, Converter={StaticResource BoolToVisibility}}"
+                                                                Command="{Binding DataContext.CreateIncidentFromReportCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding Id}" />
+                                                        <Button Content="Link to selected" Padding="6,0" FontSize="11"
+                                                                ToolTip="Attribute this report to the selected incident"
+                                                                Visibility="{Binding CanLink, Converter={StaticResource BoolToVisibility}}"
+                                                                Command="{Binding DataContext.LinkReportCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding Id}" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <TextBlock Style="{StaticResource EmptyHint}" Text="No calls or reports yet.">
+                                    <TextBlock.Visibility>
+                                        <Binding Path="IntelligenceFeed.Count" Converter="{x:Static vm:Converters.ZeroToVisible}" />
+                                    </TextBlock.Visibility>
+                                </TextBlock>
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="HISTORY &amp; REPLAY">
+                <DockPanel DataContext="{Binding Timeline}" Margin="12,8">
+                    <!-- Replay control -->
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button Content="Show COP at this time" Command="{Binding ReplayCommand}" />
+                            <Button Content="Live" Command="{Binding ReturnToLiveCommand}" />
+                        </StackPanel>
+                        <TextBlock DockPanel.Dock="Left" Text="REPLAY" Style="{StaticResource PanelHeader}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <TextBlock DockPanel.Dock="Left" Text="{Binding SliderLabel}" FontFamily="Consolas" VerticalAlignment="Center"
+                                   Width="70" />
+                        <Slider Minimum="0" Maximum="{Binding MaxSeconds}" Value="{Binding ReplaySeconds}" VerticalAlignment="Center"
+                                Margin="8,0" ToolTip="Drag to a moment in the session, then 'Show COP at this time'" />
+                    </DockPanel>
+
+                    <!-- Filters -->
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                        <TextBlock Text="HISTORY LOG" Style="{StaticResource PanelHeader}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <ComboBox ItemsSource="{Binding Filters}" SelectedItem="{Binding SelectedFilter}" Width="170" />
+                        <CheckBox Content="Key events only" IsChecked="{Binding ImportantOnly}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                        <CheckBox Content="Show ground truth (instructor / AAR)" IsChecked="{Binding ShowTruth}" Margin="12,0,0,0"
+                                  VerticalAlignment="Center" />
+                        <TextBlock Text="Double-click a line to see the COP at that moment." Margin="16,0,0,0" VerticalAlignment="Center"
+                                   Foreground="{StaticResource MutedTextBrush}" FontSize="11" />
+                    </StackPanel>
+
+                    <ListBox ItemsSource="{Binding Entries}" FontFamily="Consolas" FontSize="12"
+                             MouseDoubleClick="TimelineList_MouseDoubleClick">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:TimelineRow}">
+                                <Grid>
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="80" />
+                                        <ColumnDefinition Width="200" />
                                         <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="{Binding Group}" />
-                                    <TextBlock Grid.Column="1" Text="{Binding Text}" FontFamily="Consolas"
-                                               Foreground="{StaticResource MutedTextBrush}" />
+                                    <TextBlock Text="{Binding Time}" Foreground="{StaticResource MutedTextBrush}" />
+                                    <TextBlock x:Name="Category" Grid.Column="1" Text="{Binding Category}" />
+                                    <TextBlock x:Name="Text" Grid.Column="2" Text="{Binding Text}" TextWrapping="Wrap" />
                                 </Grid>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding Important}" Value="True">
+                                        <Setter TargetName="Category" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsTruth}" Value="True">
+                                        <Setter TargetName="Category" Property="Foreground" Value="#C792EA" />
+                                        <Setter TargetName="Text" Property="Foreground" Value="#C792EA" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
                             </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
                 </DockPanel>
-            </Border>
-
-            <Border Grid.Column="2" Style="{StaticResource Panel}" BorderThickness="0,1,0,0">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="ALERTS / INTELLIGENCE" Style="{StaticResource PanelHeader}" />
-                    <Grid>
-                        <ListBox ItemsSource="{Binding AlertFeed}" ItemTemplate="{StaticResource FeedItemTemplate}" />
-                        <TextBlock Style="{StaticResource EmptyHint}" Text="No alerts.">
-                            <TextBlock.Visibility>
-                                <Binding Path="AlertFeed.Count" Converter="{x:Static vm:Converters.ZeroToVisible}" />
-                            </TextBlock.Visibility>
-                        </TextBlock>
-                    </Grid>
-                </DockPanel>
-            </Border>
-        </Grid>
+            </TabItem>
+        </TabControl>
     </Grid>
 </Window>

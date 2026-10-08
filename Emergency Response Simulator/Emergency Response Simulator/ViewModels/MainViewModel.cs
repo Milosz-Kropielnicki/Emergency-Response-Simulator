@@ -4,30 +4,37 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Emergency_Response_Simulator.Core.Contracts;
+using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.Simulation.State;
 
 namespace Emergency_Response_Simulator.ViewModels;
 
 /// <summary>
-/// The dashboard shell: header, pop-out panels and the status boards along the bottom
-/// (Design Document §6.8, Appendix D). Reads only the COP, never ground truth.
+/// The dashboard: header, pop-out panels, status boards and history (Design Document §6, Appendix D).
+/// Displays <see cref="CopView"/> — the live COP or a replay — and never ground truth. Commands go
+/// through C2 and are refused while replaying.
 /// </summary>
 public partial class MainViewModel : ObservableObject
 {
-    private readonly ICopService _cop;
+    private readonly CopView _cop;
     private readonly ISimulationControl _simulation;
     private readonly IC2Service _c2;
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _clockTimer;
     private int _refreshQueued;
+    private DateTimeOffset _messageExpires;
 
-    public MainViewModel(ICopService cop, ISimulationControl simulation, IC2Service c2, DataSourceInfo dataSource)
+    public MainViewModel(CopView cop, ISimulationControl simulation, IC2Service c2, TimelineViewModel timeline,
+        DataSourceInfo dataSource)
     {
         _cop = cop;
         _simulation = simulation;
         _c2 = c2;
-        ZoneDrawing = new ZoneDrawingViewModel(c2);
+        Timeline = timeline;
+        ZoneDrawing = new ZoneDrawingViewModel(c2, this);
+        IncidentDetail = new IncidentDetailViewModel(this, c2);
         LayerGroups = BuildLayerGroups();
         _dispatcher = Application.Current.Dispatcher;
         EventStoreLabel = $"Event store: {dataSource.EventStore}";
@@ -47,6 +54,12 @@ public partial class MainViewModel : ObservableObject
 
     public string EventStoreLabel { get; }
 
+    public TimelineViewModel Timeline { get; }
+
+    public IncidentDetailViewModel IncidentDetail { get; }
+
+    public bool IsReplay => _cop.IsReplay;
+
     // ---- Header ----
 
     [ObservableProperty] private string _incidentTitle = "NO ACTIVE INCIDENT";
@@ -56,6 +69,10 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _isRunning;
     [ObservableProperty] private double _timeScale = 1;
 
+    /// <summary>Result of the last command, shown briefly in the header.</summary>
+    [ObservableProperty] private string _commandMessage = "";
+    [ObservableProperty] private bool _commandFailed;
+
     public IReadOnlyList<double> TimeScales { get; } = [1, 2, 5, 10, 30];
 
     // ---- Pop-out panels ----
@@ -63,6 +80,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _isLeftPanelOpen = true;
     [ObservableProperty] private bool _isRightPanelOpen = true;
     [ObservableProperty] private bool _isTopPanelOpen;
+
+    /// <summary>0 = comms hub, 1 = incident detail.</summary>
+    [ObservableProperty] private int _rightPanelTab;
 
     /// <summary>
     /// Left panel: map layer toggles (Design Document §6.8). Operational layers come from the COP;
@@ -80,6 +100,7 @@ public partial class MainViewModel : ObservableObject
             new("OPERATIONAL",
             [
                 new(MapLayerKeys.Incidents, "Incidents", true),
+                new(MapLayerKeys.Reports, "Located reports", true),
                 new(MapLayerKeys.FireUnits, "Fire units", true),
                 new(MapLayerKeys.EmsUnits, "EMS units", true),
                 new(MapLayerKeys.PoliceUnits, "Police units", true),
@@ -158,14 +179,158 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void CloseInfo() => IsInfoOpen = false;
 
+    // ---- Status boards ----
+
+    public ObservableCollection<IncidentRow> IncidentBoard { get; } = [];
+    public ObservableCollection<UnitRow> ResourceBoard { get; } = [];
+    public ObservableCollection<ResourceSummary> ResourceSummary { get; } = [];
+    public ObservableCollection<AlertRow> AlertFeed { get; } = [];
+    public ObservableCollection<ReportRow> IntelligenceFeed { get; } = [];
+
+    [ObservableProperty] private int _unacknowledgedAlerts;
+
+    /// <summary>The incident the operator is working on: target for dispatch, report linking and zones.</summary>
+    [ObservableProperty] private Guid? _selectedIncidentId;
+
+    /// <summary>Two-way binding for the incident board's selected row.</summary>
+    public IncidentRow? SelectedIncidentRow
+    {
+        get => IncidentBoard.FirstOrDefault(r => r.Id == SelectedIncidentId);
+        set
+        {
+            if (value is not null && value.Id != SelectedIncidentId)
+                SelectedIncidentId = value.Id;
+        }
+    }
+
+    /// <summary>Raised when the operator picks an incident, so the map can centre on it.</summary>
+    public event EventHandler<GeoPoint>? FocusRequested;
+
+    partial void OnSelectedIncidentIdChanged(Guid? value)
+    {
+        var incident = value is { } id ? _cop.FindIncident(id) : null;
+        IncidentDetail.Load(incident, selectionChanged: true);
+        OnPropertyChanged(nameof(SelectedIncidentRow));
+        ZoneDrawing.TargetChanged();
+        if (incident is not null)
+        {
+            RightPanelTab = 1;
+            IsRightPanelOpen = true;
+            FocusRequested?.Invoke(this, GeoPoint.FromPoint(incident.Location));
+        }
+        RefreshResourceBoard();
+        RefreshIntelligence();
+    }
+
+    public Incident? FindIncident(Guid id) => _cop.FindIncident(id);
+
+    // ---- Commands (all through C2; refused while replaying) ----
+
+    /// <summary>Runs a C2 command and reports the outcome in the header.</summary>
+    public async Task<CommandResult?> RunCommandAsync(Func<Task<CommandResult>> command, string successMessage,
+        bool quietIfUnchanged = false)
+    {
+        if (_cop.IsReplay)
+        {
+            ShowCommandResult(CommandResult.Fail("Return to live before issuing commands."));
+            return null;
+        }
+
+        var result = await command();
+        if (!(quietIfUnchanged && !result.Succeeded && result.Error == "Nothing changed."))
+            ShowCommandResult(result, successMessage);
+        return result;
+    }
+
+    public void ShowCommandResult(CommandResult result, string? successMessage = null)
+    {
+        CommandFailed = !result.Succeeded;
+        CommandMessage = result.Succeeded ? successMessage ?? "Done" : result.Error ?? "Command refused";
+        _messageExpires = DateTimeOffset.Now.AddSeconds(6);
+    }
+
     [RelayCommand]
-    private async Task LiftZoneAsync(Guid zoneId) => await _c2.LiftZoneAsync(zoneId);
+    private async Task LiftZoneAsync(Guid zoneId) => await RunCommandAsync(() => _c2.LiftZoneAsync(zoneId), "Zone lifted");
 
-    // ---- Bottom boards ----
+    [RelayCommand]
+    private async Task DispatchUnitAsync(Guid unitId)
+    {
+        if (SelectedIncidentId is not { } incidentId)
+        {
+            ShowCommandResult(CommandResult.Fail("Select an incident first."));
+            return;
+        }
+        var callsign = _cop.FindUnit(unitId)?.Callsign;
+        await RunCommandAsync(() => _c2.DispatchAsync(unitId, incidentId), $"{callsign} dispatched");
+    }
 
-    public ObservableCollection<FeedItem> IncidentBoard { get; } = [];
-    public ObservableCollection<ResourceSummary> ResourceBoard { get; } = [];
-    public ObservableCollection<FeedItem> AlertFeed { get; } = [];
+    [RelayCommand]
+    private async Task CancelUnitAsync(Guid unitId) =>
+        await RunCommandAsync(() => _c2.CancelDispatchAsync(unitId, "Stood down by dispatcher"),
+            $"{_cop.FindUnit(unitId)?.Callsign} stood down");
+
+    public async Task RequestUnitStatusAsync(Guid unitId, UnitStatus status) =>
+        await RunCommandAsync(() => _c2.UpdateUnitStatusAsync(unitId, status),
+            $"{_cop.FindUnit(unitId)?.Callsign} → {EventDescriber.Humanize(status)}");
+
+    [RelayCommand]
+    private async Task AcknowledgeAlertAsync(Guid alertId) =>
+        await RunCommandAsync(() => _c2.AcknowledgeAlertAsync(alertId), "Alert acknowledged");
+
+    public async Task AssessReportAsync(Guid reportId, VerificationStatus verification)
+    {
+        var report = _cop.Reports.FirstOrDefault(r => r.Id == reportId);
+        if (report is null) return;
+        // Confirming raises confidence; downgrading to suspected lowers it.
+        var confidence = verification switch
+        {
+            VerificationStatus.Confirmed or VerificationStatus.Known => Confidence.High,
+            VerificationStatus.Suspected => Confidence.Low,
+            _ => report.Confidence,
+        };
+        await RunCommandAsync(() => _c2.AssessReportAsync(reportId, verification, confidence), $"Report marked {verification}");
+    }
+
+    [RelayCommand]
+    private async Task CreateIncidentFromReportAsync(Guid reportId)
+    {
+        var report = _cop.Reports.FirstOrDefault(r => r.Id == reportId);
+        if (report?.Location is null)
+        {
+            ShowCommandResult(CommandResult.Fail("The report has no location to open an incident at."));
+            return;
+        }
+
+        var result = await RunCommandAsync(() => _c2.CreateIncidentAsync(
+            GuessIncidentType(report.Claim), IncidentPriority.High, GeoPoint.FromPoint(report.Location),
+            address: null, name: null, fromReportId: reportId), "Incident created");
+
+        if (result?.EntityId is { } incidentId)
+            SelectedIncidentId = incidentId;
+    }
+
+    [RelayCommand]
+    private async Task LinkReportAsync(Guid reportId)
+    {
+        if (SelectedIncidentId is not { } incidentId) return;
+        await RunCommandAsync(() => _c2.LinkReportAsync(reportId, incidentId),
+            $"Report attributed to {_cop.FindIncident(incidentId)?.Number}");
+    }
+
+    /// <summary>A starting guess from the caller's words; the operator corrects it in the incident panel.</summary>
+    private static IncidentType GuessIncidentType(string claim)
+    {
+        var text = claim.ToLowerInvariant();
+        if (text.Contains("explosion") || text.Contains("bang")) return IncidentType.Explosion;
+        if (text.Contains("fire") || text.Contains("smoke")) return IncidentType.StructureFire;
+        if (text.Contains("chemical") || text.Contains("gas") || text.Contains("leak")) return IncidentType.HazmatRelease;
+        if (text.Contains("crash") || text.Contains("collision")) return IncidentType.RoadAccident;
+        if (text.Contains("flood")) return IncidentType.Flood;
+        if (text.Contains("collapse")) return IncidentType.StructuralCollapse;
+        return IncidentType.Other;
+    }
+
+    // ---- Simulation control ----
 
     [RelayCommand]
     private async Task TogglePlayAsync()
@@ -197,7 +362,13 @@ public partial class MainViewModel : ObservableObject
         SimDate = local.ToString("ddd d MMM yyyy");
         IsRunning = _simulation.IsRunning;
         TimeScale = _simulation.TimeScale;
+        Timeline.Tick();
+
+        if (CommandMessage.Length > 0 && DateTimeOffset.Now > _messageExpires)
+            CommandMessage = "";
     }
+
+    // ---- Refresh from the COP ----
 
     /// <summary>COP changes can arrive in bursts from the engine thread; coalesce them into one UI refresh.</summary>
     private void QueueRefresh()
@@ -214,13 +385,19 @@ public partial class MainViewModel : ObservableObject
 
     private void Refresh()
     {
+        OnPropertyChanged(nameof(IsReplay));
+        if (SelectedIncidentId is { } id && _cop.FindIncident(id) is null)
+            SelectedIncidentId = null; // e.g. replaying to before it existed
+
         RefreshHeader();
         RefreshIncidentBoard();
         RefreshResourceBoard();
         RefreshAlerts();
+        RefreshIntelligence();
         RefreshComms();
         RefreshZones();
         RefreshWeather();
+        IncidentDetail.Load(SelectedIncidentId is { } selected ? _cop.FindIncident(selected) : null, selectionChanged: false);
     }
 
     private void RefreshZones()
@@ -245,11 +422,12 @@ public partial class MainViewModel : ObservableObject
 
     private void RefreshHeader()
     {
-        var focus = _cop.Incidents
-            .Where(i => i.Status != IncidentStatus.Closed)
-            .OrderByDescending(i => i.Priority)
-            .ThenBy(i => i.ReportedAt)
-            .FirstOrDefault();
+        var focus = (SelectedIncidentId is { } id ? _cop.FindIncident(id) : null)
+            ?? _cop.Incidents
+                .Where(i => i.Status != IncidentStatus.Closed)
+                .OrderByDescending(i => i.Priority)
+                .ThenBy(i => i.ReportedAt)
+                .FirstOrDefault();
 
         if (focus is null)
         {
@@ -259,40 +437,61 @@ public partial class MainViewModel : ObservableObject
         }
 
         IncidentTitle = $"INCIDENT: {(focus.Name ?? Humanize(focus.Type)).ToUpperInvariant()}";
-        IncidentSubtitle = $"{focus.Number}   Status: {Humanize(focus.Status).ToUpperInvariant()}   Priority: {focus.Priority}";
+        IncidentSubtitle = $"{focus.Number}   Status: {Humanize(focus.Status).ToUpperInvariant()}   Priority: {focus.Priority}" +
+                           (focus.IncidentCommanderName is { } ic ? $"   IC: {ic}" : "");
     }
 
     private void RefreshIncidentBoard()
     {
         IncidentBoard.Clear();
-        foreach (var incident in _cop.Incidents.OrderByDescending(i => i.Priority).ThenBy(i => i.ReportedAt))
+        foreach (var incident in _cop.Incidents.OrderByDescending(i => i.Status != IncidentStatus.Closed)
+                     .ThenByDescending(i => i.Priority).ThenBy(i => i.ReportedAt))
         {
-            IncidentBoard.Add(new FeedItem(
-                Time(incident.ReportedAt),
-                $"{incident.Number}  {Humanize(incident.Type)}",
-                $"{Humanize(incident.Status)} · {incident.AssignedUnits.Count} units · " +
-                $"{incident.CasualtiesReported} casualties reported",
-                incident.Priority.ToString()));
+            IncidentBoard.Add(new IncidentRow(
+                incident.Id,
+                incident.Number,
+                Humanize(incident.Type),
+                incident.Priority,
+                Humanize(incident.Status),
+                incident.Address ?? $"{incident.Location.Y:F4}, {incident.Location.X:F4}",
+                $"{incident.CasualtiesReported} / {incident.CasualtiesConfirmed}",
+                incident.AssignedUnits.Count,
+                incident.IncidentCommanderName ?? "—",
+                Time(incident.LastUpdatedAt)));
         }
+        OnPropertyChanged(nameof(SelectedIncidentRow));
     }
 
     private void RefreshResourceBoard()
     {
         ResourceBoard.Clear();
-        foreach (var group in _cop.Units.GroupBy(u => ResourceGroup(u.Type)).OrderBy(g => g.Key))
+        foreach (var unit in _cop.Units.OrderBy(u => u.Agency?.Type).ThenBy(u => u.Callsign, StringComparer.Ordinal))
+            ResourceBoard.Add(new UnitRow(this, unit, _cop.AsOf));
+
+        ResourceSummary.Clear();
+        foreach (var group in _cop.Units.GroupBy(u => ResourceGroups.For(u.Type)).OrderBy(g => g.Key))
         {
-            ResourceBoard.Add(new ResourceSummary(
-                group.Key,
-                group.Count(u => u.Status == UnitStatus.Available),
-                group.Count()));
+            ResourceSummary.Add(new ResourceSummary(group.Key,
+                group.Count(u => u.Status == UnitStatus.Available), group.Count()));
         }
     }
 
     private void RefreshAlerts()
     {
         AlertFeed.Clear();
-        foreach (var alert in _cop.Alerts.OrderByDescending(a => a.RaisedAt).Take(50))
-            AlertFeed.Add(new FeedItem(Time(alert.RaisedAt), alert.Title, alert.Message, alert.Severity.ToString()));
+        foreach (var alert in _cop.Alerts.OrderBy(a => a.AcknowledgedAt is not null).ThenByDescending(a => a.RaisedAt).Take(100))
+        {
+            AlertFeed.Add(new AlertRow(alert.Id, Time(alert.RaisedAt), Humanize(alert.Category).ToUpperInvariant(),
+                alert.Severity.ToString(), alert.Title, alert.Message, alert.AcknowledgedAt is not null));
+        }
+        UnacknowledgedAlerts = _cop.Alerts.Count(a => a.AcknowledgedAt is null);
+    }
+
+    private void RefreshIntelligence()
+    {
+        IntelligenceFeed.Clear();
+        foreach (var report in _cop.Reports.OrderByDescending(r => r.ReceivedAt).Take(100))
+            IntelligenceFeed.Add(new ReportRow(this, report));
     }
 
     private void RefreshComms()
@@ -317,24 +516,8 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private static string ResourceGroup(UnitType type) => type switch
-    {
-        UnitType.Engine => "Fire Engines",
-        UnitType.Ladder => "Ladder Trucks",
-        UnitType.Hazmat => "Hazmat Teams",
-        UnitType.AmbulanceAls or UnitType.AmbulanceBls => "Ambulances",
-        UnitType.Patrol or UnitType.Traffic or UnitType.Motorcycle or UnitType.Supervisor => "Police Units",
-        UnitType.Swat => "Tactical Units",
-        _ => Humanize(type),
-    };
+    internal static string Time(DateTimeOffset at, bool seconds = false) =>
+        at.ToLocalTime().ToString(seconds ? "HH:mm:ss" : "HH:mm");
 
-    internal static string Time(DateTimeOffset at) => at.ToLocalTime().ToString("HH:mm");
-
-    /// <summary>"StructureFire" → "Structure fire".</summary>
-    internal static string Humanize<T>(T value) where T : Enum
-    {
-        var name = value.ToString();
-        var spaced = string.Concat(name.Select((c, i) => i > 0 && char.IsUpper(c) ? " " + char.ToLowerInvariant(c) : c.ToString()));
-        return spaced;
-    }
+    internal static string Humanize<T>(T value) where T : Enum => EventDescriber.Humanize(value);
 }

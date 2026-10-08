@@ -31,6 +31,9 @@ public class Incident
     public int CasualtiesConfirmed { get; set; }
     public bool EvacuationRequired { get; set; }
 
+    /// <summary>Who holds command, e.g. "Chief Murphy". Not necessarily a simulator user.</summary>
+    public string? IncidentCommanderName { get; set; }
+
     public Guid? IncidentCommanderId { get; set; }
     public User? IncidentCommander { get; set; }
 

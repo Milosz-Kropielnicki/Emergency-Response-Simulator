@@ -4,6 +4,7 @@ namespace Emergency_Response_Simulator.ViewModels;
 public static class MapLayerKeys
 {
     public const string Incidents = "op:incidents";
+    public const string Reports = "op:reports";
     public const string FireUnits = "op:units-fire";
     public const string EmsUnits = "op:units-ems";
     public const string PoliceUnits = "op:units-police";

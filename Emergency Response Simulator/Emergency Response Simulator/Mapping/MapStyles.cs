@@ -182,6 +182,32 @@ public static class MapStyles
         };
     }
 
+    public static IStyle Report(Confidence confidence) => new SymbolStyle
+    {
+        SymbolType = SymbolType.Ellipse,
+        SymbolScale = 0.32,
+        Fill = new Brush(ConfidenceColor(confidence)),
+        Outline = new Pen(Color.Black, 1.5),
+    };
+
+    /// <summary>Faint circle for a report's stated location accuracy.</summary>
+    public static IStyle ReportAccuracy(Confidence confidence)
+    {
+        var color = ConfidenceColor(confidence);
+        return new VectorStyle
+        {
+            Fill = new Brush(Color.FromArgb(35, color.R, color.G, color.B)),
+            Outline = new Pen(Color.FromArgb(160, color.R, color.G, color.B), 1) { PenStyle = PenStyle.Dot },
+        };
+    }
+
+    private static Color ConfidenceColor(Confidence confidence) => confidence switch
+    {
+        Confidence.High => new Color(80, 220, 120),
+        Confidence.Medium => new Color(255, 200, 60),
+        _ => new Color(255, 120, 200),
+    };
+
     public static IStyle Incident(IncidentPriority priority) => new StyleCollection
     {
         Styles =

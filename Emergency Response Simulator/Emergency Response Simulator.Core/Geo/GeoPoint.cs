@@ -21,6 +21,12 @@ public static class Wgs84
     public static GeometryFactory Factory { get; } =
         NtsGeometryServices.Instance.CreateGeometryFactory(Srid);
 
+    /// <summary>A circle of true radius (metres) around a point, as a ring of points.</summary>
+    public static IReadOnlyList<GeoPoint> Circle(GeoPoint center, double radiusMeters, int segments = 48) =>
+        Enumerable.Range(0, segments)
+            .Select(i => GeoMath.Destination(center, 360.0 * i / segments, radiusMeters))
+            .ToList();
+
     /// <summary>Builds a closed polygon from a ring of points (the first point is repeated at the end if needed).</summary>
     public static Polygon CreatePolygon(IReadOnlyList<GeoPoint> ring)
     {

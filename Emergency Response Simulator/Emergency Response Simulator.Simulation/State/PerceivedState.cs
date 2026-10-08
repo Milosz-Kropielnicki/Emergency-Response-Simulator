@@ -94,6 +94,7 @@ public sealed class PerceivedState : ICopService
                     CrewSize = e.CrewSize,
                     Capabilities = [.. e.Capabilities],
                     LastAvlUpdate = at,
+                    LastContactAt = at,
                 };
                 _units[e.UnitId] = registered;
                 registered.Agency?.Resources.Add(registered);
@@ -115,6 +116,8 @@ public sealed class PerceivedState : ICopService
                 break;
 
             case ReportReceived e:
+                if (e.FromUnitId is { } reportingUnitId && _units.TryGetValue(reportingUnitId, out var reportingUnit))
+                    Contact(reportingUnit, at);
                 AddReport(new Report
                 {
                     Id = e.ReportId,
@@ -128,6 +131,25 @@ public sealed class PerceivedState : ICopService
                     LocationAccuracyMeters = e.LocationAccuracyMeters,
                     ReceivedAt = at,
                 });
+                break;
+
+            case ReportAssessed e when _reports.TryGetValue(e.ReportId, out var assessed):
+                assessed.Verification = e.Verification;
+                assessed.Confidence = e.Confidence;
+                break;
+
+            case ReportLinked e when _reports.TryGetValue(e.ReportId, out var linked)
+                                     && _incidents.TryGetValue(e.IncidentId, out var linkedIncident):
+                linked.Incident?.Reports.Remove(linked);
+                linked.IncidentId = e.IncidentId;
+                linked.Incident = linkedIncident;
+                linkedIncident.Reports.Add(linked);
+                break;
+
+            case IncidentCommanderAssigned e when _incidents.TryGetValue(e.IncidentId, out var commanded):
+                commanded.IncidentCommanderName = e.Name;
+                commanded.IncidentCommanderId = e.UserId;
+                commanded.LastUpdatedAt = at;
                 break;
 
             case IncidentCreated e:
@@ -176,6 +198,7 @@ public sealed class PerceivedState : ICopService
                 break;
 
             case UnitStatusChanged e when _units.TryGetValue(e.UnitId, out var unit):
+                Contact(unit, at);
                 unit.Status = e.Status;
                 if (e.Status is UnitStatus.Available or UnitStatus.OutOfService)
                     Unassign(unit);
@@ -187,6 +210,7 @@ public sealed class PerceivedState : ICopService
                 unit.Heading = e.Heading;
                 unit.Eta = e.Eta;
                 unit.LastAvlUpdate = at;
+                Contact(unit, at);
                 break;
 
             case AlertRaised e:
@@ -202,6 +226,11 @@ public sealed class PerceivedState : ICopService
                     RaisedAt = at,
                 };
                 _alerts[e.AlertId] = alert;
+                if (e.Category == AlertCategory.CommunicationFailure && e.UnitId is { } silentId
+                    && _units.TryGetValue(silentId, out var silent))
+                {
+                    silent.CommsConnected = false;
+                }
                 if (e.IncidentId is { } alertIncidentId && _incidents.TryGetValue(alertIncidentId, out var alertIncident))
                 {
                     alert.Incident = alertIncident;
@@ -242,6 +271,13 @@ public sealed class PerceivedState : ICopService
                 lifted.Incident?.Zones.Remove(lifted);
                 break;
         }
+    }
+
+    /// <summary>Anything heard from a unit restores its comms status.</summary>
+    private static void Contact(Unit unit, DateTimeOffset at)
+    {
+        unit.LastContactAt = at;
+        unit.CommsConnected = true;
     }
 
     private void AddReport(Report report)

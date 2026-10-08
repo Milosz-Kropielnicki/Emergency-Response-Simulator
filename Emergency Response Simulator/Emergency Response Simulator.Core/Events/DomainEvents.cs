@@ -27,10 +27,14 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(ZoneLifted), nameof(ZoneLifted))]
 [JsonDerivedType(typeof(ResourceRequested), nameof(ResourceRequested))]
 [JsonDerivedType(typeof(WeatherObserved), nameof(WeatherObserved))]
+[JsonDerivedType(typeof(IncidentCommanderAssigned), nameof(IncidentCommanderAssigned))]
+[JsonDerivedType(typeof(ReportAssessed), nameof(ReportAssessed))]
+[JsonDerivedType(typeof(ReportLinked), nameof(ReportLinked))]
 // Truth: the world as it really is
 [JsonDerivedType(typeof(WorldIncidentStarted), nameof(WorldIncidentStarted))]
 [JsonDerivedType(typeof(WorldIncidentChanged), nameof(WorldIncidentChanged))]
 [JsonDerivedType(typeof(WeatherChanged), nameof(WeatherChanged))]
+[JsonDerivedType(typeof(UnitRadioFailed), nameof(UnitRadioFailed))]
 // Engine control
 [JsonDerivedType(typeof(SimulationStarted), nameof(SimulationStarted))]
 [JsonDerivedType(typeof(SimulationPaused), nameof(SimulationPaused))]
@@ -81,6 +85,8 @@ public sealed record IncidentUpdated(
 
 public sealed record UnitDispatched(Guid UnitId, Guid IncidentId, Guid? OrderedBy) : DomainEvent;
 
+// Status changes and position fixes also count as contact from the unit for comms-failure detection.
+
 public sealed record UnitDispatchCancelled(Guid UnitId, Guid IncidentId, string? Reason) : DomainEvent;
 
 public sealed record UnitStatusChanged(Guid UnitId, UnitStatus Status) : DomainEvent;
@@ -102,7 +108,19 @@ public sealed record ReportReceived(
     Confidence Confidence,
     VerificationStatus Verification,
     GeoPoint? Location,
-    double? LocationAccuracyMeters) : DomainEvent;
+    double? LocationAccuracyMeters,
+    Guid? FromUnitId = null) : DomainEvent;
+
+/// <summary>Command re-grades a report after corroboration, e.g. Reported → Confirmed.</summary>
+public sealed record ReportAssessed(
+    Guid ReportId,
+    VerificationStatus Verification,
+    Confidence Confidence) : DomainEvent;
+
+/// <summary>A report (or call) is attributed to an incident.</summary>
+public sealed record ReportLinked(Guid ReportId, Guid IncidentId) : DomainEvent;
+
+public sealed record IncidentCommanderAssigned(Guid IncidentId, string Name, Guid? UserId) : DomainEvent;
 
 public sealed record AlertRaised(
     Guid AlertId,
@@ -165,6 +183,9 @@ public sealed record WeatherChanged(
     double WindSpeedMps,
     double TemperatureC,
     double RelativeHumidity) : DomainEvent;
+
+/// <summary>A unit's radio and data link really fail (or recover). Command only notices the silence.</summary>
+public sealed record UnitRadioFailed(Guid UnitId, bool Failed) : DomainEvent;
 
 // ---- Engine control ----
 

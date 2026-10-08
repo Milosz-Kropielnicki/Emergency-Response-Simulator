@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Emergency_Response_Simulator.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Emergency_Response_Simulator.Data.Migrations
 {
     [DbContext(typeof(ErsDbContext))]
-    partial class ErsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261008141905_CopSituationalData")]
+    partial class CopSituationalData
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -1,5 +1,8 @@
 namespace Emergency_Response_Simulator.Simulation.Engine;
 
+/// <summary>Identifies the running session; every event it produces carries this id.</summary>
+public sealed record SimulationSession(Guid Id);
+
 /// <summary>Bound from the "Simulation" configuration section.</summary>
 public sealed class SimulationOptions
 {
@@ -17,4 +20,10 @@ public sealed class SimulationOptions
 
     /// <summary>Caps one tick's simulated time so a stalled machine does not make the world jump.</summary>
     public TimeSpan MaxTickDelta { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Scripted scenario to play: "barrow-street", or empty for none.</summary>
+    public string? Scenario { get; set; }
+
+    /// <summary>Start the clock as soon as the scenario is seeded (unattended demos, instructor setups).</summary>
+    public bool AutoStart { get; set; }
 }
