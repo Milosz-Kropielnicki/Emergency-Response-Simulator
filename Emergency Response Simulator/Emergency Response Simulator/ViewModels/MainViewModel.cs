@@ -4,6 +4,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Emergency_Response_Simulator.Core.Contracts;
+using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
 
 namespace Emergency_Response_Simulator.ViewModels;
@@ -16,14 +17,18 @@ public partial class MainViewModel : ObservableObject
 {
     private readonly ICopService _cop;
     private readonly ISimulationControl _simulation;
+    private readonly IC2Service _c2;
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _clockTimer;
     private int _refreshQueued;
 
-    public MainViewModel(ICopService cop, ISimulationControl simulation, DataSourceInfo dataSource)
+    public MainViewModel(ICopService cop, ISimulationControl simulation, IC2Service c2, DataSourceInfo dataSource)
     {
         _cop = cop;
         _simulation = simulation;
+        _c2 = c2;
+        ZoneDrawing = new ZoneDrawingViewModel(c2);
+        LayerGroups = BuildLayerGroups();
         _dispatcher = Application.Current.Dispatcher;
         EventStoreLabel = $"Event store: {dataSource.EventStore}";
 
@@ -59,25 +64,48 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _isRightPanelOpen = true;
     [ObservableProperty] private bool _isTopPanelOpen;
 
-    /// <summary>Left panel: map layer toggles with the defaults from Design Document §6.8.</summary>
-    public ObservableCollection<ToggleItem> MapLayers { get; } =
-    [
-        new("incidents", "Incidents", true),
-        new("units", "Emergency units", true),
-        new("hospitals", "Hospitals", true),
-        new("roads", "Roads", true),
-        new("evacuation", "Evacuation zones", true),
-        new("command", "Command zones", true),
-        new("utilities", "Utilities"),
-        new("weather", "Weather"),
-        new("cctv", "CCTV"),
-        new("traffic", "Traffic"),
-        new("terrain", "Terrain"),
-        new("infrastructure", "Critical infrastructure"),
-        new("population", "Population density"),
-        new("hazmat", "Hazardous materials"),
-        new("communications", "Communications"),
-    ];
+    /// <summary>
+    /// Left panel: map layer toggles (Design Document §6.8). Operational layers come from the COP;
+    /// the rest are the static GIS layers, whose availability is filled in once they load.
+    /// </summary>
+    public IReadOnlyList<LayerGroup> LayerGroups { get; }
+
+    public ToggleItem? FindLayerToggle(string key) =>
+        LayerGroups.SelectMany(g => g.Items).FirstOrDefault(t => t.Key == key);
+
+    private static IReadOnlyList<LayerGroup> BuildLayerGroups()
+    {
+        var groups = new List<LayerGroup>
+        {
+            new("OPERATIONAL",
+            [
+                new(MapLayerKeys.Incidents, "Incidents", true),
+                new(MapLayerKeys.FireUnits, "Fire units", true),
+                new(MapLayerKeys.EmsUnits, "EMS units", true),
+                new(MapLayerKeys.PoliceUnits, "Police units", true),
+                new(MapLayerKeys.OtherUnits, "Other units", true),
+                new(MapLayerKeys.Weather, "Wind (reported)"),
+            ]),
+            new("ZONES",
+            [
+                new(MapLayerKeys.HazardZones, "Hot / warm / cold & hazard", true),
+                new(MapLayerKeys.EvacuationZones, "Evacuation & shelter", true),
+                new(MapLayerKeys.CommandZones, "Command, staging & landing", true),
+                new(MapLayerKeys.TrafficZones, "Road closures & traffic", true),
+                new(MapLayerKeys.SearchZones, "Search areas & cordons", true),
+                new(MapLayerKeys.PerimeterZones, "Incident perimeters", true),
+            ]),
+        };
+
+        // Area boundaries are switched from the top panel ("Area codes"), not listed here.
+        foreach (var group in GisLayerKeys.All.Where(d => d.Key != GisLayerKeys.AreaBoundaries).GroupBy(d => d.Group))
+        {
+            groups.Add(new LayerGroup(group.Key.ToUpperInvariant(),
+                [.. group.Select(d => new ToggleItem(d.Key, d.Name, d.VisibleByDefault) { IsAvailable = false, Detail = "loading…" })]));
+        }
+
+        return groups;
+    }
 
     /// <summary>Top panel: base map style (one at a time).</summary>
     public ObservableCollection<ToggleItem> MapViews { get; } =
@@ -103,6 +131,35 @@ public partial class MainViewModel : ObservableObject
     ];
 
     public ObservableCollection<FeedItem> CommsFeed { get; } = [];
+
+    // ---- Map tools ----
+
+    public ZoneDrawingViewModel ZoneDrawing { get; }
+
+    public ObservableCollection<ActiveZoneItem> ActiveZones { get; } = [];
+
+    /// <summary>Wind as last reported to command, shown on the map.</summary>
+    [ObservableProperty] private string _weatherSummary = "No weather report";
+
+    /// <summary>Details of whatever was clicked on the map.</summary>
+    [ObservableProperty] private bool _isInfoOpen;
+    [ObservableProperty] private string _infoTitle = "";
+    public ObservableCollection<string> InfoLines { get; } = [];
+
+    public void ShowInfo(string title, IEnumerable<string> lines)
+    {
+        InfoTitle = title;
+        InfoLines.Clear();
+        foreach (var line in lines)
+            InfoLines.Add(line);
+        IsInfoOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseInfo() => IsInfoOpen = false;
+
+    [RelayCommand]
+    private async Task LiftZoneAsync(Guid zoneId) => await _c2.LiftZoneAsync(zoneId);
 
     // ---- Bottom boards ----
 
@@ -162,6 +219,28 @@ public partial class MainViewModel : ObservableObject
         RefreshResourceBoard();
         RefreshAlerts();
         RefreshComms();
+        RefreshZones();
+        RefreshWeather();
+    }
+
+    private void RefreshZones()
+    {
+        ActiveZones.Clear();
+        foreach (var zone in _cop.Zones.OrderBy(z => z.EffectiveFrom))
+            ActiveZones.Add(new ActiveZoneItem(zone.Id, zone.Name, Humanize(zone.Type)));
+    }
+
+    private void RefreshWeather()
+    {
+        if (_cop.Weather is not { } weather)
+        {
+            WeatherSummary = "No weather report";
+            return;
+        }
+
+        var toward = GeoMath.CompassPoint(weather.WindFromDegrees + 180);
+        WeatherSummary = $"Wind from {GeoMath.CompassPoint(weather.WindFromDegrees)} ({weather.WindFromDegrees:F0}°) → {toward} " +
+                         $"· {weather.WindSpeedMps:F1} m/s · {weather.TemperatureC:F0}°C · {weather.Source} {Time(weather.ObservedAt)}";
     }
 
     private void RefreshHeader()
@@ -249,10 +328,10 @@ public partial class MainViewModel : ObservableObject
         _ => Humanize(type),
     };
 
-    private static string Time(DateTimeOffset at) => at.ToLocalTime().ToString("HH:mm");
+    internal static string Time(DateTimeOffset at) => at.ToLocalTime().ToString("HH:mm");
 
     /// <summary>"StructureFire" → "Structure fire".</summary>
-    private static string Humanize<T>(T value) where T : Enum
+    internal static string Humanize<T>(T value) where T : Enum
     {
         var name = value.ToString();
         var spaced = string.Concat(name.Select((c, i) => i > 0 && char.IsUpper(c) ? " " + char.ToLowerInvariant(c) : c.ToString()));

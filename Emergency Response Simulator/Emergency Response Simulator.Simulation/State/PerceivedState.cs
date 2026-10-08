@@ -32,6 +32,7 @@ public sealed class PerceivedState : ICopService
     public IReadOnlyList<Report> Reports => Snapshot(_reports);
     public IReadOnlyList<Alert> Alerts => Snapshot(_alerts);
     public IReadOnlyList<Zone> Zones => Snapshot(_zones);
+    public PerceivedWeather? Weather { get; private set; }
 
     public Incident? FindIncident(Guid incidentId)
     {
@@ -229,6 +230,11 @@ public sealed class PerceivedState : ICopService
                     zone.Incident = zoneIncident;
                     zoneIncident.Zones.Add(zone);
                 }
+                break;
+
+            case WeatherObserved e:
+                Weather = new PerceivedWeather(e.Source, e.Location, e.WindFromDegrees, e.WindSpeedMps,
+                    e.TemperatureC, e.RelativeHumidity, at);
                 break;
 
             case ZoneLifted e when _zones.Remove(e.ZoneId, out var lifted):

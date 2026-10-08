@@ -1,0 +1,501 @@
+using System.ComponentModel;
+using System.Globalization;
+using System.Windows.Threading;
+using Emergency_Response_Simulator.Core.Contracts;
+using Emergency_Response_Simulator.Core.Geo;
+using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.ViewModels;
+using Mapsui;
+using Mapsui.Layers;
+using Mapsui.Manipulations;
+using Mapsui.Nts;
+using Mapsui.Styles;
+using Mapsui.Styles.Thematics;
+using Mapsui.UI.Wpf;
+using Microsoft.Extensions.Configuration;
+using NetTopologySuite.Geometries;
+
+namespace Emergency_Response_Simulator.Mapping;
+
+/// <summary>
+/// Builds and maintains the map: base tiles for the selected view, static GIS layers from PostGIS,
+/// and operational layers (zones, incidents, units, wind) projected from the COP. Also handles map
+/// clicks for feature info, nearest-facility lookups and zone drawing.
+/// </summary>
+public sealed class MapController
+{
+    private const string InfoTitleField = "info:title";
+    private const string InfoLinesField = "info:lines";
+    private const string RoleField = "role";
+
+    private readonly MapControl _control;
+    private readonly MainViewModel _viewModel;
+    private readonly ICopService _cop;
+    private readonly IGisService? _gis;
+    private readonly Dispatcher _dispatcher;
+    private readonly Mapsui.Map _map = new();
+    private readonly GeoPoint _home;
+
+    private readonly Dictionary<string, MemoryLayer> _staticLayers = [];
+    private readonly MemoryLayer _zones = new("Zones");
+    private readonly MemoryLayer _incidents = new("Incidents");
+    private readonly MemoryLayer _units = new("Units");
+    private readonly MemoryLayer _weather = new("Wind");
+    private readonly MemoryLayer _drawing = new("Drawing");
+
+    private string _view = BaseMaps.Street;
+    private ILayer _baseLayer;
+    private int _refreshQueued;
+
+    public MapController(MapControl control, MainViewModel viewModel, ICopService cop, IGisService? gis, IConfiguration mapSettings)
+    {
+        _control = control;
+        _viewModel = viewModel;
+        _cop = cop;
+        _gis = gis;
+        _dispatcher = control.Dispatcher;
+        _home = new GeoPoint(mapSettings.GetValue("CenterLatitude", 53.344), mapSettings.GetValue("CenterLongitude", -6.26));
+
+        _baseLayer = BaseMaps.Create(_view);
+        _map.Layers.Add(_baseLayer);
+        foreach (var definition in GisLayerKeys.All.OrderBy(d => d.DisplayOrder))
+        {
+            var layer = new MemoryLayer(definition.Name)
+            {
+                Features = [],
+                Style = StaticLayerStyle(definition.Key),
+                MaxVisible = MapStyles.ResolutionAtZoom(definition.MinZoom),
+            };
+            _staticLayers[definition.Key] = layer;
+            _map.Layers.Add(layer);
+        }
+
+        foreach (var layer in new[] { _zones, _incidents, _units, _weather, _drawing })
+        {
+            layer.Features = [];
+            layer.Style = null; // operational features carry their own styles
+            _map.Layers.Add(layer);
+        }
+        _drawing.Style = MapStyles.DrawingPreview;
+
+        var (x, y) = WebMercator.FromLonLat(_home.Longitude, _home.Latitude);
+        _map.Navigator.CenterOnAndZoomTo(new MPoint(x, y),
+            MapStyles.ResolutionAtZoom(mapSettings.GetValue("ZoomLevel", 14)));
+        _control.Map = _map;
+
+        WireViewModel();
+        _control.MapTapped += OnMapTapped;
+        _control.MapPointerMoved += OnMapPointerMoved;
+        _cop.Changed += (_, _) => QueueOperationalRefresh();
+
+        ApplyVisibility();
+        RefreshOperational();
+
+        // Optional starting view (Map:InitialView = street | satellite | weather | traffic | terrain).
+        if (mapSettings["InitialView"] is { Length: > 0 } initialView)
+        {
+            foreach (var view in _viewModel.MapViews)
+                view.IsOn = view.Key == initialView;
+        }
+    }
+
+    /// <summary>Loads every imported static layer from PostGIS. Safe to call once at start-up.</summary>
+    public async Task LoadStaticLayersAsync(CancellationToken cancellationToken = default)
+    {
+        if (_gis is null)
+        {
+            foreach (var definition in GisLayerKeys.All)
+                MarkUnavailable(definition.Key, "needs database");
+            return;
+        }
+
+        IReadOnlyList<GisLayer> imported;
+        try
+        {
+            imported = await _gis.GetLayersAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            foreach (var definition in GisLayerKeys.All)
+                MarkUnavailable(definition.Key, "database unavailable");
+            _viewModel.ShowInfo("GIS data unavailable", [ex.Message]);
+            return;
+        }
+
+        foreach (var definition in GisLayerKeys.All.OrderBy(d => d.DisplayOrder))
+        {
+            var layerInfo = imported.FirstOrDefault(l => l.Key == definition.Key);
+            if (layerInfo is null)
+            {
+                MarkUnavailable(definition.Key, "not imported");
+                continue;
+            }
+
+            var features = await _gis.GetAllFeaturesAsync(definition.Key, cancellationToken);
+            // Projection and feature building is CPU work (50k buildings); keep it off the UI thread.
+            var mapFeatures = await Task.Run(() => features.SelectMany(f => ToMapFeatures(f, definition)).ToList(), cancellationToken);
+
+            var layer = _staticLayers[definition.Key];
+            layer.Features = mapFeatures;
+            layer.DataHasChanged();
+
+            var toggle = definition.Key == GisLayerKeys.AreaBoundaries ? _viewModel.AreaCodes : _viewModel.FindLayerToggle(definition.Key);
+            if (toggle is not null)
+            {
+                toggle.IsAvailable = features.Count > 0;
+                toggle.Detail = features.Count.ToString("N0", CultureInfo.CurrentCulture);
+            }
+        }
+
+        _map.RefreshGraphics();
+    }
+
+    // ---- View model wiring ----
+
+    private void WireViewModel()
+    {
+        foreach (var toggle in _viewModel.LayerGroups.SelectMany(g => g.Items))
+        {
+            toggle.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName != nameof(ToggleItem.IsOn)) return;
+                if (toggle.Key.StartsWith("op:") || toggle.Key.StartsWith("zones:"))
+                    RefreshOperational();
+                else
+                    ApplyVisibility();
+            };
+        }
+
+        _viewModel.AreaCodes.PropertyChanged += OnToggleChanged;
+
+        foreach (var view in _viewModel.MapViews)
+        {
+            view.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(ToggleItem.IsOn) && view.IsOn)
+                    SwitchView(view.Key);
+            };
+        }
+
+        _viewModel.ZoneDrawing.ShapeChanged += (_, _) => RefreshDrawing(null);
+    }
+
+    private void OnToggleChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ToggleItem.IsOn))
+            ApplyVisibility();
+    }
+
+    private void SwitchView(string view)
+    {
+        _view = view;
+        _map.Layers.Remove(_baseLayer);
+        _baseLayer = BaseMaps.Create(view);
+        _map.Layers.Insert(0, _baseLayer);
+
+        // The traffic view re-styles roads; the others use the normal road style.
+        _staticLayers[GisLayerKeys.Roads].Style = StaticLayerStyle(GisLayerKeys.Roads);
+        ApplyVisibility();
+        RefreshOperational();
+    }
+
+    /// <summary>A layer shows when its toggle is on, or when the current view depends on it.</summary>
+    private void ApplyVisibility()
+    {
+        foreach (var (key, layer) in _staticLayers)
+        {
+            var toggle = key == GisLayerKeys.AreaBoundaries ? _viewModel.AreaCodes : _viewModel.FindLayerToggle(key);
+            var forced = (_view == BaseMaps.Traffic && key == GisLayerKeys.Roads)
+                      || (_view == BaseMaps.Terrain && key == GisLayerKeys.Elevation);
+            layer.Enabled = forced || toggle?.IsOn == true;
+        }
+        _map.RefreshGraphics();
+    }
+
+    private IStyle StaticLayerStyle(string key)
+    {
+        var style = MapStyles.ForStaticLayer(key, trafficView: _view == BaseMaps.Traffic);
+        if (key is GisLayerKeys.Roads or GisLayerKeys.Buildings or GisLayerKeys.Water or GisLayerKeys.Railways
+            or GisLayerKeys.Elevation or GisLayerKeys.AreaBoundaries or GisLayerKeys.Hydrants)
+        {
+            return style;
+        }
+
+        // Facilities mapped as areas get a faint footprint plus the symbol at their interior point.
+        var area = MapStyles.FacilityArea(key);
+        return new ThemeStyle(f => f[RoleField] as string == "area" ? area : style);
+    }
+
+    private void MarkUnavailable(string key, string reason)
+    {
+        var toggle = key == GisLayerKeys.AreaBoundaries ? _viewModel.AreaCodes : _viewModel.FindLayerToggle(key);
+        if (toggle is null) return;
+        toggle.IsAvailable = false;
+        toggle.Detail = reason;
+    }
+
+    // ---- Static features ----
+
+    private static IEnumerable<IFeature> ToMapFeatures(GisFeature feature, GisLayerDefinition definition)
+    {
+        var title = feature.Name ?? definition.Name;
+        var lines = feature.Properties
+            .Where(p => p.Key != "osm_id")
+            .Select(p => $"{p.Key}: {p.Value}")
+            .Prepend(definition.Name)
+            .Append($"Source: {feature.Properties.GetValueOrDefault("osm_id", "elevation grid")}")
+            .ToArray();
+
+        var isFacility = definition.Group is GisLayerGroups.Facilities or GisLayerGroups.Infrastructure;
+        if (isFacility && feature.Geometry is not Point)
+        {
+            yield return Tag(new GeometryFeature(WebMercator.FromWgs84(feature.Geometry)), title, lines, role: "area");
+            yield return Tag(new GeometryFeature(WebMercator.FromWgs84(feature.Geometry.InteriorPoint)), title, lines, label: feature.Name);
+            yield break;
+        }
+
+        var mapFeature = Tag(new GeometryFeature(WebMercator.FromWgs84(feature.Geometry)), title, lines, label: feature.Name);
+        foreach (var (key, value) in feature.Properties)
+            mapFeature[key] = value; // used by themed styles (road class, elevation)
+        yield return mapFeature;
+    }
+
+    private static GeometryFeature Tag(GeometryFeature feature, string title, string[] lines, string? label = null, string? role = null)
+    {
+        feature[InfoTitleField] = title;
+        feature[InfoLinesField] = lines;
+        if (label is not null) feature[MapStyles.LabelField] = label;
+        if (role is not null) feature[RoleField] = role;
+        return feature;
+    }
+
+    // ---- Operational features (from the COP) ----
+
+    private void QueueOperationalRefresh()
+    {
+        if (Interlocked.Exchange(ref _refreshQueued, 1) == 1) return;
+        _dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        {
+            Interlocked.Exchange(ref _refreshQueued, 0);
+            RefreshOperational();
+        });
+    }
+
+    private bool IsOn(string key) => _viewModel.FindLayerToggle(key)?.IsOn == true;
+
+    private void RefreshOperational()
+    {
+        _zones.Features = _cop.Zones
+            .Where(z => IsOn(MapStyles.ZoneToggleKey(z.Type)))
+            .Select(ZoneFeature)
+            .ToList();
+
+        _incidents.Features = IsOn(MapLayerKeys.Incidents)
+            ? _cop.Incidents.Where(i => i.Status != IncidentStatus.Closed).Select(IncidentFeature).ToList()
+            : [];
+
+        _units.Features = _cop.Units
+            .Where(u => u.Location is not null && IsOn(MapStyles.UnitToggleKey(u.Agency?.Type)))
+            .Select(UnitFeature)
+            .ToList();
+
+        _weather.Features = IsOn(MapLayerKeys.Weather) || _view == BaseMaps.Weather ? WindFeatures() : [];
+
+        foreach (var layer in new[] { _zones, _incidents, _units, _weather })
+            layer.DataHasChanged();
+        _map.RefreshGraphics();
+    }
+
+    private static IFeature ZoneFeature(Zone zone)
+    {
+        var projection = MetricProjection.For(GeoPoint.FromPoint(zone.Area.Centroid));
+        var size = zone.Area is LineString
+            ? $"Length: {projection.LengthMeters(zone.Area):N0} m"
+            : $"Area: {projection.AreaSquareMeters(zone.Area) / 1_000_000:N3} km²";
+
+        var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(zone.Area)), zone.Name,
+            [MainViewModel.Humanize(zone.Type), size, $"In force since {MainViewModel.Time(zone.EffectiveFrom)}"],
+            label: zone.Name);
+        AddStyles(feature, MapStyles.Zone(zone.Type));
+        return feature;
+    }
+
+    private static IFeature IncidentFeature(Incident incident)
+    {
+        var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(incident.Location)),
+            $"{incident.Number} {incident.Name ?? MainViewModel.Humanize(incident.Type)}",
+            [
+                $"Priority: {incident.Priority}", $"Status: {MainViewModel.Humanize(incident.Status)}",
+                $"Reported: {MainViewModel.Time(incident.ReportedAt)}", $"Units assigned: {incident.AssignedUnits.Count}",
+                $"Casualties: {incident.CasualtiesReported} reported, {incident.CasualtiesConfirmed} confirmed",
+            ],
+            label: incident.Number);
+        AddStyles(feature, MapStyles.Incident(incident.Priority));
+        return feature;
+    }
+
+    private static IFeature UnitFeature(Unit unit)
+    {
+        var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(unit.Location!)), unit.Callsign,
+            [
+                $"{MainViewModel.Humanize(unit.Type)} · {unit.Agency?.ShortName ?? "No agency"}",
+                $"Status: {MainViewModel.Humanize(unit.Status)}",
+                $"Crew: {unit.CrewSize}", $"Station: {unit.HomeStation ?? "—"}",
+                $"Last AVL fix: {(unit.LastAvlUpdate is { } at ? MainViewModel.Time(at) : "—")}",
+            ],
+            label: unit.Callsign);
+        AddStyles(feature, MapStyles.Unit(unit.Agency?.Type, unit.Status));
+        return feature;
+    }
+
+    /// <summary>A grid of arrows around the area showing the reported wind (perceived, not true).</summary>
+    private List<IFeature> WindFeatures()
+    {
+        if (_cop.Weather is not { } weather) return [];
+
+        var style = MapStyles.WindArrow(weather.WindFromDegrees, weather.WindSpeedMps);
+        var features = new List<IFeature>();
+        for (var row = -3; row <= 3; row++)
+        {
+            for (var col = -3; col <= 3; col++)
+            {
+                var north = GeoMath.Destination(_home, 0, row * 700);
+                var point = GeoMath.Destination(north, 90, col * 700);
+                var (x, y) = WebMercator.FromLonLat(point.Longitude, point.Latitude);
+                var feature = new PointFeature(x, y);
+                feature[InfoTitleField] = "Reported wind";
+                feature[InfoLinesField] = new[] { _viewModel.WeatherSummary };
+                AddStyles(feature, style);
+                features.Add(feature);
+            }
+        }
+        return features;
+    }
+
+    // ---- Interaction ----
+
+    private void OnMapTapped(object? sender, MapEventArgs e)
+    {
+        var drawing = _viewModel.ZoneDrawing;
+        if (drawing.IsActive)
+        {
+            if (e.GestureType == GestureType.DoubleTap)
+            {
+                _ = drawing.FinishAsync();
+            }
+            else if (e.GestureType == GestureType.SingleTap)
+            {
+                drawing.AddPoint(WebMercator.ToGeoPoint(e.WorldPosition.X, e.WorldPosition.Y));
+            }
+            e.Handled = true; // don't zoom on double-click while drawing
+            return;
+        }
+
+        if (e.GestureType != GestureType.SingleTap) return;
+
+        var info = e.GetMapInfo(_map.Layers.Where(l => l.Enabled && l is MemoryLayer && l != _drawing).ToList());
+        if (info.Feature is { } feature && feature[InfoTitleField] is string title)
+        {
+            _viewModel.ShowInfo(title, feature[InfoLinesField] as string[] ?? []);
+            return;
+        }
+
+        _ = ShowLocationInfoAsync(WebMercator.ToGeoPoint(e.WorldPosition.X, e.WorldPosition.Y));
+    }
+
+    private void OnMapPointerMoved(object? sender, MapEventArgs e)
+    {
+        if (_viewModel.ZoneDrawing.IsActive && _viewModel.ZoneDrawing.Points.Count > 0)
+            RefreshDrawing(WebMercator.ToGeoPoint(e.WorldPosition.X, e.WorldPosition.Y));
+    }
+
+    /// <summary>Clicking empty map: coordinates, ground elevation and the nearest emergency facilities.</summary>
+    private async Task ShowLocationInfoAsync(GeoPoint point)
+    {
+        var header = $"{point.Latitude:F5}, {point.Longitude:F5}";
+        if (_gis is null)
+        {
+            _viewModel.ShowInfo(header, ["No GIS database configured."]);
+            return;
+        }
+
+        _viewModel.ShowInfo(header, ["Looking up nearby facilities…"]);
+        try
+        {
+            var lines = new List<string>();
+            if (await _gis.GetElevationAsync(point) is { } elevation)
+                lines.Add($"Ground elevation: {elevation:F0} m");
+
+            string[] keys = [GisLayerKeys.Hospitals, GisLayerKeys.FireStations, GisLayerKeys.PoliceStations, GisLayerKeys.AmbulanceStations];
+            foreach (var key in keys)
+            {
+                var nearest = (await _gis.FindNearestAsync(point, [key], 1)).FirstOrDefault();
+                if (nearest is null) continue;
+                var bearing = GeoMath.CompassPoint(GeoMath.BearingDegrees(point, GeoPoint.FromPoint(nearest.Feature.Geometry.Centroid)));
+                lines.Add($"Nearest {GisLayerKeys.Find(key)!.Name.TrimEnd('s').ToLowerInvariant()}: " +
+                          $"{nearest.Feature.Name ?? "(unnamed)"} — {FormatDistance(nearest.DistanceMeters)} {bearing}");
+            }
+
+            _viewModel.ShowInfo(header, lines.Count > 0 ? lines : ["No GIS data near this point."]);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _viewModel.ShowInfo(header, [$"Lookup failed: {ex.Message}"]);
+        }
+    }
+
+    private void RefreshDrawing(GeoPoint? cursor)
+    {
+        var drawing = _viewModel.ZoneDrawing;
+        var points = drawing.Points.Concat(cursor is { } c ? [c] : []).ToList();
+
+        var features = new List<IFeature>();
+        if (drawing.IsActive && points.Count > 0)
+        {
+            var coordinates = points.Select(p =>
+            {
+                var (x, y) = WebMercator.FromLonLat(p.Longitude, p.Latitude);
+                return new Coordinate(x, y);
+            }).ToList();
+
+            var factory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory();
+            Geometry shape = coordinates.Count switch
+            {
+                1 => factory.CreatePoint(coordinates[0]),
+                2 => factory.CreateLineString([.. coordinates]),
+                _ when drawing.IsLine => factory.CreateLineString([.. coordinates]),
+                _ => factory.CreatePolygon([.. coordinates, coordinates[0]]),
+            };
+            features.Add(new GeometryFeature(shape));
+            features.AddRange(drawing.Points.Select(p =>
+            {
+                var (x, y) = WebMercator.FromLonLat(p.Longitude, p.Latitude);
+                return (IFeature)new PointFeature(x, y);
+            }));
+        }
+
+        _drawing.Features = features;
+        _drawing.DataHasChanged();
+        _map.RefreshGraphics();
+    }
+
+    /// <summary>
+    /// Mapsui only expands a <see cref="StyleCollection"/> when it is a layer's style, so per-feature
+    /// collections are flattened into the feature's own style list.
+    /// </summary>
+    private static void AddStyles(IFeature feature, IStyle style)
+    {
+        if (style is StyleCollection collection)
+        {
+            foreach (var inner in collection.Styles)
+                feature.Styles.Add(inner);
+        }
+        else
+        {
+            feature.Styles.Add(style);
+        }
+    }
+
+    private static string FormatDistance(double meters) =>
+        meters < 1000 ? $"{meters:F0} m" : $"{meters / 1000:F1} km";
+}

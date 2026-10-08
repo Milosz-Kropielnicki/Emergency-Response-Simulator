@@ -89,7 +89,23 @@ public class C2AndCopTests
 
         Assert.Empty(harness.Cop.Incidents);
         Assert.Equal(0, harness.Cop.LastSequence);
+        Assert.Null(harness.Cop.Weather);
         Assert.Equal(90, harness.World.Weather.WindFromDegrees);
+    }
+
+    [Fact]
+    public async Task Cop_weather_is_the_latest_report_not_the_true_weather()
+    {
+        var harness = new TestHarness();
+        await harness.Perceived(new WeatherObserved("Met service", TestHarness.Dublin, 270, 4.5, 14, 0.7));
+        await harness.Engine.StepAsync(TimeSpan.FromMinutes(10));
+
+        // The wind really shifts, but nobody has reported it yet.
+        await harness.Truth(new WeatherChanged(45, 9, 13, 0.6));
+
+        Assert.Equal(270, harness.Cop.Weather!.WindFromDegrees);
+        Assert.Equal(TestHarness.Start, harness.Cop.Weather.ObservedAt);
+        Assert.Equal(45, harness.World.Weather.WindFromDegrees);
     }
 
     [Fact]

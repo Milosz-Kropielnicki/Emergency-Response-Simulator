@@ -44,6 +44,10 @@ public sealed class DemoRosterScenario : IScenario
             new WeatherChanged(WindFromDegrees: 270, WindSpeedMps: 4.5, TemperatureC: 14, RelativeHumidity: 0.72),
             EventVisibility.Truth, EventSources.Scenario, cancellationToken);
 
+        // What command is told: a met-service observation that happens to match the truth for now.
+        await Register(new WeatherObserved("Met service", new GeoPoint(53.3498, -6.2603),
+            WindFromDegrees: 270, WindSpeedMps: 4.5, TemperatureC: 14, RelativeHumidity: 0.72));
+
         Task Register(DomainEvent payload) =>
             publisher.PublishAsync(payload, EventVisibility.Perceived, EventSources.Scenario, cancellationToken);
 

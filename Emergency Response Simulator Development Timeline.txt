@@ -23,7 +23,6 @@
 ---
 
 ## Phase 1 — GIS & Map Core  
-**Weeks 5–10 | 6 weeks**
 
 **Focus:** Geographic foundation and map rendering.
 
@@ -39,8 +38,7 @@
 
 ---
 
-## Phase 2 — COP Core & Situational Data  
-**Weeks 11–16 | 6 weeks**
+## Phase 2 — COP Core & Situational Data
 
 **Focus:** The Common Operating Picture as a shared information system.
 
@@ -58,8 +56,7 @@
 
 ---
 
-## Phase 3 — AVL & Resource Tracking  
-**Weeks 17–22 | 6 weeks**
+## Phase 3 — AVL & Resource Tracking
 
 **Focus:** Real-time location and status of mobile resources.
 
@@ -75,8 +72,7 @@
 
 ---
 
-## Phase 4 — C2 Dispatch & Command  
-**Weeks 23–28 | 6 weeks**
+## Phase 4 — C2 Dispatch & Command
 
 **Focus:** Command and control execution — “Make it happen.”
 
@@ -92,8 +88,7 @@
 
 ---
 
-## Phase 5 — IAP Builder & ICS  
-**Weeks 29–34 | 6 weeks**
+## Phase 5 — IAP Builder & ICS
 
 **Focus:** Incident Action Plan creation and ICS compliance.
 
@@ -110,8 +105,7 @@
 
 ---
 
-## Phase 6 — Simulation Engine & Basic AI  
-**Weeks 35–42 | 8 weeks**
+## Phase 6 — Simulation Engine & Basic AI
 
 **Focus:** The world beyond the player’s perception.
 
@@ -129,7 +123,7 @@
 ---
 
 ## Phase 7 — Communications Realism  
-**Weeks 43–48 | 6 weeks**  
+
 **High-impact training feature #2**
 
 **Focus:** The fog of war through realistic communications.
@@ -149,7 +143,7 @@
 ---
 
 ## Phase 8 — Human Factors & Crew Management  
-**Weeks 49–54 | 6 weeks**  
+
 **High-impact training feature #1**
 
 **Focus:** Making resources feel human.
@@ -166,7 +160,7 @@
 ---
 
 ## Phase 9 — After-Action Review & Metrics  
-**Weeks 55–60 | 6 weeks**  
+
 **High-impact training feature #4**
 
 **Focus:** The key training value — learning from decisions.
@@ -183,7 +177,7 @@
 ---
 
 ## Phase 10 — Multi-Agency & Interoperability  
-**Weeks 61–66 | 6 weeks**  
+
 **High-impact training feature #3**
 
 **Focus:** Joint command and inter-agency friction.
@@ -201,7 +195,7 @@
 ---
 
 ## Phase 11 — Instructor Tools & Multiplayer  
-**Weeks 67–72 | 6 weeks**  
+
 **High-impact training feature #5**
 
 **Focus:** Turning it into a team trainer.
@@ -218,7 +212,7 @@
 ---
 
 ## Phase 12 — Plume & Hazard Models  
-**Weeks 73–78 | 6 weeks**
+
 
 **Focus:** Advanced dispersion prediction.
 
@@ -235,8 +229,7 @@
 
 ---
 
-## Phase 13 — Public, Media, Political & Legal  
-**Weeks 79–84 | 6 weeks**
+## Phase 13 — Public, Media, Political & Legal
 
 **Focus:** External pressures.
 
@@ -252,8 +245,7 @@
 
 ---
 
-## Phase 14 — Logistics & Resource Sustainment  
-**Weeks 85–90 | 6 weeks**
+## Phase 14 — Logistics & Resource Sustainment
 
 **Focus:** Supporting the operation over time.
 
@@ -268,8 +260,7 @@
 
 ---
 
-## Phase 15 — Medical, Mass Casualty & Public Health  
-**Weeks 91–96 | 6 weeks**
+## Phase 15 — Medical, Mass Casualty & Public Health
 
 **Focus:** Health and medical surge.
 
@@ -284,8 +275,7 @@
 
 ---
 
-## Phase 16 — Evacuation, Shelter & Infrastructure  
-**Weeks 97–102 | 6 weeks**
+## Phase 16 — Evacuation, Shelter & Infrastructure
 
 **Focus:** Population protection and critical systems.
 
@@ -300,8 +290,7 @@
 
 ---
 
-## Phase 17 — Documentation & ICS Forms  
-**Weeks 103–108 | 6 weeks**
+## Phase 17 — Documentation & ICS Forms
 
 **Focus:** Standardized documentation.
 
@@ -315,8 +304,7 @@
 
 ---
 
-## Phase 18 — Scenario Design & Adaptive Training  
-**Weeks 109–114 | 6 weeks**
+## Phase 18 — Scenario Design & Adaptive Training
 
 **Focus:** Reusable, dynamic training content.
 
@@ -331,8 +319,7 @@
 
 ---
 
-## Phase 19 — Data Standards & Integration  
-**Weeks 115–118 | 4 weeks**
+## Phase 19 — Data Standards & Integration
 
 **Focus:** Interoperability and external systems.
 
@@ -346,8 +333,7 @@
 
 ---
 
-## Phase 20 — UI/UX & Accessibility  
-**Weeks 119–122 | 4 weeks**
+## Phase 20 — UI/UX & Accessibility
 
 **Focus:** Usability under pressure.
 
@@ -361,8 +347,7 @@
 
 ---
 
-## Phase 21 — Ethical & Psychological Considerations  
-**Weeks 123–124 | 2 weeks**
+## Phase 21 — Ethical & Psychological Considerations
 
 **Focus:** Responsible training.
 

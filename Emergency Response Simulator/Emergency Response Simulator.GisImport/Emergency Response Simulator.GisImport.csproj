@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Emergency Response Simulator.Core\Emergency Response Simulator.Core.csproj" />
+    <ProjectReference Include="..\Emergency Response Simulator.Data\Emergency Response Simulator.Data.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Emergency_Response_Simulator.GisImport</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Emergency Response Simulator.Tests" />
+  </ItemGroup>
+
+</Project>

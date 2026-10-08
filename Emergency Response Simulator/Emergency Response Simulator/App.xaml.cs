@@ -26,6 +26,8 @@ namespace Emergency_Response_Simulator
             builder.Configuration.SetBasePath(AppContext.BaseDirectory);
             builder.Configuration.AddJsonFile("appsettings.json", optional: false);
             builder.Configuration.AddJsonFile(ErsConfiguration.LocalSettingsFileName, optional: true);
+            // Command-line overrides (e.g. --Map:InitialView=terrain) win over the files above.
+            builder.Configuration.AddCommandLine(e.Args);
 
             // PostgreSQL when configured; otherwise run entirely in memory so the shell always starts.
             var connectionString = builder.Configuration.GetConnectionString("Ers");

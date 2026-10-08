@@ -26,6 +26,7 @@
     <ProjectReference Include="..\Emergency Response Simulator.Core\Emergency Response Simulator.Core.csproj" />
     <ProjectReference Include="..\Emergency Response Simulator.Simulation\Emergency Response Simulator.Simulation.csproj" />
     <ProjectReference Include="..\Emergency Response Simulator.Data\Emergency Response Simulator.Data.csproj" />
+    <ProjectReference Include="..\Emergency Response Simulator.GisImport\Emergency Response Simulator.GisImport.csproj" />
   </ItemGroup>
 
 </Project>

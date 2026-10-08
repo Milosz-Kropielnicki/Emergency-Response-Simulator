@@ -7,3 +7,4 @@ savegame.dat
 .venv/
 __pycache__/
 appsettings.Local.json
+gis-data/

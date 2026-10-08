@@ -117,6 +117,8 @@ public class ErsDbContext(DbContextOptions<ErsDbContext> options) : DbContext(op
             b.Property(l => l.Key).HasMaxLength(60);
             b.HasIndex(l => l.Key).IsUnique();
             b.Property(l => l.Name).HasMaxLength(200);
+            b.Property(l => l.Group).HasMaxLength(100);
+            b.Property(l => l.Source).HasMaxLength(400);
         });
 
         modelBuilder.Entity<GisFeature>(b =>

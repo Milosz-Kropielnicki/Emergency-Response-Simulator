@@ -15,6 +15,17 @@ public class GisLayer
     public bool VisibleByDefault { get; set; }
     public int DisplayOrder { get; set; }
 
+    /// <summary>Heading the layer is listed under in the map panel, see <c>GisLayerGroups</c>.</summary>
+    public string? Group { get; set; }
+
+    /// <summary>Web map zoom level below which the layer is not drawn.</summary>
+    public int MinZoom { get; set; }
+
+    /// <summary>Where the data came from and its licence, e.g. "© OpenStreetMap contributors (ODbL)".</summary>
+    public string? Source { get; set; }
+
+    public DateTimeOffset? ImportedAt { get; set; }
+
     public List<GisFeature> Features { get; set; } = [];
 }
 

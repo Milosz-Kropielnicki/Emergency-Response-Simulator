@@ -1,3 +1,4 @@
+using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
 
 namespace Emergency_Response_Simulator.Core.Contracts;
@@ -27,6 +28,19 @@ public interface ICopService
     /// <summary>Zones currently in force.</summary>
     IReadOnlyList<Zone> Zones { get; }
 
+    /// <summary>Latest weather report received, or null if none yet. Not the true weather.</summary>
+    PerceivedWeather? Weather { get; }
+
     Incident? FindIncident(Guid incidentId);
     Unit? FindUnit(Guid unitId);
 }
+
+/// <param name="WindFromDegrees">Direction the wind blows from, degrees clockwise from north.</param>
+public sealed record PerceivedWeather(
+    string Source,
+    GeoPoint Location,
+    double WindFromDegrees,
+    double WindSpeedMps,
+    double TemperatureC,
+    double RelativeHumidity,
+    DateTimeOffset ObservedAt);

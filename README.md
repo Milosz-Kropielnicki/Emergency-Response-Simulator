@@ -70,6 +70,51 @@ The simulator separates **what is happening** from **what command believes is ha
 | `IAarService` | How did we get here? | Timeline and replay implemented; metrics come in Phase 9 |
 | `ISimulationControl` | Start, pause, speed | Implemented (`SimulationEngine`) |
 
+## GIS (Phase 1)
+
+### Coordinate systems
+
+| Use | System | Where |
+|---|---|---|
+| Storage, events, contracts | WGS84 lat/lon (EPSG:4326) | PostGIS columns `geometry(…,4326)`, `GeoPoint` |
+| Map rendering | Web Mercator (EPSG:3857) | `WebMercator`; never used for measurement |
+| Metric calculations (buffers, areas, lengths) | UTM zone for the area (Dublin: 29N, EPSG:32629) | `MetricProjection` (ProjNet) |
+| Quick point-to-point distance and bearing | Great circle | `GeoMath` |
+
+Spatial indexing: every geometry column has a GiST index. `IGisService.FindNearestAsync` walks the index with the KNN operator `<->`, then re-ranks the candidates by true `geography` distance in metres.
+
+### Static layers
+
+The `Emergency Response Simulator.GisImport` console tool fills the static layers listed in `GisLayerKeys`:
+- **From OpenStreetMap, via the Overpass API:** roads, buildings, water, railways, area boundaries, hospitals, fire, police and ambulance stations, shelters, hydrants, schools and critical infrastructure.
+- **From the Open-Meteo elevation API (Copernicus DEM):** an elevation grid.
+
+Raw downloads are cached in `gis-data/cache/` (git-ignored), so a re-import runs offline. Each layer is replaced in a single transaction.
+
+```powershell
+cd "Emergency Response Simulator"
+dotnet run --project "Emergency Response Simulator.GisImport" -- --help
+dotnet run --project "Emergency Response Simulator.GisImport"                       # all layers, central Dublin
+dotnet run --project "Emergency Response Simulator.GisImport" -- --layers roads --refresh
+dotnet run --project "Emergency Response Simulator.GisImport" -- --connection ErsTest
+```
+
+Licences: OSM data is © OpenStreetMap contributors (ODbL), and the elevation data is Copernicus DEM (CC BY 4.0). Each layer records its source in `gis_layers.source`.
+
+### Dynamic layers
+
+Road closures, evacuation zones, perimeters, search areas and operational zones are drawn on the map and declared through `IC2Service.DeclareZoneAsync`. They become `ZoneDeclared` and `ZoneLifted` events, so they replay in the AAR like any other order. They are not written to the static tables.
+
+### Map views
+
+| View | Background | Simulator overlay |
+|---|---|---|
+| Street | OpenStreetMap | — |
+| Satellite | Esri World Imagery | — |
+| Weather | Esri Dark Gray Canvas | Arrows for the *reported* wind (`WeatherObserved`), not the true wind |
+| Traffic | Esri Dark Gray Canvas | Roads styled by class; congestion arrives with the traffic simulation in Phase 6 |
+| Terrain | OpenTopoMap | Elevation grid |
+
 ## Local setup
 
 ```powershell

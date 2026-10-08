@@ -26,6 +26,7 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(ZoneDeclared), nameof(ZoneDeclared))]
 [JsonDerivedType(typeof(ZoneLifted), nameof(ZoneLifted))]
 [JsonDerivedType(typeof(ResourceRequested), nameof(ResourceRequested))]
+[JsonDerivedType(typeof(WeatherObserved), nameof(WeatherObserved))]
 // Truth: the world as it really is
 [JsonDerivedType(typeof(WorldIncidentStarted), nameof(WorldIncidentStarted))]
 [JsonDerivedType(typeof(WorldIncidentChanged), nameof(WorldIncidentChanged))]
@@ -129,6 +130,18 @@ public sealed record ResourceRequested(
     string Description,
     int Quantity,
     Guid? RequestedBy) : DomainEvent;
+
+/// <summary>
+/// Weather as reported to command by a met service or station. May lag or differ from the true
+/// <see cref="WeatherChanged"/>; the COP's weather view shows only this.
+/// </summary>
+public sealed record WeatherObserved(
+    string Source,
+    GeoPoint Location,
+    double WindFromDegrees,
+    double WindSpeedMps,
+    double TemperatureC,
+    double RelativeHumidity) : DomainEvent;
 
 // ---- Truth ----
 

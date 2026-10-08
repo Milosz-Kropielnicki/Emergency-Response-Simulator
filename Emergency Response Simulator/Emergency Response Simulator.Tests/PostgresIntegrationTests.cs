@@ -116,4 +116,65 @@ public class PostgresIntegrationTests(PostgresFixture fixture) : IClassFixture<P
         Assert.Equal("Inside school", school.Name);
         Assert.Equal("420", school.Properties["pupils"]);
     }
+
+    [DatabaseFact]
+    public async Task Nearest_features_are_ranked_by_true_distance_in_metres()
+    {
+        var layerKey = $"hospitals-{Guid.NewGuid():N}";
+        var origin = new GeoPoint(53.344, -6.260);
+        // At 53°N a degree of longitude is ~0.6 of a degree of latitude, so the point that is nearest
+        // in raw degrees (north, 0.009° ≈ 1.0 km) is actually further than the east one (0.012° ≈ 0.8 km).
+        var east = new GeoPoint(53.344, -6.248);
+        var north = new GeoPoint(53.353, -6.260);
+        await SeedLayerAsync(layerKey, ("East", east), ("North", north), ("Far", new GeoPoint(53.40, -6.10)));
+
+        var nearest = await new GisService(fixture.Factory!).FindNearestAsync(origin, [layerKey], maxResults: 2);
+
+        Assert.Equal(["East", "North"], nearest.Select(n => n.Feature.Name));
+        Assert.Equal(GeoMath.DistanceMeters(origin, east), nearest[0].DistanceMeters, 3.0);
+        Assert.Equal(GeoMath.DistanceMeters(origin, north), nearest[1].DistanceMeters, 3.0);
+        Assert.All(nearest, n => Assert.Equal(layerKey, n.LayerKey));
+    }
+
+    [DatabaseFact]
+    public async Task Elevation_is_interpolated_from_nearby_samples_and_absent_far_away()
+    {
+        // Samples in an otherwise empty spot (mid-Atlantic) so they don't mix with other elevation data.
+        var lat = 45 + Random.Shared.NextDouble();
+        var west = new GeoPoint(lat, -30.000);
+        var east = new GeoPoint(lat, -29.998); // ~157 m apart
+        await SeedLayerAsync(GisLayerKeys.Elevation, ("w", west, "10"), ("e", east, "20"));
+        var gis = new GisService(fixture.Factory!);
+
+        var atWest = await gis.GetElevationAsync(west);
+        var middle = await gis.GetElevationAsync(new GeoPoint(lat, -29.999));
+        var nowhere = await gis.GetElevationAsync(new GeoPoint(lat + 0.5, -30));
+
+        Assert.Equal(10, atWest!.Value, 0.01);
+        Assert.Equal(15, middle!.Value, 0.5);
+        Assert.Null(nowhere);
+    }
+
+    private Task SeedLayerAsync(string layerKey, params (string Name, GeoPoint At)[] points) =>
+        SeedLayerAsync(layerKey, points.Select(p => (p.Name, p.At, (string?)null)).ToArray());
+
+    private async Task SeedLayerAsync(string layerKey, params (string Name, GeoPoint At, string? Elevation)[] points)
+    {
+        await using var db = await fixture.Factory!.CreateDbContextAsync();
+        var layer = await db.GisLayers.SingleOrDefaultAsync(l => l.Key == layerKey);
+        if (layer is null)
+        {
+            layer = new GisLayer { Key = layerKey, Name = layerKey, Kind = GisLayerKind.Static };
+            db.GisLayers.Add(layer);
+        }
+
+        foreach (var (name, at, elevation) in points)
+        {
+            var feature = new GisFeature { Name = name, Geometry = at.ToPoint(), Layer = layer };
+            if (elevation is not null)
+                feature.Properties["elevation_m"] = elevation;
+            db.GisFeatures.Add(feature);
+        }
+        await db.SaveChangesAsync();
+    }
 }

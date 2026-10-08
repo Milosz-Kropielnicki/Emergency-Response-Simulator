@@ -10,7 +10,7 @@
         Title="Emergency Response Simulator" Height="900" Width="1500" MinHeight="600" MinWidth="1000"
         WindowState="Maximized"
         Background="{StaticResource BackgroundBrush}" Foreground="{StaticResource TextBrush}"
-        FontFamily="Segoe UI" FontSize="13">
+        FontFamily="Segoe UI" FontSize="13" PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.Resources>
         <!-- Time · title · detail row used by the incident, alert and comms feeds. -->
@@ -118,25 +118,106 @@
             </Grid.ColumnDefinitions>
 
             <!-- Left: map icon / layer toggles -->
-            <Border Grid.Column="0" Width="230" Style="{StaticResource Panel}" BorderThickness="0,0,1,0"
+            <Border Grid.Column="0" Width="250" Style="{StaticResource Panel}" BorderThickness="0,0,1,0"
                     Visibility="{Binding IsLeftPanelOpen, Converter={StaticResource BoolToVisibility}}">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="MAP LAYERS" Style="{StaticResource PanelHeader}" />
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding MapLayers}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <ItemsControl ItemsSource="{Binding LayerGroups}">
                             <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="{x:Type vm:ToggleItem}">
-                                    <CheckBox Content="{Binding Label}" IsChecked="{Binding IsOn}" />
+                                <DataTemplate DataType="{x:Type vm:LayerGroup}">
+                                    <StackPanel Margin="0,0,0,12">
+                                        <TextBlock Text="{Binding Title}" Style="{StaticResource PanelHeader}" Margin="0,0,0,4" />
+                                        <ItemsControl ItemsSource="{Binding Items}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type vm:ToggleItem}">
+                                                    <DockPanel>
+                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding Detail}" FontSize="11"
+                                                                   Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+                                                        <CheckBox Content="{Binding Label}" IsChecked="{Binding IsOn}"
+                                                                  IsEnabled="{Binding IsAvailable}" />
+                                                    </DockPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </ScrollViewer>
-                </DockPanel>
+
+                        <TextBlock Text="ACTIVE ZONES" Style="{StaticResource PanelHeader}" Margin="0,0,0,4" />
+                        <TextBlock Style="{StaticResource EmptyHint}" Text="None. Use Draw zone on the map.">
+                            <TextBlock.Visibility>
+                                <Binding Path="ActiveZones.Count" Converter="{x:Static vm:Converters.ZeroToVisible}" />
+                            </TextBlock.Visibility>
+                        </TextBlock>
+                        <ItemsControl ItemsSource="{Binding ActiveZones}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:ActiveZoneItem}">
+                                    <DockPanel Margin="0,2">
+                                        <Button DockPanel.Dock="Right" Content="Lift" Padding="6,1" FontSize="11"
+                                                ToolTip="Lift this zone (recorded as a C2 order)"
+                                                Command="{Binding DataContext.LiftZoneCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding Id}" />
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Type}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                        </StackPanel>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
             </Border>
 
             <!-- Centre: the map -->
             <Grid Grid.Column="1" ClipToBounds="True">
                 <mapsui:MapControl x:Name="MapView" />
+
+                <!-- Reported wind (what command has been told, not ground truth). -->
+                <Border VerticalAlignment="Top" HorizontalAlignment="Left" Margin="10" Padding="10,5"
+                        Background="#DD161D26" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4">
+                    <TextBlock Text="{Binding WeatherSummary}" FontSize="12" />
+                </Border>
+
+                <!-- Zone drawing tool (dynamic GIS objects). -->
+                <Border VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="10,10,10,28" Padding="10,8" MaxWidth="560"
+                        Background="#EE161D26" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4"
+                        DataContext="{Binding ZoneDrawing}">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox ItemsSource="{Binding ZoneTypes}" SelectedItem="{Binding SelectedType}"
+                                      DisplayMemberPath="Label" Width="190" Margin="0,0,6,0" />
+                            <Button Content="&#x270E; Draw zone" Command="{Binding StartCommand}" />
+                            <Button Content="Finish" Command="{Binding FinishCommand}"
+                                    Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}" />
+                            <Button Content="Cancel" Command="{Binding CancelCommand}"
+                                    Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding Hint}" Foreground="{StaticResource MutedTextBrush}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,6,0,0" />
+                        <TextBlock Text="{Binding Error}" Foreground="{StaticResource CriticalBrush}" FontSize="11" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Details of the clicked feature or location. -->
+                <Border VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="10,10,10,28" Padding="12,8" Width="330"
+                        Background="#EE161D26" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="4"
+                        Visibility="{Binding IsInfoOpen, Converter={StaticResource BoolToVisibility}}">
+                    <DockPanel>
+                        <DockPanel DockPanel.Dock="Top">
+                            <Button DockPanel.Dock="Right" Content="&#x2715;" Padding="6,0" Margin="0" Command="{Binding CloseInfoCommand}" />
+                            <TextBlock Text="{Binding InfoTitle}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,8,6" />
+                        </DockPanel>
+                        <ItemsControl ItemsSource="{Binding InfoLines}" MaxHeight="220">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </DockPanel>
+                </Border>
 
                 <!-- Hovering the top edge reveals the map-view panel. -->
                 <Border x:Name="TopHoverStrip" VerticalAlignment="Top" HorizontalAlignment="Center"
