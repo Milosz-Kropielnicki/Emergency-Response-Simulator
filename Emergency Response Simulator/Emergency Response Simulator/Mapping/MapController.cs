@@ -4,6 +4,7 @@ using System.Windows.Threading;
 using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.Simulation.Services;
 using Emergency_Response_Simulator.ViewModels;
 using Mapsui;
 using Mapsui.Layers;
@@ -28,11 +29,13 @@ public sealed class MapController
     private const string InfoLinesField = "info:lines";
     private const string RoleField = "role";
     private const string IncidentIdField = "incident:id";
+    private const string UnitIdField = "unit:id";
 
     private readonly MapControl _control;
     private readonly MainViewModel _viewModel;
     private readonly ICopService _cop;
     private readonly IGisService? _gis;
+    private readonly AvlService _avl;
     private readonly Dispatcher _dispatcher;
     private readonly Mapsui.Map _map = new();
     private readonly GeoPoint _home;
@@ -41,6 +44,8 @@ public sealed class MapController
     private readonly MemoryLayer _zones = new("Zones");
     private readonly MemoryLayer _reports = new("Reports");
     private readonly MemoryLayer _incidents = new("Incidents");
+    private readonly MemoryLayer _routes = new("Routes");
+    private readonly MemoryLayer _trails = new("Trails");
     private readonly MemoryLayer _units = new("Units");
     private readonly MemoryLayer _weather = new("Wind");
     private readonly MemoryLayer _drawing = new("Drawing");
@@ -49,8 +54,10 @@ public sealed class MapController
     private ILayer _baseLayer;
     private int _refreshQueued;
 
-    public MapController(MapControl control, MainViewModel viewModel, ICopService cop, IGisService? gis, IConfiguration mapSettings)
+    public MapController(MapControl control, MainViewModel viewModel, ICopService cop, IGisService? gis, AvlService avl,
+        IConfiguration mapSettings)
     {
+        _avl = avl;
         _control = control;
         _viewModel = viewModel;
         _cop = cop;
@@ -72,7 +79,7 @@ public sealed class MapController
             _map.Layers.Add(layer);
         }
 
-        foreach (var layer in new[] { _zones, _reports, _incidents, _units, _weather, _drawing })
+        foreach (var layer in new[] { _zones, _reports, _routes, _trails, _incidents, _units, _weather, _drawing })
         {
             layer.Features = [];
             layer.Style = null; // operational features carry their own styles
@@ -89,6 +96,11 @@ public sealed class MapController
         _control.MapTapped += OnMapTapped;
         _control.MapPointerMoved += OnMapPointerMoved;
         _cop.Changed += (_, _) => QueueOperationalRefresh();
+        _viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.SelectedUnitId))
+                RefreshOperational();
+        };
         _viewModel.FocusRequested += (_, point) =>
         {
             var (fx, fy) = WebMercator.FromLonLat(point.Longitude, point.Latitude);
@@ -305,14 +317,26 @@ public sealed class MapController
             ? _cop.Incidents.Where(i => i.Status != IncidentStatus.Closed).Select(IncidentFeature).ToList()
             : [];
 
-        _units.Features = _cop.Units
+        var visibleUnits = _cop.Units
             .Where(u => u.Location is not null && IsOn(MapStyles.UnitToggleKey(u.Agency?.Type)))
-            .Select(UnitFeature)
             .ToList();
+        var selected = _viewModel.SelectedUnitId;
+
+        _units.Features = visibleUnits.Select(u => UnitFeature(u, u.Id == selected)).ToList();
+
+        _routes.Features = IsOn(MapLayerKeys.Routes)
+            ? visibleUnits.Where(u => u.PlannedRoute is not null && u.Status is UnitStatus.Dispatched or UnitStatus.EnRoute)
+                .Select(u => RouteFeature(u, u.Id == selected)).ToList()
+            : [];
+
+        // Trails come from the live AVL feed, so they are not shown while replaying.
+        _trails.Features = IsOn(MapLayerKeys.Trails) && !_viewModel.IsReplay
+            ? visibleUnits.Select(u => TrailFeature(u.Id)).OfType<IFeature>().ToList()
+            : [];
 
         _weather.Features = IsOn(MapLayerKeys.Weather) || _view == BaseMaps.Weather ? WindFeatures() : [];
 
-        foreach (var layer in new[] { _zones, _reports, _incidents, _units, _weather })
+        foreach (var layer in new[] { _zones, _reports, _routes, _trails, _incidents, _units, _weather })
             layer.DataHasChanged();
         _map.RefreshGraphics();
     }
@@ -379,17 +403,43 @@ public sealed class MapController
         return feature;
     }
 
-    private static IFeature UnitFeature(Unit unit)
+    private static IFeature UnitFeature(Unit unit, bool selected)
     {
+        var moving = unit.SpeedKph >= 1;
+        var label = unit.Status == UnitStatus.EnRoute && unit.Eta is { } eta
+            ? $"{unit.Callsign} · ETA {(int)eta.TotalMinutes}:{eta.Seconds:D2}"
+            : unit.Callsign;
+
         var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(unit.Location!)), unit.Callsign,
             [
                 $"{ResourceGroups.Label(unit.Type)} · {unit.Agency?.ShortName ?? "No agency"}",
                 $"Status: {MainViewModel.Humanize(unit.Status)}",
-                $"Crew: {unit.CrewSize}", $"Station: {unit.HomeStation ?? "—"}",
-                $"Last AVL fix: {(unit.LastAvlUpdate is { } at ? MainViewModel.Time(at) : "—")}",
+                moving ? $"{unit.SpeedKph:F0} km/h heading {GeoMath.CompassPoint(unit.Heading)}" : "Stationary",
+                $"Last AVL fix: {(unit.LastAvlUpdate is { } at ? MainViewModel.Time(at, seconds: true) : "—")}",
             ],
-            label: unit.Callsign);
-        AddStyles(feature, MapStyles.Unit(unit.Agency?.Type, unit.Status));
+            label: label);
+        feature[UnitIdField] = unit.Id;
+        AddStyles(feature, MapStyles.Unit(unit.Agency?.Type, unit.Status, moving ? unit.Heading : null, selected, unit.CommsConnected));
+        return feature;
+    }
+
+    private static IFeature RouteFeature(Unit unit, bool selected)
+    {
+        var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(unit.PlannedRoute!)), $"{unit.Callsign} planned route",
+            [$"{(unit.RouteDistanceMeters ?? 0) / 1000:F1} km by road", $"ETA {(unit.Eta is { } eta ? $"{(int)eta.TotalMinutes}:{eta.Seconds:D2}" : "—")}"]);
+        feature[UnitIdField] = unit.Id;
+        AddStyles(feature, MapStyles.Route(unit.Agency?.Type, selected));
+        return feature;
+    }
+
+    private IFeature? TrailFeature(Guid unitId)
+    {
+        var trail = _avl.GetTrail(unitId);
+        if (trail.Count < 2) return null;
+
+        var line = Wgs84.Factory.CreateLineString(trail.Select(f => f.Location.ToPoint().Coordinate).ToArray());
+        var feature = new GeometryFeature(WebMercator.FromWgs84(line));
+        AddStyles(feature, MapStyles.Trail);
         return feature;
     }
 
@@ -443,6 +493,8 @@ public sealed class MapController
         {
             if (feature[IncidentIdField] is Guid incidentId)
                 _viewModel.SelectedIncidentId = incidentId;
+            if (feature[UnitIdField] is Guid unitId)
+                _viewModel.SelectedUnitId = unitId;
             _viewModel.ShowInfo(title, feature[InfoLinesField] as string[] ?? []);
             return;
         }
@@ -535,7 +587,7 @@ public sealed class MapController
         if (style is StyleCollection collection)
         {
             foreach (var inner in collection.Styles)
-                feature.Styles.Add(inner);
+                AddStyles(feature, inner); // collections may nest
         }
         else
         {

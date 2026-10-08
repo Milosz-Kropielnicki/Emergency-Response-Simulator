@@ -24,7 +24,14 @@ public sealed class ScriptedInjectSystem(string scenarioName, IReadOnlyList<Inje
 
         foreach (var inject in injects)
         {
-            if (elapsed < inject.At || !_fired.Add(inject)) continue;
+            if (elapsed < inject.At || _fired.Contains(inject)) continue;
+            if (inject.Until is { } until && elapsed > until)
+            {
+                _fired.Add(inject); // window passed without the condition being met
+                continue;
+            }
+            if (inject.Condition is { } condition && !condition(context)) continue;
+            _fired.Add(inject);
 
             foreach (var (visibility, payload) in inject.Produce(context))
                 context.Emit(visibility, payload, EventSources.Scenario);
@@ -34,10 +41,14 @@ public sealed class ScriptedInjectSystem(string scenarioName, IReadOnlyList<Inje
 
 /// <param name="At">Time after the session starts.</param>
 /// <param name="Description">What the instructor sees in the scenario script.</param>
+/// <param name="Condition">If set, the inject waits after <paramref name="At"/> until this holds.</param>
+/// <param name="Until">If set with a condition, the inject is dropped when the condition hasn't held by then.</param>
 public sealed record Inject(
     TimeSpan At,
     string Description,
-    Func<SimulationContext, IEnumerable<(EventVisibility Visibility, DomainEvent Payload)>> Produce)
+    Func<SimulationContext, IEnumerable<(EventVisibility Visibility, DomainEvent Payload)>> Produce,
+    Func<SimulationContext, bool>? Condition = null,
+    TimeSpan? Until = null)
 {
     public static (EventVisibility, DomainEvent) Truth(DomainEvent payload) => (EventVisibility.Truth, payload);
 

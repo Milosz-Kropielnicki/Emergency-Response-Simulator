@@ -20,12 +20,43 @@ public static class BarrowStreetScenario
     /// <summary>Where the fire really is. Callers place it slightly wrong.</summary>
     public static readonly GeoPoint FireLocation = new(53.34045, -6.23710);
 
-    public static ScriptedInjectSystem Create()
+    /// <summary>
+    /// Where a lorry has shed its load on MacMahon Bridge (truth, unreported), drawn across both
+    /// carriageways. Crews approaching along Pearse Street run into it and must detour via Grand Canal Street.
+    /// </summary>
+    public static readonly IReadOnlyList<GeoPoint> ObstructionLine = [new(53.34180, -6.23780), new(53.34280, -6.23780)];
+
+    /// <param name="demoAutoResponse">
+    /// Presentation mode: at minute 2 the scenario itself opens the incident and dispatches a first response,
+    /// so the AVL picture comes alive without a trainee. Off for training, where those decisions are the point.
+    /// </param>
+    public static ScriptedInjectSystem Create(bool demoAutoResponse = false)
     {
         var fire = Guid.NewGuid();
+        var lorry = Guid.NewGuid();
+        var secondCall = Guid.NewGuid();
+        var demoIncident = Guid.NewGuid();
+
+        List<Inject> demo = !demoAutoResponse ? [] :
+        [
+            new(TimeSpan.FromMinutes(2), "DEMO: instructor opens the incident and sends a first response",
+                context => [
+                    Perceived(new IncidentCreated(demoIncident, "INC-00001", IncidentType.Explosion, IncidentPriority.High,
+                        FireLocation, "Barrow Street", "Barrow Street warehouse fire")),
+                    Perceived(new ReportLinked(secondCall, demoIncident)),
+                    .. new[] { "Engine 4", "Engine 12", "Ambulance 14", "Police 21" }
+                        .Select(callsign => UnitIdByCallsign(context, callsign))
+                        .OfType<Guid>()
+                        .Select(unit => Perceived(new UnitDispatched(unit, demoIncident, null))),
+                ]),
+        ];
 
         return new ScriptedInjectSystem(Name,
         [
+            .. demo,
+            new(TimeSpan.FromSeconds(5), "Lorry sheds its load on MacMahon Bridge (truth, unreported)",
+                _ => [Truth(new RoadObstructed(lorry, ObstructionLine, "lorry has shed its load across both lanes"))]),
+
             new(TimeSpan.FromSeconds(20), "Fire and explosion start in the warehouse (truth)",
                 _ => [Truth(new WorldIncidentStarted(fire, IncidentType.Explosion, FireLocation, Severity: 0.4, ActualCasualties: 6))]),
 
@@ -35,7 +66,7 @@ public static class BarrowStreetScenario
                     GeoMath.Destination(FireLocation, 300, 120), 150))]),
 
             new(TimeSpan.FromSeconds(105), "Second call: better location, people affected",
-                _ => [Perceived(new CallReceived(Guid.NewGuid(), "999 caller (landline)",
+                _ => [Perceived(new CallReceived(secondCall, "999 caller (landline)",
                     "Fire in the warehouse unit on Barrow Street, people coming out coughing",
                     GeoMath.Destination(FireLocation, 90, 25), 40))]),
 
@@ -74,12 +105,28 @@ public static class BarrowStreetScenario
                     "St. James's Hospital: ED near capacity",
                     "Emergency department at 95% capacity; can accept 3 more P1 casualties.", null, null))]),
 
+            new(TimeSpan.FromMinutes(6), "First fire engine still driving breaks down (truth)",
+                context => TravellingEngine(context) is { } engine
+                    ? [Truth(new UnitBrokeDown(engine, "engine overheating, lost power"))]
+                    : [],
+                Condition: context => TravellingEngine(context) is not null,
+                Until: TimeSpan.FromMinutes(15)),
+
+            new(TimeSpan.FromMinutes(25), "Lorry load cleared from MacMahon Bridge (truth)",
+                _ => [Truth(new RoadObstructionCleared(lorry))]),
+
             new(TimeSpan.FromMinutes(18), "Engine 7's radio recovers (truth)",
                 context => UnitIdByCallsign(context, "Engine 7") is { } engine7
                     ? [Truth(new UnitRadioFailed(engine7, Failed: false))]
                     : []),
         ]);
     }
+
+    private static Guid? TravellingEngine(SimulationContext context) =>
+        context.World.Units.Values
+            .Where(u => u.Type == UnitType.Engine && u.Phase == State.ResponsePhase.Travelling && !u.BrokenDown)
+            .OrderBy(u => u.Callsign, StringComparer.Ordinal)
+            .FirstOrDefault()?.Id;
 
     private static Guid? UnitIdByCallsign(SimulationContext context, string callsign) =>
         context.World.Units.Values.FirstOrDefault(u => u.Callsign == callsign)?.Id;

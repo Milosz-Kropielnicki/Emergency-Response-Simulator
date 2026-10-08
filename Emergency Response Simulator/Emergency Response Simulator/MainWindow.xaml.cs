@@ -2,6 +2,7 @@
 using System.Windows.Input;
 using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Mapping;
+using Emergency_Response_Simulator.Simulation.Services;
 using Emergency_Response_Simulator.Simulation.State;
 using Emergency_Response_Simulator.ViewModels;
 using Microsoft.Extensions.Configuration;
@@ -20,7 +21,8 @@ namespace Emergency_Response_Simulator
             DataContext = _viewModel = viewModel;
 
             // The GIS service only exists when a database is configured.
-            _map = new MapController(MapView, viewModel, cop, services.GetService<IGisService>(), configuration.GetSection("Map"));
+            _map = new MapController(MapView, viewModel, cop, services.GetService<IGisService>(),
+                services.GetRequiredService<AvlService>(), configuration.GetSection("Map"));
             Loaded += async (_, _) =>
             {
                 await viewModel.Timeline.LoadAsync();

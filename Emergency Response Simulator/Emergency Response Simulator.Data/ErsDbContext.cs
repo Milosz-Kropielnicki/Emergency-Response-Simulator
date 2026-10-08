@@ -72,6 +72,9 @@ public class ErsDbContext(DbContextOptions<ErsDbContext> options) : DbContext(op
             b.Property(u => u.HomeStation).HasMaxLength(200);
             b.HasIndex(u => u.Callsign);
             b.HasIndex(u => u.Status);
+            // Route tracking is live COP state rebuilt from events; it is not persisted.
+            b.Ignore(u => u.PlannedRoute);
+            b.Ignore(u => u.RouteDistanceMeters);
             b.HasOne(u => u.AssignedIncident).WithMany(i => i.AssignedUnits)
                 .HasForeignKey(u => u.AssignedIncidentId).OnDelete(DeleteBehavior.SetNull);
         });

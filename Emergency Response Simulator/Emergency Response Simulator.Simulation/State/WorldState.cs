@@ -1,6 +1,8 @@
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
+using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Model;
+using NetTopologySuite.Geometries;
 
 namespace Emergency_Response_Simulator.Simulation.State;
 
@@ -24,6 +26,18 @@ public sealed class WorldState
     /// which may not be where the real incident is.
     /// </summary>
     public Dictionary<Guid, GeoPoint> ReportedIncidentLocations { get; } = [];
+
+    /// <summary>
+    /// Areas drivers have been told to keep out of: declared road closures, hot zones, fire exclusion zones.
+    /// Declared by command, so every crew knows about them.
+    /// </summary>
+    public Dictionary<Guid, Geometry> DeclaredNoGoAreas { get; } = [];
+
+    /// <summary>Real, unreported blockages. A crew only learns of one by reaching it.</summary>
+    public Dictionary<Guid, (Geometry Line, string Description)> Obstructions { get; } = [];
+
+    /// <summary>Bumped whenever <see cref="DeclaredNoGoAreas"/> changes, so moving crews re-plan.</summary>
+    public int NoGoVersion { get; private set; }
     public WorldWeather Weather { get; set; } = new(WindFromDegrees: 270, WindSpeedMps: 4, TemperatureC: 14, RelativeHumidity: 0.7);
 
     /// <summary>
@@ -89,6 +103,33 @@ public sealed class WorldState
                     unit.OrderedIncidentId = null;
                 break;
 
+            case ZoneDeclared e when e.Type is ZoneType.RoadClosure or ZoneType.HotZone or ZoneType.FireExclusion:
+                DeclaredNoGoAreas[e.ZoneId] = e.Boundary.Count >= 3
+                    ? Wgs84.CreatePolygon(e.Boundary)
+                    : Wgs84.Factory.CreateLineString(e.Boundary.Select(p => p.ToPoint().Coordinate).ToArray());
+                NoGoVersion++;
+                break;
+
+            case ZoneLifted e when DeclaredNoGoAreas.Remove(e.ZoneId):
+                NoGoVersion++;
+                break;
+
+            case UnitBrokeDown e when Units.TryGetValue(e.UnitId, out var broken):
+                broken.BrokenDown = true;
+                broken.BreakdownFault = e.Fault;
+                broken.BrokeDownAt = simEvent.SimTime;
+                broken.SpeedKph = 0;
+                break;
+
+            case RoadObstructed e:
+                Obstructions[e.ObstructionId] = (
+                    Wgs84.Factory.CreateLineString(e.Line.Select(p => p.ToPoint().Coordinate).ToArray()), e.Description);
+                break;
+
+            case RoadObstructionCleared e:
+                Obstructions.Remove(e.ObstructionId);
+                break;
+
             case UnitRadioFailed e when Units.TryGetValue(e.UnitId, out var unit):
                 unit.RadioFailed = e.Failed;
                 break;
@@ -124,6 +165,9 @@ public sealed class WorldUnit
     public Guid? OrderedIncidentId { get; set; }
 
     public bool BrokenDown { get; set; }
+    public string? BreakdownFault { get; set; }
+    public DateTimeOffset? BrokeDownAt { get; set; }
+    public bool BreakdownReported { get; set; }
 
     /// <summary>The unit keeps working, but nothing it says reaches command.</summary>
     public bool RadioFailed { get; set; }
@@ -131,11 +175,27 @@ public sealed class WorldUnit
     public ResponsePhase Phase { get; set; }
     public DateTimeOffset PhaseStartedAt { get; set; }
 
-    /// <summary>Where the current journey started and is heading, and how long it takes.</summary>
-    public GeoPoint TravelFrom { get; set; }
-    public GeoPoint TravelTo { get; set; }
-    public TimeSpan TravelTime { get; set; }
     public DateTimeOffset LastFixAt { get; set; }
+
+    /// <summary>The journey being driven: legs along the road network, and progress along them.</summary>
+    public IReadOnlyList<RouteLeg> Route { get; set; } = [];
+    public int LegIndex { get; set; }
+    public double LegProgressMeters { get; set; }
+    public GeoPoint Destination { get; set; }
+
+    /// <summary>The <see cref="WorldState.NoGoVersion"/> the route was planned with.</summary>
+    public int PlannedWithNoGoVersion { get; set; }
+
+    /// <summary>Obstructions this crew has run into and now avoids.</summary>
+    public Dictionary<Guid, Geometry> KnownObstructions { get; } = [];
+
+    /// <summary>When the crew stopped at an obstruction; they re-route after assessing it.</summary>
+    public DateTimeOffset? HeldUpSince { get; set; }
+    public Guid? HeldUpBy { get; set; }
+
+    public TimeSpan RemainingTime =>
+        TimeSpan.FromSeconds(Route.Skip(LegIndex).Sum(l => l.Duration.TotalSeconds)
+                             - (LegIndex < Route.Count ? LegProgressMeters / (Route[LegIndex].SpeedKph / 3.6) : 0));
 }
 
 /// <summary>What a responding unit is actually doing, advanced by <c>UnitResponseSystem</c>.</summary>

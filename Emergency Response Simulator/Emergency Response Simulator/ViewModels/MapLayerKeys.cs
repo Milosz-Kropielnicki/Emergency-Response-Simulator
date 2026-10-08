@@ -10,6 +10,8 @@ public static class MapLayerKeys
     public const string PoliceUnits = "op:units-police";
     public const string OtherUnits = "op:units-other";
     public const string Weather = "op:weather";
+    public const string Routes = "op:routes";
+    public const string Trails = "op:trails";
 
     public const string HazardZones = "zones:hazard";
     public const string EvacuationZones = "zones:evacuation";

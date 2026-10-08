@@ -26,4 +26,7 @@ public sealed class SimulationOptions
 
     /// <summary>Start the clock as soon as the scenario is seeded (unattended demos, instructor setups).</summary>
     public bool AutoStart { get; set; }
+
+    /// <summary>Presentation mode for scripted scenarios: the scenario makes the first dispatch decisions itself.</summary>
+    public bool DemoAutoResponse { get; set; }
 }

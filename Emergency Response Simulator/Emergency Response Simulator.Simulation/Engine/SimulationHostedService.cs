@@ -1,4 +1,6 @@
 using Emergency_Response_Simulator.Core.Contracts;
+using Emergency_Response_Simulator.Simulation.Routing;
+using Emergency_Response_Simulator.Simulation.Services;
 using Emergency_Response_Simulator.Simulation.Scenarios;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -11,12 +13,19 @@ public sealed class SimulationHostedService(
     IEnumerable<IScenario> scenarios,
     // Taken only so the live COP exists and is following the stream before the first event is published.
     ICopService cop,
+    RoutingService routing,
+    // Taken so the AVL feed is listening before the first fix is published.
+    AvlService avl,
     Microsoft.Extensions.Options.IOptions<SimulationOptions> options,
     ILogger<SimulationHostedService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _ = cop;
+        _ = avl;
+
+        // Units need the road network before anyone can be dispatched.
+        await routing.LoadAsync(stoppingToken);
 
         foreach (var scenario in scenarios)
         {

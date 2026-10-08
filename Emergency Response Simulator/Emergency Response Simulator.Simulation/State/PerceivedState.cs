@@ -180,6 +180,8 @@ public sealed class PerceivedState : ICopService
 
             case UnitDispatched e when _units.TryGetValue(e.UnitId, out var unit):
                 Unassign(unit);
+                unit.PlannedRoute = null; // a new assignment means a new journey
+                unit.RouteDistanceMeters = null;
                 unit.Status = UnitStatus.Dispatched;
                 unit.AssignedIncidentId = e.IncidentId;
                 if (_incidents.TryGetValue(e.IncidentId, out var target))
@@ -202,6 +204,11 @@ public sealed class PerceivedState : ICopService
                 unit.Status = e.Status;
                 if (e.Status is UnitStatus.Available or UnitStatus.OutOfService)
                     Unassign(unit);
+                if (e.Status is not (UnitStatus.Dispatched or UnitStatus.EnRoute))
+                {
+                    unit.PlannedRoute = null;
+                    unit.RouteDistanceMeters = null;
+                }
                 break;
 
             case UnitPositionReported e when _units.TryGetValue(e.UnitId, out var unit):
@@ -211,6 +218,15 @@ public sealed class PerceivedState : ICopService
                 unit.Eta = e.Eta;
                 unit.LastAvlUpdate = at;
                 Contact(unit, at);
+                break;
+
+            case RouteReported e when _units.TryGetValue(e.UnitId, out var routed):
+                routed.PlannedRoute = e.Path.Count >= 2
+                    ? Wgs84.Factory.CreateLineString(e.Path.Select(p => p.ToPoint().Coordinate).ToArray())
+                    : null;
+                routed.RouteDistanceMeters = e.DistanceMeters;
+                routed.Eta = e.Eta;
+                Contact(routed, at);
                 break;
 
             case AlertRaised e:

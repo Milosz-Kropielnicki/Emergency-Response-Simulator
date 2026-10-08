@@ -141,6 +141,36 @@ Road closures, evacuation zones, perimeters, search areas and operational zones 
 
   It never creates the incident; that is the trainee's job. `--Simulation:AutoStart=true` starts the clock automatically.
 
+## AVL & routing (Phase 3)
+
+- **Road network:** `RoadNetwork` builds a routable graph in memory from the imported roads. Ways that meet share a vertex, which is how junctions are found. Central Dublin is 37k nodes and 79k edges, built in about 1 s at start-up.
+  - Speeds come from road class, capped near the posted `maxspeed`. Heavy apparatus is 15% slower.
+  - One-way streets, roundabouts and motorways are respected. Driving against one is only a 3×-cost fallback.
+  - A* finds the fastest route by travel time.
+  - We use this rather than pgRouting because closures and obstructions change every simulation tick, and in-memory re-routing takes milliseconds.
+- **Traffic:** `TimeOfDayTraffic` slows main roads at weekday peaks to 45% of free-flow speed and in the daytime to 70%. Blue lights recover part of the delay (the square root of the factor). Phase 6 adds live, simulated congestion.
+- **Units drive routes:** `UnitResponseSystem` follows the legs at road speed and sends AVL fixes every 5 s while moving (every 60 s when stationary). It sends `RouteReported` when a route is planned or re-planned.
+  - Crews avoid every declared road closure, hot zone and fire-exclusion zone, and re-plan when one is declared mid-journey.
+  - **Routing complications:** a `RoadObstructed` truth event blocks a road without anyone being told. A crew that reaches it stops, assesses it for 40 s, radios a field report and re-routes.
+  - A `UnitBrokeDown` truth event stops a vehicle; its AVL keeps reporting, and after 2 minutes the crew reports the fault and goes out of service.
+- **AVL feed:** `AvlService` implements `IAvlService`: the latest fix per unit (ID, position, timestamp, speed, heading, status) plus a breadcrumb trail.
+- **Derived alerts** (in `AttentionMonitor`, thresholds in the `Attention` settings):
+
+  | Alert | Fires when |
+  |---|---|
+  | Stopped en route | No movement for 90 s or more |
+  | Off planned route | Two consecutive fixes more than 150 m from the reported route |
+  | Delayed: re-routed | Expected arrival pushed back by 1 min or more; counts the time spent stopped as well as the longer drive |
+  | AVL signal lost | No fix for 60 s while en route; this fires well before the 4-minute comms-failure alert |
+- **AVL + GIS in the UI:**
+  - The map shows heading arrows, an ETA on each moving unit's label, planned routes (dashed) and AVL trails.
+  - The unit panel shows location with the nearest road name, speed, heading, crew, equipment, assignment, ETA, distance to incident (straight line and by road) and AVL age.
+  - The incident panel ranks available units by road ETA (avoiding declared closures), each with a Dispatch button.
+- **Barrow Street scenario:**
+  - At the start, a lorry sheds its load on MacMahon Bridge (unreported).
+  - From minute 6, the first fire engine still driving breaks down.
+  - `--Simulation:DemoAutoResponse=true` makes the scenario open the incident and dispatch a first response itself, for presentations.
+
 ## Local setup
 
 ```powershell

@@ -149,28 +149,53 @@ public static class MapStyles
 
     // ---- Operational (COP) ----
 
-    public static IStyle Unit(AgencyType? agency, UnitStatus status)
+    public static Color AgencyColor(AgencyType? agency) => agency switch
     {
-        var color = agency switch
-        {
-            AgencyType.Fire => new Color(230, 50, 40),
-            AgencyType.Ems => new Color(30, 170, 90),
-            AgencyType.Police => new Color(40, 100, 220),
-            _ => new Color(120, 120, 130),
-        };
+        AgencyType.Fire => new Color(230, 50, 40),
+        AgencyType.Ems => new Color(30, 170, 90),
+        AgencyType.Police => new Color(40, 100, 220),
+        _ => new Color(120, 120, 130),
+    };
+
+    /// <param name="heading">Degrees clockwise from north when moving; draws a direction arrow.</param>
+    public static IStyle Unit(AgencyType? agency, UnitStatus status, double? heading = null, bool selected = false, bool commsOk = true)
+    {
+        var color = AgencyColor(agency);
         if (status == UnitStatus.OutOfService)
             color = new Color(110, 110, 110);
 
-        // Committed units get an amber ring so availability can be read at a glance.
+        // Committed units get an amber ring so availability can be read at a glance; lost comms show red.
         var committed = status is not (UnitStatus.Available or UnitStatus.OutOfService);
+        var ring = !commsOk ? new Color(255, 40, 40) : committed ? new Color(255, 190, 0) : Color.White;
+        var styles = new StyleCollection();
+        if (selected)
+        {
+            styles.Styles.Add(new SymbolStyle
+            {
+                SymbolType = SymbolType.Ellipse, SymbolScale = 0.95,
+                Fill = new Brush(Color.FromArgb(60, 59, 167, 255)), Outline = new Pen(new Color(59, 167, 255), 2.5),
+            });
+        }
+        if (heading is { } direction)
+        {
+            // Direction arrow, offset ahead of the vehicle along its heading.
+            var radians = direction * Math.PI / 180;
+            styles.Styles.Add(new SymbolStyle
+            {
+                SymbolType = SymbolType.Triangle, SymbolScale = 0.32, SymbolRotation = direction, RotateWithMap = true,
+                Offset = new Offset(Math.Sin(radians) * 15, -Math.Cos(radians) * 15),
+                Fill = new Brush(color), Outline = new Pen(Color.White, 1.5),
+            });
+        }
         return new StyleCollection
         {
             Styles =
             {
+                styles,
                 new SymbolStyle
                 {
                     SymbolType = SymbolType.Ellipse, SymbolScale = 0.5, Fill = new Brush(color),
-                    Outline = new Pen(committed ? new Color(255, 190, 0) : Color.White, committed ? 3.5 : 2),
+                    Outline = new Pen(ring, committed || !commsOk ? 3.5 : 2),
                 },
                 new LabelStyle
                 {
@@ -181,6 +206,25 @@ public static class MapStyles
             },
         };
     }
+
+    public static IStyle Route(AgencyType? agency, bool selected)
+    {
+        var color = AgencyColor(agency);
+        return new VectorStyle
+        {
+            Line = new Pen(Color.FromArgb(selected ? 230 : 150, color.R, color.G, color.B), selected ? 5 : 3) { PenStyle = PenStyle.Dash },
+            Fill = null,
+            Outline = null,
+        };
+    }
+
+    /// <summary>Breadcrumb trail of recent AVL fixes.</summary>
+    public static IStyle Trail { get; } = new VectorStyle
+    {
+        Line = new Pen(Color.FromArgb(150, 255, 255, 255), 2) { PenStyle = PenStyle.Dot },
+        Fill = null,
+        Outline = null,
+    };
 
     public static IStyle Report(Confidence confidence) => new SymbolStyle
     {

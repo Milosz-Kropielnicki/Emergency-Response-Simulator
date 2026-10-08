@@ -360,6 +360,33 @@
                                     <TextBlock Style="{StaticResource EmptyHint}" FontSize="11" Margin="0,0,0,12"
                                                Text="Command posts, staging areas, evacuation zones: use Draw zone on the map; they attach to this incident." />
 
+                                    <DockPanel Margin="0,0,0,4">
+                                        <Button DockPanel.Dock="Right" Content="↻" Padding="6,0" Margin="0" Command="{Binding RankCommand}"
+                                                ToolTip="Recalculate road ETAs" />
+                                        <TextBlock Text="CLOSEST AVAILABLE UNITS (BY ROAD)" Style="{StaticResource PanelHeader}" Margin="0" />
+                                    </DockPanel>
+                                    <ItemsControl ItemsSource="{Binding Candidates}" Margin="0,0,0,2">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:UnitCandidate}">
+                                                <DockPanel Margin="0,1">
+                                                    <Button DockPanel.Dock="Right" Content="Dispatch" Padding="6,0" FontSize="11" Margin="4,0,0,0"
+                                                            Command="{Binding DataContext.DispatchUnitCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding UnitId}" />
+                                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Distance}" Width="56" TextAlignment="Right"
+                                                               Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+                                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Eta}" Width="44" TextAlignment="Right"
+                                                               FontFamily="Consolas" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                    <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                                        <Run Text="{Binding Callsign, Mode=OneWay}" FontWeight="SemiBold" />
+                                                        <Run Text="{Binding Type, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    </TextBlock>
+                                                </DockPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Text="{Binding RankingNote}" FontSize="11" Foreground="{StaticResource MutedTextBrush}"
+                                               TextWrapping="Wrap" Margin="0,0,0,12" />
+
                                     <TextBlock Text="ASSIGNED RESOURCES" Style="{StaticResource PanelHeader}" />
                                     <ItemsControl ItemsSource="{Binding Units}" Margin="0,0,0,12" />
                                     <TextBlock Text="REPORTS" Style="{StaticResource PanelHeader}" />
@@ -374,6 +401,32 @@
                                     <ItemsControl ItemsSource="{Binding Zones}" />
                                 </StackPanel>
                             </ScrollViewer>
+                        </Grid>
+                    </TabItem>
+                    <TabItem Header="UNIT">
+                        <Grid DataContext="{Binding UnitDetail}">
+                            <TextBlock Style="{StaticResource EmptyHint}" Margin="4,8"
+                                       Text="Click a unit on the map or in the resource board to see its live AVL data."
+                                       Visibility="{Binding HasUnit, Converter={x:Static vm:Converters.FalseToVisible}}" />
+                            <StackPanel Margin="4" Visibility="{Binding HasUnit, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="{Binding Callsign}" FontSize="17" FontWeight="Bold" />
+                                <TextBlock Text="{Binding Subtitle}" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding StatusText}" Style="{StaticResource UnitStatusText}" FontSize="15" Margin="0,6,0,10" />
+                                <ItemsControl ItemsSource="{Binding Rows}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:DetailRow}">
+                                            <Grid Margin="0,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="130" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Label}" Style="{StaticResource FieldLabel}" VerticalAlignment="Top" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
                         </Grid>
                     </TabItem>
                 </TabControl>
@@ -448,7 +501,7 @@
                                 </ItemsControl>
                                 <TextBlock Text="RESOURCES" Style="{StaticResource PanelHeader}" />
                             </DockPanel>
-                            <DataGrid ItemsSource="{Binding ResourceBoard}">
+                            <DataGrid ItemsSource="{Binding ResourceBoard}" SelectedItem="{Binding SelectedUnitRow}">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Unit" Binding="{Binding Callsign}" />
                                     <DataGridTextColumn Header="Type" Binding="{Binding Type}" />

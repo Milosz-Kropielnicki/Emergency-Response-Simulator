@@ -148,7 +148,8 @@ public class PostgresIntegrationTests(PostgresFixture fixture) : IClassFixture<P
 
         var atWest = await gis.GetElevationAsync(west);
         var middle = await gis.GetElevationAsync(new GeoPoint(lat, -29.999));
-        var nowhere = await gis.GetElevationAsync(new GeoPoint(lat + 0.5, -30));
+        // Seeded samples (this run's and earlier runs') all lie at 45–46°N, 30°W; nothing is ever seeded here.
+        var nowhere = await gis.GetElevationAsync(new GeoPoint(-60, 150));
 
         Assert.Equal(10, atWest!.Value, 0.01);
         Assert.Equal(15, middle!.Value, 0.5);

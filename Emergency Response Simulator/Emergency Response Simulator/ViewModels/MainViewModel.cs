@@ -21,17 +21,20 @@ public partial class MainViewModel : ObservableObject
     private readonly CopView _cop;
     private readonly ISimulationControl _simulation;
     private readonly IC2Service _c2;
+    private readonly IRoutingService _routing;
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _clockTimer;
     private int _refreshQueued;
     private DateTimeOffset _messageExpires;
 
     public MainViewModel(CopView cop, ISimulationControl simulation, IC2Service c2, TimelineViewModel timeline,
-        DataSourceInfo dataSource)
+        IRoutingService routing, DataSourceInfo dataSource)
     {
         _cop = cop;
         _simulation = simulation;
         _c2 = c2;
+        _routing = routing;
+        UnitDetail = new UnitDetailViewModel(routing);
         Timeline = timeline;
         ZoneDrawing = new ZoneDrawingViewModel(c2, this);
         IncidentDetail = new IncidentDetailViewModel(this, c2);
@@ -58,6 +61,8 @@ public partial class MainViewModel : ObservableObject
 
     public IncidentDetailViewModel IncidentDetail { get; }
 
+    public UnitDetailViewModel UnitDetail { get; }
+
     public bool IsReplay => _cop.IsReplay;
 
     // ---- Header ----
@@ -81,7 +86,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _isRightPanelOpen = true;
     [ObservableProperty] private bool _isTopPanelOpen;
 
-    /// <summary>0 = comms hub, 1 = incident detail.</summary>
+    /// <summary>0 = comms hub, 1 = incident detail, 2 = unit detail.</summary>
     [ObservableProperty] private int _rightPanelTab;
 
     /// <summary>
@@ -105,6 +110,8 @@ public partial class MainViewModel : ObservableObject
                 new(MapLayerKeys.EmsUnits, "EMS units", true),
                 new(MapLayerKeys.PoliceUnits, "Police units", true),
                 new(MapLayerKeys.OtherUnits, "Other units", true),
+                new(MapLayerKeys.Routes, "Planned routes", true),
+                new(MapLayerKeys.Trails, "Unit trails (AVL)", true),
                 new(MapLayerKeys.Weather, "Wind (reported)"),
             ]),
             new("ZONES",
@@ -203,6 +210,74 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>The unit shown in the unit panel and highlighted on the map.</summary>
+    [ObservableProperty] private Guid? _selectedUnitId;
+
+    /// <summary>Two-way binding for the resource board's selected row.</summary>
+    public UnitRow? SelectedUnitRow
+    {
+        get => ResourceBoard.FirstOrDefault(r => r.Id == SelectedUnitId);
+        set
+        {
+            if (value is not null && value.Id != SelectedUnitId)
+                SelectedUnitId = value.Id;
+        }
+    }
+
+    partial void OnSelectedUnitIdChanged(Guid? value)
+    {
+        var unit = value is { } id ? _cop.FindUnit(id) : null;
+        UnitDetail.Load(unit, Now);
+        OnPropertyChanged(nameof(SelectedUnitRow));
+        if (unit is not null)
+        {
+            RightPanelTab = 2;
+            IsRightPanelOpen = true;
+            if (unit.Location is { } location)
+                FocusRequested?.Invoke(this, GeoPoint.FromPoint(location));
+        }
+    }
+
+    /// <summary>The moment being displayed: simulation time, or the replay time.</summary>
+    private DateTimeOffset Now => _cop.ReplayTime ?? _simulation.SimTime;
+
+    /// <summary>
+    /// Ranks available units by road ETA to the selected incident, avoiding declared closures and hot zones
+    /// (Design Document §7.5): "Engine 12 can reach the incident in approximately 6 minutes".
+    /// </summary>
+    public async Task RankClosestUnitsAsync()
+    {
+        IncidentDetail.Candidates.Clear();
+        if (SelectedIncidentId is not { } id || _cop.FindIncident(id) is not { } incident) return;
+
+        var target = GeoPoint.FromPoint(incident.Location);
+        var avoid = _cop.Zones
+            .Where(z => z.Type is ZoneType.RoadClosure or ZoneType.HotZone or ZoneType.FireExclusion)
+            .Select(z => z.Area)
+            .ToList();
+        var available = _cop.Units.Where(u => u.Status == UnitStatus.Available && u.Location is not null).ToList();
+        var departAt = _simulation.SimTime;
+
+        IncidentDetail.RankingNote = _routing.IsReady ? "Ranking by road…" : "No road network: straight-line estimates.";
+        var ranked = await Task.Run(() => available.Select(unit =>
+        {
+            var from = GeoPoint.FromPoint(unit.Location!);
+            var route = _routing.Route(from, target, new RouteOptions(unit.Type, departAt, Emergency: true, Avoid: avoid));
+            var seconds = route?.Duration.TotalSeconds
+                          ?? GeoMath.DistanceMeters(from, target) * 1.3 / (45 / 3.6);
+            var meters = route?.DistanceMeters ?? GeoMath.DistanceMeters(from, target) * 1.3;
+            return new UnitCandidate(unit.Id, unit.Callsign, ResourceGroups.Label(unit.Type),
+                $"{(int)(seconds / 60)}:{(int)(seconds % 60):D2}", meters < 1000 ? $"{meters:F0} m" : $"{meters / 1000:F1} km", seconds);
+        }).OrderBy(c => c.Seconds).ToList());
+
+        if (SelectedIncidentId != id) return; // selection moved on while ranking
+        foreach (var candidate in ranked)
+            IncidentDetail.Candidates.Add(candidate);
+        IncidentDetail.RankingNote = ranked.Count == 0
+            ? "No units available."
+            : $"Road travel time (excludes ~45 s turnout); avoids {avoid.Count} declared closure/hazard zone(s).";
+    }
+
     /// <summary>Raised when the operator picks an incident, so the map can centre on it.</summary>
     public event EventHandler<GeoPoint>? FocusRequested;
 
@@ -220,6 +295,7 @@ public partial class MainViewModel : ObservableObject
         }
         RefreshResourceBoard();
         RefreshIntelligence();
+        _ = RankClosestUnitsAsync();
     }
 
     public Incident? FindIncident(Guid id) => _cop.FindIncident(id);
@@ -363,6 +439,8 @@ public partial class MainViewModel : ObservableObject
         IsRunning = _simulation.IsRunning;
         TimeScale = _simulation.TimeScale;
         Timeline.Tick();
+        if (SelectedUnitId is { } selectedUnit)
+            UnitDetail.Load(_cop.FindUnit(selectedUnit), Now);
 
         if (CommandMessage.Length > 0 && DateTimeOffset.Now > _messageExpires)
             CommandMessage = "";
@@ -388,6 +466,8 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsReplay));
         if (SelectedIncidentId is { } id && _cop.FindIncident(id) is null)
             SelectedIncidentId = null; // e.g. replaying to before it existed
+        if (SelectedUnitId is { } unitId && _cop.FindUnit(unitId) is null)
+            SelectedUnitId = null;
 
         RefreshHeader();
         RefreshIncidentBoard();
@@ -466,7 +546,8 @@ public partial class MainViewModel : ObservableObject
     {
         ResourceBoard.Clear();
         foreach (var unit in _cop.Units.OrderBy(u => u.Agency?.Type).ThenBy(u => u.Callsign, StringComparer.Ordinal))
-            ResourceBoard.Add(new UnitRow(this, unit, _cop.AsOf));
+            ResourceBoard.Add(new UnitRow(this, unit, Now));
+        OnPropertyChanged(nameof(SelectedUnitRow));
 
         ResourceSummary.Clear();
         foreach (var group in _cop.Units.GroupBy(u => ResourceGroups.For(u.Type)).OrderBy(g => g.Key))

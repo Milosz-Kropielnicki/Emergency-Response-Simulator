@@ -1,3 +1,5 @@
+using NetTopologySuite.Geometries;
+
 namespace Emergency_Response_Simulator.Core.Model;
 
 /// <summary>A mobile resource tracked by AVL (Design Document §6.4, §7.4).</summary>
@@ -29,6 +31,11 @@ public class Unit : Resource
     /// <summary>False after a communication-failure alert, until the unit is heard from again.</summary>
     public bool CommsConnected { get; set; } = true;
     public TimeSpan? Eta { get; set; }
+
+    /// <summary>The route the unit last reported it is following (COP state, not stored in the database).</summary>
+    public LineString? PlannedRoute { get; set; }
+
+    public double? RouteDistanceMeters { get; set; }
 
     public Guid? AssignedIncidentId { get; set; }
     public Incident? AssignedIncident { get; set; }

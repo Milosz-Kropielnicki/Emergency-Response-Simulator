@@ -1,6 +1,7 @@
 using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Simulation.Engine;
+using Emergency_Response_Simulator.Simulation.Routing;
 using Emergency_Response_Simulator.Simulation.Scenarios;
 using Emergency_Response_Simulator.Simulation.Services;
 using Emergency_Response_Simulator.Simulation.State;
@@ -46,10 +47,19 @@ public static class ServiceCollectionExtensions
         });
         services.AddSingleton(sp => new CopView(sp.GetRequiredService<ICopService>()));
 
-        services.AddSingleton<ISimulationSystem, UnitResponseSystem>();
-        services.AddSingleton<ISimulationSystem, AttentionMonitor>();
+        services.AddSingleton<ITrafficModel, TimeOfDayTraffic>();
+        services.AddSingleton<RoutingService>();
+        services.AddSingleton<IRoutingService>(sp => sp.GetRequiredService<RoutingService>());
+        services.AddSingleton(sp => new AvlService(
+            sp.GetRequiredService<ICopService>(), sp.GetRequiredService<IEventStore>(), sp.GetRequiredService<SimulationSession>().Id));
+        services.AddSingleton<IAvlService>(sp => sp.GetRequiredService<AvlService>());
+
+        services.AddSingleton<ISimulationSystem>(sp => new UnitResponseSystem(sp.GetRequiredService<RoutingService>()));
+        services.AddSingleton<ISimulationSystem>(sp => new AttentionMonitor(
+            sp.GetRequiredService<ICopService>(), sp.GetRequiredService<AttentionOptions>(), sp.GetRequiredService<IRoutingService>()));
         if (configuration[$"{SimulationOptions.SectionName}:Scenario"] == BarrowStreetScenario.Key)
-            services.AddSingleton<ISimulationSystem>(_ => BarrowStreetScenario.Create());
+            services.AddSingleton<ISimulationSystem>(_ => BarrowStreetScenario.Create(
+                configuration.GetValue<bool>($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.DemoAutoResponse)}")));
 
         services.AddSingleton<IC2Service, C2Service>();
         services.AddSingleton<IAarService, AarService>();

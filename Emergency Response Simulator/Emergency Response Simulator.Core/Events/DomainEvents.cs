@@ -28,6 +28,7 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(ResourceRequested), nameof(ResourceRequested))]
 [JsonDerivedType(typeof(WeatherObserved), nameof(WeatherObserved))]
 [JsonDerivedType(typeof(IncidentCommanderAssigned), nameof(IncidentCommanderAssigned))]
+[JsonDerivedType(typeof(RouteReported), nameof(RouteReported))]
 [JsonDerivedType(typeof(ReportAssessed), nameof(ReportAssessed))]
 [JsonDerivedType(typeof(ReportLinked), nameof(ReportLinked))]
 // Truth: the world as it really is
@@ -35,6 +36,9 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(WorldIncidentChanged), nameof(WorldIncidentChanged))]
 [JsonDerivedType(typeof(WeatherChanged), nameof(WeatherChanged))]
 [JsonDerivedType(typeof(UnitRadioFailed), nameof(UnitRadioFailed))]
+[JsonDerivedType(typeof(RoadObstructed), nameof(RoadObstructed))]
+[JsonDerivedType(typeof(UnitBrokeDown), nameof(UnitBrokeDown))]
+[JsonDerivedType(typeof(RoadObstructionCleared), nameof(RoadObstructionCleared))]
 // Engine control
 [JsonDerivedType(typeof(SimulationStarted), nameof(SimulationStarted))]
 [JsonDerivedType(typeof(SimulationPaused), nameof(SimulationPaused))]
@@ -90,6 +94,18 @@ public sealed record UnitDispatched(Guid UnitId, Guid IncidentId, Guid? OrderedB
 public sealed record UnitDispatchCancelled(Guid UnitId, Guid IncidentId, string? Reason) : DomainEvent;
 
 public sealed record UnitStatusChanged(Guid UnitId, UnitStatus Status) : DomainEvent;
+
+/// <summary>
+/// The route a unit's navigation has planned (or re-planned), as sent by its mobile data terminal.
+/// Lets command see where the unit intends to drive and notice when it deviates.
+/// </summary>
+public sealed record RouteReported(
+    Guid UnitId,
+    Guid? IncidentId,
+    IReadOnlyList<GeoPoint> Path,
+    double DistanceMeters,
+    TimeSpan Eta,
+    string? Reason) : DomainEvent;
 
 /// <summary>An AVL fix as transmitted by the vehicle (Design Document §7.4).</summary>
 public sealed record UnitPositionReported(
@@ -186,6 +202,17 @@ public sealed record WeatherChanged(
 
 /// <summary>A unit's radio and data link really fail (or recover). Command only notices the silence.</summary>
 public sealed record UnitRadioFailed(Guid UnitId, bool Failed) : DomainEvent;
+
+/// <summary>
+/// A road is really blocked (crash, fallen tree, flooding) but nobody has reported it yet.
+/// Drivers find out when they reach it.
+/// </summary>
+public sealed record RoadObstructed(Guid ObstructionId, IReadOnlyList<GeoPoint> Line, string Description) : DomainEvent;
+
+public sealed record RoadObstructionCleared(Guid ObstructionId) : DomainEvent;
+
+/// <summary>A vehicle really breaks down. AVL shows it stop; the crew reports the cause a little later.</summary>
+public sealed record UnitBrokeDown(Guid UnitId, string Fault) : DomainEvent;
 
 // ---- Engine control ----
 

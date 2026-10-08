@@ -63,6 +63,13 @@ public static class EventDescriber
             WorldIncidentChanged e => Entry("TRUTH", e.Extinguished ? "Incident extinguished" :
                 $"Incident now severity {e.Severity:P0}, {e.ActualCasualties} casualties"),
             WeatherChanged e => Entry("TRUTH", $"Wind actually from {e.WindFromDegrees:F0}° at {e.WindSpeedMps:F1} m/s"),
+            RouteReported e => Entry("UNIT ROUTE", $"{Unit(e.UnitId)}: {e.DistanceMeters / 1000:F1} km by road, ETA {e.Eta.TotalMinutes:F1} min" +
+                (e.Reason is null or "Dispatched" ? "" : $" — {e.Reason}"), e.IncidentId, e.UnitId,
+                important: e.Reason?.StartsWith("Re-routed") == true),
+            RoadObstructed e => Entry("TRUTH", $"Road blocked (unreported): {e.Description}"),
+            RoadObstructionCleared => Entry("TRUTH", "Road obstruction cleared"),
+            UnitBrokeDown e => Entry("TRUTH", $"{Unit(e.UnitId)} breaks down: {e.Fault}", unit: e.UnitId),
+            UnitRadioFailed e => Entry("TRUTH", $"{Unit(e.UnitId)} radio {(e.Failed ? "fails" : "recovers")}", unit: e.UnitId),
             UnitPositionReported => null, // dozens per minute; shown on the map instead
             _ => Entry(simEvent.Type.ToUpperInvariant(), simEvent.Type),
         };

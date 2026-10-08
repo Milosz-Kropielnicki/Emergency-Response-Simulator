@@ -36,6 +36,14 @@ public sealed partial class IncidentDetailViewModel(MainViewModel owner, IC2Serv
     [ObservableProperty] private string _coldRadius = "400";
 
     public ObservableCollection<string> Units { get; } = [];
+
+    /// <summary>Available units ranked by road ETA to this incident.</summary>
+    public ObservableCollection<UnitCandidate> Candidates { get; } = [];
+
+    [ObservableProperty] private string _rankingNote = "";
+
+    [RelayCommand]
+    private Task RankAsync() => owner.RankClosestUnitsAsync();
     public ObservableCollection<string> Reports { get; } = [];
     public ObservableCollection<string> Zones { get; } = [];
 
