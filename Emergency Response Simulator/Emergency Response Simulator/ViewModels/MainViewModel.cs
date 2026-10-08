@@ -8,6 +8,7 @@ using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
 using Emergency_Response_Simulator.Simulation.State;
+using Emergency_Response_Simulator.ViewModels.Iap;
 
 namespace Emergency_Response_Simulator.ViewModels;
 
@@ -27,7 +28,7 @@ public partial class MainViewModel : ObservableObject
     private int _refreshQueued;
     private DateTimeOffset _messageExpires;
 
-    public MainViewModel(CopView cop, ISimulationControl simulation, IC2Service c2, TimelineViewModel timeline,
+    public MainViewModel(CopView cop, ISimulationControl simulation, IC2Service c2, IIapService iap, TimelineViewModel timeline,
         IRoutingService routing, DataSourceInfo dataSource)
     {
         _cop = cop;
@@ -38,6 +39,7 @@ public partial class MainViewModel : ObservableObject
         Command = new CommandViewModel(this, c2, cop);
         Command.InitialiseDefaults();
         Ics = new IcsViewModel(this, c2);
+        Iap = new IapBuilderViewModel(this, iap, cop, simulation);
         Timeline = timeline;
         ZoneDrawing = new ZoneDrawingViewModel(c2, this);
         IncidentDetail = new IncidentDetailViewModel(this, c2);
@@ -71,6 +73,18 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>The selected incident's ICS organisation and span of control.</summary>
     public IcsViewModel Ics { get; }
+
+    /// <summary>The Incident Action Plan builder for the selected incident (opened in its own window).</summary>
+    public IapBuilderViewModel Iap { get; }
+
+    /// <summary>Raised when the operator asks for the IAP builder.</summary>
+    public event EventHandler? IapRequested;
+
+    [RelayCommand]
+    private void OpenIap() => IapRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>The selected incident's planning state, e.g. "Period 1 (14:00–15:00) · v2 approved, briefed 14:20".</summary>
+    [ObservableProperty] private string _planSummary = "";
 
     public bool IsReplay => _cop.IsReplay;
 
@@ -306,6 +320,8 @@ public partial class MainViewModel : ObservableObject
         RefreshIntelligence();
         Command.Refresh();
         Ics.Load(incident);
+        Iap.Load(incident);
+        RefreshPlanSummary();
         _ = RankClosestUnitsAsync();
     }
 
@@ -499,6 +515,31 @@ public partial class MainViewModel : ObservableObject
         IncidentDetail.Load(SelectedIncidentId is { } selected ? _cop.FindIncident(selected) : null, selectionChanged: false);
         Command.Refresh();
         Ics.Load(SelectedIncidentId is { } forIcs ? _cop.FindIncident(forIcs) : null);
+        Iap.Load(SelectedIncidentId is { } forIap ? _cop.FindIncident(forIap) : null);
+        RefreshPlanSummary();
+    }
+
+    private void RefreshPlanSummary()
+    {
+        if (SelectedIncidentId is not { } id || _cop.FindIncident(id) is null)
+        {
+            PlanSummary = "";
+            return;
+        }
+        if (_cop.CurrentPeriod(id, Now) is not { } period)
+        {
+            PlanSummary = "No operational period yet";
+            return;
+        }
+
+        var label = $"Period {period.Number} ({period.Window})";
+        var latest = _cop.VersionsOf(period.Id).LastOrDefault();
+        PlanSummary = _cop.ApprovedPlan(period.Id) is { } inForce
+            ? $"{label} · v{inForce.Version} in force" + (inForce.BriefedAt is null ? ", not briefed" : "") +
+              (latest is { } l && l.Id != inForce.Id ? $" · v{l.Version} {(l.Status == IapStatus.Draft ? "drafting" : "awaiting approval")}" : "")
+            : latest is null ? $"{label} · no plan"
+            : $"{label} · v{latest.Version} {(latest.Status == IapStatus.Draft ? "draft" : "awaiting approval")}";
+        if (Now >= period.End) PlanSummary += " · period ended";
     }
 
     private void RefreshZones()
@@ -566,8 +607,18 @@ public partial class MainViewModel : ObservableObject
     private void RefreshResourceBoard()
     {
         ResourceBoard.Clear();
+        // Each committed unit's task in its incident's plan in force (the IAP's resource assignment, §8.4).
+        var plans = new Dictionary<Guid, IncidentActionPlan?>();
+        string? PlanTask(Unit unit)
+        {
+            if (unit.AssignedIncidentId is not { } incidentId) return null;
+            if (!plans.TryGetValue(incidentId, out var plan))
+                plans[incidentId] = plan = _cop.PlanInForce(incidentId, Now);
+            return plan?.Content.Assignments.FirstOrDefault(a => a.UnitId == unit.Id)?.Assignment;
+        }
+
         foreach (var unit in _cop.Units.OrderBy(u => u.Agency?.Type).ThenBy(u => u.Callsign, StringComparer.Ordinal))
-            ResourceBoard.Add(new UnitRow(this, unit, Now));
+            ResourceBoard.Add(new UnitRow(this, unit, Now, PlanTask(unit)));
         OnPropertyChanged(nameof(SelectedUnitRow));
 
         ResourceSummary.Clear();

@@ -42,6 +42,90 @@ public sealed class AttentionMonitor(ICopService cop, AttentionOptions options, 
         CheckCommunications(context);
         CheckAvl(context);
         CheckCommand(context);
+        CheckPlanning(context);
+    }
+
+    /// <summary>
+    /// Planning health (§8.6–8.7): incidents running without a plan, periods about to end, plans waiting for
+    /// approval or briefing, and the plan in force diverging from the COP — units it relies on that are out of
+    /// service or gone, and objectives past their target time.
+    /// </summary>
+    private void CheckPlanning(SimulationContext context)
+    {
+        var now = context.SimTime;
+        foreach (var incident in cop.Incidents.Where(i => i.Status != IncidentStatus.Closed))
+        {
+            var periods = cop.PeriodsOf(incident.Id);
+            Track(context, $"no-iap:{incident.Id}",
+                periods.Count == 0 && incident.AssignedUnits.Count >= options.PlanningUnitThreshold
+                                   && now - incident.ReportedAt >= options.PlanningExpectedAfter,
+                AlertCategory.Planning, AlertSeverity.Info,
+                $"{incident.Number}: no Incident Action Plan",
+                $"{incident.AssignedUnits.Count} units committed and no operational period defined. Start period 1 and draft an IAP.",
+                incident.Id);
+            if (periods.Count == 0) continue;
+
+            var last = periods[^1];
+            Track(context, $"period-ending:{last.Id}", now >= last.End - options.PeriodEndWarning && now < last.End,
+                AlertCategory.Planning, AlertSeverity.Warning,
+                $"{incident.Number}: operational period {last.Number} ends at {last.End.ToLocalTime():HH:mm}",
+                $"Reassess the situation and prepare the IAP for period {last.Number + 1}.",
+                incident.Id);
+            Track(context, $"period-ended:{last.Id}", now >= last.End,
+                AlertCategory.Planning, AlertSeverity.Warning,
+                $"{incident.Number}: operational period {last.Number} has ended",
+                "No next period has been started; crews are still working to an expired plan.",
+                incident.Id);
+
+            foreach (var pending in cop.ActionPlans.Where(p => p.IncidentId == incident.Id && p.Status == IapStatus.PendingApproval))
+            {
+                Track(context, $"iap-pending:{pending.Id}", now - (pending.SubmittedAt ?? now) >= options.DecisionReminder,
+                    AlertCategory.Planning, AlertSeverity.Warning,
+                    $"{incident.Number}: IAP version {pending.Version} awaiting approval",
+                    $"Submitted by {pending.SubmittedBy} {(now - (pending.SubmittedAt ?? now)).TotalMinutes:F0} min ago.",
+                    incident.Id);
+            }
+
+            if (cop.CurrentPeriod(incident.Id, now) is not { } current) continue;
+            var plan = cop.ApprovedPlan(current.Id);
+            Track(context, $"no-plan:{current.Id}", plan is null && now - current.Start >= options.PlanApprovalGrace,
+                AlertCategory.Planning, AlertSeverity.Warning,
+                $"{incident.Number}: no approved IAP for period {current.Number}",
+                $"The period began at {current.Start.ToLocalTime():HH:mm}; operations are running without an approved plan.",
+                incident.Id);
+            if (plan is null) continue;
+
+            Track(context, $"brief:{plan.Id}", plan.BriefedAt is null && now - (plan.ApprovedAt ?? now) >= options.BriefingReminder,
+                AlertCategory.Planning, AlertSeverity.Info,
+                $"{incident.Number}: IAP version {plan.Version} not yet briefed",
+                "The plan is approved but its assignments have not been pushed to the units.",
+                incident.Id);
+
+            // Reality diverges from the plan (§8.6): "IAP: Engine 7 → Exposure protection; COP: Engine 7 → OUT OF SERVICE".
+            foreach (var assignment in plan.Content.Assignments)
+            {
+                var problem = IapCompliance.ViabilityProblem(assignment, incident, cop.FindUnit(assignment.UnitId),
+                    expectCommitted: plan.BriefedAt is not null);
+                Track(context, $"viability:{plan.Id}:{assignment.UnitId}", problem is not null,
+                    AlertCategory.Planning, AlertSeverity.Warning,
+                    $"Plan not viable: {assignment.Callsign} {problem}",
+                    $"IAP: {assignment.Callsign} → {assignment.Assignment}. Reassign the task or revise the plan.",
+                    incident.Id, assignment.UnitId);
+            }
+
+            var progress = cop.ObjectiveProgress;
+            foreach (var objective in plan.Content.OperationalObjectives)
+            {
+                var status = progress.GetValueOrDefault(objective.Id);
+                Track(context, $"overdue:{plan.Id}:{objective.Id}",
+                    objective.TargetTime is { } due && now > due && status is ObjectiveStatus.Open or ObjectiveStatus.InProgress,
+                    AlertCategory.Planning, AlertSeverity.Warning,
+                    $"Objective overdue: {plan.Content.NumberOf(objective.Id)} {objective.Statement}",
+                    $"Target{(objective.PerformanceTarget is { } target ? $" \"{target}\"" : "")} was due at " +
+                    $"{objective.TargetTime?.ToLocalTime():HH:mm}. Update its progress or revise the plan.",
+                    incident.Id);
+            }
+        }
     }
 
     /// <summary>
@@ -318,4 +402,13 @@ public sealed class AttentionOptions
     public double RouteDeviationMeters { get; set; } = 150;
     /// <summary>Alert when a re-route pushes expected arrival back by at least this much.</summary>
     public TimeSpan EtaIncreaseAlert { get; set; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>Suggest an IAP once an incident is this old with at least <see cref="PlanningUnitThreshold"/> units committed.</summary>
+    public TimeSpan PlanningExpectedAfter { get; set; } = TimeSpan.FromMinutes(20);
+    public int PlanningUnitThreshold { get; set; } = 4;
+    public TimeSpan PeriodEndWarning { get; set; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>How long a period may run before missing an approved plan is flagged.</summary>
+    public TimeSpan PlanApprovalGrace { get; set; } = TimeSpan.FromMinutes(15);
+    public TimeSpan BriefingReminder { get; set; } = TimeSpan.FromMinutes(5);
 }

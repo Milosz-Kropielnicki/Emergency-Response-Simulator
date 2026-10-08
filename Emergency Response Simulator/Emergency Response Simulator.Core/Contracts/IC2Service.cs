@@ -101,7 +101,9 @@ public interface IC2Service
 }
 
 /// <param name="EntityId">Id of anything the command created, e.g. a new incident.</param>
-public sealed record CommandResult(bool Succeeded, string? Error = null, long? EventSequence = null, Guid? EntityId = null)
+/// <param name="Detail">A summary of what a compound command did, e.g. "6 orders issued, 1 group formed".</param>
+public sealed record CommandResult(bool Succeeded, string? Error = null, long? EventSequence = null, Guid? EntityId = null,
+    string? Detail = null)
 {
     public static CommandResult Ok(long sequence, Guid? entityId = null) => new(true, EventSequence: sequence, EntityId: entityId);
 

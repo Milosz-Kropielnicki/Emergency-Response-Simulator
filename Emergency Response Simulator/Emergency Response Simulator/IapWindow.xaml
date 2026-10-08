@@ -1,0 +1,906 @@
+<Window x:Class="Emergency_Response_Simulator.IapWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Emergency_Response_Simulator.ViewModels"
+        xmlns:iap="clr-namespace:Emergency_Response_Simulator.ViewModels.Iap"
+        Title="Incident Action Plan Builder" Width="1320" Height="860" MinWidth="1000" MinHeight="600"
+        Background="{StaticResource BackgroundBrush}" Foreground="{StaticResource TextBrush}" FontSize="12"
+        WindowStartupLocation="CenterOwner">
+    <Window.Resources>
+        <!-- Form fields that stay usable whatever the plan's status (period form, return comments, progress). -->
+        <Style x:Key="FreeTextBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}" />
+        <Style x:Key="FreeComboBox" TargetType="ComboBox" />
+
+        <!-- Plan fields: read-only unless the shown version is an editable draft. -->
+        <Style TargetType="TextBox" BasedOn="{StaticResource FreeTextBox}">
+            <Setter Property="IsReadOnly" Value="{Binding DataContext.IsReadOnly, RelativeSource={RelativeSource AncestorType=Window}}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="IsEnabled" Value="{Binding DataContext.IsEditable, RelativeSource={RelativeSource AncestorType=Window}}" />
+        </Style>
+        <Style x:Key="MultiLine" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="AcceptsReturn" Value="True" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="VerticalContentAlignment" Value="Top" />
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+        </Style>
+
+        <!-- Add / remove buttons only while editing. -->
+        <Style x:Key="EditButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Visibility" Value="{Binding DataContext.IsEditable, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="Margin" Value="4,0,0,0" />
+        </Style>
+        <Style x:Key="RemoveButton" TargetType="Button" BasedOn="{StaticResource EditButton}">
+            <Setter Property="Content" Value="✕" />
+            <Setter Property="Padding" Value="5,0" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="ToolTip" Value="Remove" />
+            <Setter Property="Command" Value="{Binding RemoveCommand}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="PullButton" TargetType="Button" BasedOn="{StaticResource EditButton}">
+            <Setter Property="Command" Value="{Binding DataContext.PullCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+            <Setter Property="ToolTip" Value="Fill in what is missing from the current COP (unsaved until you save)" />
+        </Style>
+
+        <Style x:Key="SectionTitle" TargetType="TextBlock" BasedOn="{StaticResource PanelHeader}">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource PanelBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Padding" Value="10" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+        </Style>
+        <Style x:Key="ColumnHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Margin" Value="0,0,6,4" />
+        </Style>
+
+        <!-- Hides the TabControl's headers; the left-hand list picks the section. -->
+        <Style x:Key="HiddenTab" TargetType="TabItem">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <!-- Section content inherits its text colour from the (hidden) tab item. -->
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- ===== Header: incident, period, version, status and workflow ===== -->
+        <Border Grid.Row="0" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="14,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,24,0">
+                    <TextBlock Text="INCIDENT ACTION PLAN" FontWeight="Bold" FontSize="15" />
+                    <TextBlock Text="{Binding IncidentLabel}" Foreground="{StaticResource MutedTextBrush}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                            Visibility="{Binding HasIncident, Converter={StaticResource BoolToVisibility}}">
+                    <ComboBox Style="{StaticResource FreeComboBox}" ItemsSource="{Binding Periods}" SelectedItem="{Binding SelectedPeriod}"
+                              DisplayMemberPath="Label" MinWidth="230" ToolTip="Operational period" />
+                    <ComboBox Style="{StaticResource FreeComboBox}" ItemsSource="{Binding Versions}" SelectedItem="{Binding SelectedVersion}"
+                              DisplayMemberPath="Label" MinWidth="170" Margin="6,0,0,0" ToolTip="Plan version" />
+                    <StackPanel Margin="12,0,0,0" VerticalAlignment="Center" Visibility="{Binding HasPlan, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock x:Name="StatusLine" Text="{Binding PlanStatus}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="420" />
+                        <TextBlock FontSize="11">
+                            <Run Text="{Binding ErrorCount, Mode=OneWay, StringFormat='{}{0} error(s)'}" Foreground="{StaticResource CriticalBrush}" />
+                            <Run Text="·" Foreground="{StaticResource MutedTextBrush}" />
+                            <Run Text="{Binding WarningCount, Mode=OneWay, StringFormat='{}{0} warning(s)'}" Foreground="{StaticResource WarningBrush}" />
+                        </TextBlock>
+                    </StackPanel>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Discard changes" Command="{Binding DiscardChangesCommand}"
+                            Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Content="Save draft" Command="{Binding SaveCommand}" IsEnabled="{Binding IsDirty}"
+                            Visibility="{Binding CanSubmit, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Content="Submit for approval" Command="{Binding SubmitCommand}"
+                            Visibility="{Binding CanSubmit, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Content="Approve" Command="{Binding ApproveCommand}" BorderBrush="{StaticResource OkBrush}"
+                            Visibility="{Binding CanDecide, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Content="Brief: push assignments" Command="{Binding BriefCommand}" BorderBrush="{StaticResource AccentBrush}"
+                            Visibility="{Binding CanBrief, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Content="New version" Command="{Binding NewVersionCommand}"
+                            Visibility="{Binding CanNewVersion, Converter={StaticResource BoolToVisibility}}"
+                            ToolTip="Revise the plan for this period: a new draft copied from the latest version" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===== Body ===== -->
+        <TextBlock Grid.Row="1" Text="Select an incident on the main screen to plan for it." Style="{StaticResource Hint}" Margin="20"
+                   Visibility="{Binding HasIncident, Converter={x:Static vm:Converters.FalseToVisible}}" />
+        <Grid Grid.Row="1" Visibility="{Binding HasIncident, Converter={StaticResource BoolToVisibility}}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="210" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Section navigation with compliance badges. -->
+            <Border Grid.Column="0" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
+                <StackPanel>
+                    <ListBox ItemsSource="{Binding Sections}" SelectedIndex="{Binding SelectedSection}" Margin="0,8,0,0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type iap:SectionItem}">
+                                <DockPanel Margin="6,5" LastChildFill="True">
+                                    <Border DockPanel.Dock="Right" Background="{StaticResource CriticalBrush}" CornerRadius="7" Padding="5,0" Margin="4,0,0,0"
+                                            Visibility="{Binding Errors, Converter={x:Static vm:Converters.PositiveToVisible}}" ToolTip="Errors">
+                                        <TextBlock Text="{Binding Errors}" FontSize="10" Foreground="White" FontWeight="Bold" />
+                                    </Border>
+                                    <Border DockPanel.Dock="Right" Background="{StaticResource WarningBrush}" CornerRadius="7" Padding="5,0" Margin="4,0,0,0"
+                                            Visibility="{Binding Warnings, Converter={x:Static vm:Converters.PositiveToVisible}}" ToolTip="Warnings">
+                                        <TextBlock Text="{Binding Warnings}" FontSize="10" Foreground="Black" FontWeight="Bold" />
+                                    </Border>
+                                    <TextBlock Text="{Binding Title}" />
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <TextBlock Margin="12,16,12,0" Style="{StaticResource Hint}" FontSize="11"
+                               Text="Commander's intent → objectives → assignments → resources. Save the draft, submit it to the IC, then brief the approved plan to push it to the units." />
+                </StackPanel>
+            </Border>
+
+            <TabControl Grid.Column="1" SelectedIndex="{Binding SelectedSection}" Background="{StaticResource BackgroundBrush}" Foreground="{StaticResource TextBrush}"
+                        ItemContainerStyle="{StaticResource HiddenTab}">
+
+                <!-- 0: Period & situation -->
+                <TabItem>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <Grid Margin="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="340" />
+                                <ColumnDefinition Width="16" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <TextBlock Text="OPERATIONAL PERIOD" Style="{StaticResource SectionTitle}" />
+                                        <TextBlock Text="{Binding SelectedPeriod.Label, FallbackValue='No operational period yet'}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding PeriodDetail}" Style="{StaticResource Hint}" />
+                                        <TextBlock Text="VERSIONS" Style="{StaticResource PanelHeader}" Margin="0,6,0,4" />
+                                        <ListBox ItemsSource="{Binding Versions}" SelectedItem="{Binding SelectedVersion}" DisplayMemberPath="Label" MaxHeight="150" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Card}" Visibility="{Binding IsReplay, Converter={x:Static vm:Converters.FalseToVisible}}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding NewPeriodTitle}" Style="{StaticResource SectionTitle}" />
+                                        <TextBlock Style="{StaticResource Hint}"
+                                                   Text="Each period gets its own plan. Reassess at the end of a period; the next plan carries forward unfinished objectives and refreshes everything else from the COP." />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="70" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <TextBlock Text="Starts" Style="{StaticResource FieldLabel}" />
+                                            <TextBox Grid.Column="1" Style="{StaticResource FreeTextBox}" Text="{Binding NewPeriodStart, UpdateSourceTrigger=PropertyChanged}"
+                                                     Width="70" HorizontalAlignment="Left" Margin="0,2" ToolTip="HH:mm" />
+                                            <TextBlock Grid.Row="1" Text="Length" Style="{StaticResource FieldLabel}" />
+                                            <ComboBox Grid.Row="1" Grid.Column="1" Style="{StaticResource FreeComboBox}" ItemsSource="{Binding PeriodLengths}"
+                                                      SelectedItem="{Binding NewPeriodLength}" DisplayMemberPath="Label" Width="110" HorizontalAlignment="Left" Margin="0,2" />
+                                            <TextBlock Grid.Row="2" Text="Focus" Style="{StaticResource FieldLabel}" />
+                                            <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource FreeTextBox}" Text="{Binding NewPeriodFocus, UpdateSourceTrigger=PropertyChanged}"
+                                                     Margin="0,2" ToolTip="e.g. Initial response, rescue, evacuation, fire containment" />
+                                        </Grid>
+                                        <Button Content="Start period and draft its IAP" Command="{Binding StartPeriodCommand}" HorizontalAlignment="Left" Margin="0,8,0,0" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2" Visibility="{Binding HasPlan, Converter={StaticResource BoolToVisibility}}">
+                                <Border Style="{StaticResource Card}" BorderBrush="{StaticResource WarningBrush}"
+                                        Visibility="{Binding ReturnNote, Converter={x:Static vm:Converters.TextToVisible}}">
+                                    <TextBlock Text="{Binding ReturnNote}" TextWrapping="Wrap" Foreground="{StaticResource WarningBrush}" />
+                                </Border>
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <TextBlock Text="COMMANDER'S INTENT" Style="{StaticResource SectionTitle}" />
+                                        <TextBlock Style="{StaticResource Hint}" Text="The purpose behind the objectives, in a sentence or two: what success looks like at the end of this period." />
+                                        <TextBox Style="{StaticResource MultiLine}" Text="{Binding CommandersIntent, UpdateSourceTrigger=PropertyChanged}" Height="70"
+                                                 IsReadOnly="{Binding IsReadOnly}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Style="{StaticResource PullButton}" CommandParameter="Situation" Content="Pull from COP" />
+                                            <TextBlock Text="SITUATION SUMMARY" Style="{StaticResource SectionTitle}" />
+                                        </DockPanel>
+                                        <TextBox Style="{StaticResource MultiLine}" Text="{Binding SituationSummary, UpdateSourceTrigger=PropertyChanged}" Height="90"
+                                                 IsReadOnly="{Binding IsReadOnly}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Card}" Visibility="{Binding FindingsTitle, Converter={x:Static vm:Converters.TextToVisible}}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding FindingsTitle}" Style="{StaticResource SectionTitle}" />
+                                        <TextBlock Style="{StaticResource Hint}" Text="How the plan in force compares with what the COP shows now (§8.6). Use it to revise this period's plan or shape the next one." />
+                                        <ItemsControl ItemsSource="{Binding Findings}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding StringFormat='• {0}'}" TextWrapping="Wrap" Margin="0,1" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- 1: Objectives (ICS 202) -->
+                <TabItem>
+                    <Grid>
+                        <TextBlock Text="Start an operational period to draft a plan." Style="{StaticResource Hint}" Margin="16"
+                                   Visibility="{Binding HasPlan, Converter={x:Static vm:Converters.FalseToVisible}}" />
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding HasPlan, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel Margin="16">
+                                <TextBlock Text="OBJECTIVES · strategic → operational → tactical" Style="{StaticResource SectionTitle}" />
+                                <TextBlock Style="{StaticResource Hint}"
+                                           Text="Strategic objectives say what must be achieved; each needs operational objectives for this period with a measurable target, and tactics that say how. Track progress once the plan is in force." />
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,12"
+                                            Visibility="{Binding IsEditable, Converter={StaticResource BoolToVisibility}}">
+                                    <ComboBox ItemsSource="{Binding StrategicSuggestions}" Text="{Binding NewStrategic, UpdateSourceTrigger=PropertyChanged}"
+                                              IsEditable="True" Width="360" ToolTip="Pick or type a strategic objective" />
+                                    <Button Style="{StaticResource EditButton}" Content="+ Add strategic objective" Command="{Binding AddStrategicCommand}" />
+                                </StackPanel>
+
+                                <ItemsControl ItemsSource="{Binding Objectives}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type iap:StrategicEntry}">
+                                            <Border Style="{StaticResource Card}">
+                                                <StackPanel>
+                                                    <DockPanel>
+                                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Number}" FontSize="15" FontWeight="Bold" Width="30" VerticalAlignment="Center" />
+                                                        <Button DockPanel.Dock="Right" Style="{StaticResource RemoveButton}" />
+                                                        <TextBox Text="{Binding Statement, UpdateSourceTrigger=PropertyChanged}" FontSize="14" FontWeight="SemiBold" />
+                                                    </DockPanel>
+
+                                                    <ItemsControl ItemsSource="{Binding Operational}" Margin="30,8,0,0">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate DataType="{x:Type iap:OperationalEntry}">
+                                                                <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="2,0,0,0" Padding="10,4,0,4" Margin="0,0,0,10">
+                                                                    <StackPanel>
+                                                                        <DockPanel>
+                                                                            <TextBlock DockPanel.Dock="Left" Text="{Binding Number}" FontWeight="SemiBold" Width="34" VerticalAlignment="Center" />
+                                                                            <Button DockPanel.Dock="Right" Style="{StaticResource RemoveButton}" />
+                                                                            <ComboBox DockPanel.Dock="Right" Style="{StaticResource FreeComboBox}" Width="110" Margin="6,0,0,0"
+                                                                                      ItemsSource="{Binding DataContext.ProgressOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                                      SelectedItem="{Binding Progress}" ToolTip="Progress (tracked on the COP, across versions)" />
+                                                                            <TextBox Text="{Binding Statement, UpdateSourceTrigger=PropertyChanged}" />
+                                                                        </DockPanel>
+                                                                        <Grid Margin="34,4,0,0">
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="Auto" />
+                                                                                <ColumnDefinition Width="*" />
+                                                                                <ColumnDefinition Width="Auto" />
+                                                                                <ColumnDefinition Width="60" />
+                                                                                <ColumnDefinition Width="Auto" />
+                                                                                <ColumnDefinition Width="*" />
+                                                                            </Grid.ColumnDefinitions>
+                                                                            <Grid.RowDefinitions>
+                                                                                <RowDefinition Height="Auto" />
+                                                                                <RowDefinition Height="Auto" />
+                                                                            </Grid.RowDefinitions>
+                                                                            <TextBlock Text="Target" Style="{StaticResource FieldLabel}" Margin="0,0,6,0" />
+                                                                            <TextBox Grid.Column="1" Text="{Binding PerformanceTarget, UpdateSourceTrigger=PropertyChanged}" Margin="0,2"
+                                                                                     ToolTip="What done looks like, e.g. Initial evacuation completed" />
+                                                                            <TextBlock Grid.Column="2" Text="by" Style="{StaticResource FieldLabel}" Margin="8,0,6,0" />
+                                                                            <TextBox Grid.Column="3" Text="{Binding TargetTime, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" ToolTip="HH:mm" />
+                                                                            <TextBlock Grid.Column="4" Text="Responsible" Style="{StaticResource FieldLabel}" Margin="8,0,6,0" />
+                                                                            <TextBox Grid.Column="5" Text="{Binding Responsible, UpdateSourceTrigger=PropertyChanged}" Margin="0,2"
+                                                                                     ToolTip="Section or group, e.g. Operations, Evacuation Group" />
+                                                                            <TextBlock Grid.Row="1" Text="Resources" Style="{StaticResource FieldLabel}" Margin="0,0,6,0" />
+                                                                            <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="5" Text="{Binding ResourcesSummary, UpdateSourceTrigger=PropertyChanged}"
+                                                                                     Margin="0,2" ToolTip="e.g. 12 police units, 2 buses, 4 emergency management personnel" />
+                                                                        </Grid>
+                                                                        <TextBlock Text="TACTICS" Style="{StaticResource ColumnHeader}" Margin="34,6,0,2" />
+                                                                        <ItemsControl ItemsSource="{Binding Tactics}" Margin="34,0,0,0">
+                                                                            <ItemsControl.ItemTemplate>
+                                                                                <DataTemplate DataType="{x:Type iap:TacticEntry}">
+                                                                                    <DockPanel Margin="0,1">
+                                                                                        <TextBlock DockPanel.Dock="Left" Text="•" Width="14" VerticalAlignment="Center" />
+                                                                                        <Button DockPanel.Dock="Right" Style="{StaticResource RemoveButton}" />
+                                                                                        <TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" />
+                                                                                    </DockPanel>
+                                                                                </DataTemplate>
+                                                                            </ItemsControl.ItemTemplate>
+                                                                        </ItemsControl>
+                                                                        <StackPanel Orientation="Horizontal" Margin="48,3,0,0"
+                                                                                    Visibility="{Binding DataContext.IsEditable, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
+                                                                            <ComboBox ItemsSource="{Binding DataContext.TacticSuggestions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                                      Text="{Binding NewTactic, UpdateSourceTrigger=PropertyChanged}" IsEditable="True" Width="260" />
+                                                                            <Button Style="{StaticResource EditButton}" Content="+ Tactic" Command="{Binding AddTacticCommand}" />
+                                                                        </StackPanel>
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+
+                                                    <StackPanel Orientation="Horizontal" Margin="30,0,0,0"
+                                                                Visibility="{Binding DataContext.IsEditable, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
+                                                        <ComboBox ItemsSource="{Binding Suggestions}" Text="{Binding NewOperational, UpdateSourceTrigger=PropertyChanged}"
+                                                                  IsEditable="True" Width="380" ToolTip="Pick or type an operational objective" />
+                                                        <Button Style="{StaticResource EditButton}" Content="+ Operational objective" Command="{Binding AddOperationalCommand}" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </TabItem>
+
+                <!-- 2: Organisation (ICS 203) and chart -->
+                <TabItem>
+                    <Grid>
+                        <TextBlock Text="Start an operational period to draft a plan." Style="{StaticResource Hint}" Margin="16"
+                                   Visibility="{Binding HasPlan, Converter={x:Static vm:Converters.FalseToVisible}}" />
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                      Visibility="{Binding HasPlan, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel Margin="16">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="460" />
+                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="*" MinWidth="420" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Style="{StaticResource Card}">
+                                        <StackPanel>
+                                            <DockPanel>
+                                                <Button DockPanel.Dock="Right" Style="{StaticResource PullButton}" CommandParameter="Organisation" Content="Pull from COP" />
+                                                <TextBlock Text="POSITIONS" Style="{StaticResource SectionTitle}" />
+                                            </DockPanel>
+                                            <ItemsControl ItemsSource="{Binding Positions}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="{x:Type iap:PositionEntry}">
+                                                        <Grid Margin="0,2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="190" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel>
+                                                                <TextBlock Text="{Binding Label}" />
+                                                                <TextBlock Text="{Binding Staff}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                            </StackPanel>
+                                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" ToolTip="Leave empty: the IC retains the function" />
+                                                                <TextBlock Text="{Binding CopHolder}" FontSize="10" Foreground="{StaticResource WarningBrush}"
+                                                                           Visibility="{Binding CopHolder, Converter={x:Static vm:Converters.TextToVisible}}" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Grid.Column="2" Style="{StaticResource Card}" VerticalAlignment="Top">
+                                        <StackPanel>
+                                            <DockPanel>
+                                                <Button DockPanel.Dock="Right" Style="{StaticResource EditButton}" Content="+ Group / division" Command="{Binding AddGroupCommand}" />
+                                                <TextBlock Text="GROUPS &amp; DIVISIONS (under Operations)" Style="{StaticResource SectionTitle}" />
+                                            </DockPanel>
+                                            <TextBlock Style="{StaticResource Hint}" Text="Functional groups (Fire Group, Medical Group) or geographic divisions (Division A). Assign units to them on the Assignments page; keep each supervisor to 3–7 resources." />
+                                            <Grid Margin="0,0,0,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="90" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="30" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="Name" Style="{StaticResource ColumnHeader}" />
+                                                <TextBlock Grid.Column="1" Text="Kind" Style="{StaticResource ColumnHeader}" />
+                                                <TextBlock Grid.Column="2" Text="Supervisor" Style="{StaticResource ColumnHeader}" />
+                                            </Grid>
+                                            <ItemsControl ItemsSource="{Binding Groups}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="{x:Type iap:GroupEntry}">
+                                                        <Grid Margin="0,1">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="90" />
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="30" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,4,0" />
+                                                            <ComboBox Grid.Column="1" ItemsSource="{Binding DataContext.GroupKinds, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                      SelectedItem="{Binding Kind}" Margin="0,0,4,0" />
+                                                            <TextBox Grid.Column="2" Text="{Binding Supervisor, UpdateSourceTrigger=PropertyChanged}" />
+                                                            <Button Grid.Column="3" Style="{StaticResource RemoveButton}" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+
+                                <!-- The organisation chart the plan describes (ICS 207). -->
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <TextBlock Text="ORGANISATION CHART" Style="{StaticResource SectionTitle}" />
+                                        <TextBlock Style="{StaticResource Hint}" Text="Drawn from this plan. Dashed boxes are vacant (the IC keeps the function); red marks a supervisor over the span of control or a unit the COP shows can't do its job." />
+                                        <Grid Width="{Binding Chart.Width}" Height="{Binding Chart.Height}" HorizontalAlignment="Left">
+                                            <ItemsControl ItemsSource="{Binding Chart.Lines}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <Canvas />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Polyline Points="{Binding}" Stroke="{StaticResource MutedTextBrush}" StrokeThickness="1.2" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <ItemsControl ItemsSource="{Binding Chart.Nodes}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <Canvas />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemContainerStyle>
+                                                    <Style TargetType="ContentPresenter">
+                                                        <Setter Property="Canvas.Left" Value="{Binding X}" />
+                                                        <Setter Property="Canvas.Top" Value="{Binding Y}" />
+                                                    </Style>
+                                                </ItemsControl.ItemContainerStyle>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="{x:Type iap:OrgNode}">
+                                                        <Grid Width="{Binding Width}" Height="{Binding Height}">
+                                                            <Rectangle x:Name="Frame" Fill="{StaticResource PanelRaisedBrush}" Stroke="{StaticResource AccentBrush}"
+                                                                       StrokeThickness="1.2" RadiusX="3" RadiusY="3" />
+                                                            <StackPanel Margin="7,4">
+                                                                <DockPanel>
+                                                                    <TextBlock x:Name="SpanText" DockPanel.Dock="Right" Text="{Binding Span}" FontSize="9"
+                                                                               Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+                                                                    <TextBlock Text="{Binding Title}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
+                                                                </DockPanel>
+                                                                <TextBlock x:Name="NameText" Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                                <ItemsControl ItemsSource="{Binding Members}" Margin="0,3,0,0">
+                                                                    <ItemsControl.ItemTemplate>
+                                                                        <DataTemplate DataType="{x:Type iap:OrgMember}">
+                                                                            <TextBlock x:Name="Member" Text="{Binding Text}" FontSize="10" Height="15" TextTrimming="CharacterEllipsis" />
+                                                                            <DataTemplate.Triggers>
+                                                                                <DataTrigger Binding="{Binding HasProblem}" Value="True">
+                                                                                    <Setter TargetName="Member" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                                                </DataTrigger>
+                                                                            </DataTemplate.Triggers>
+                                                                        </DataTemplate>
+                                                                    </ItemsControl.ItemTemplate>
+                                                                </ItemsControl>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                        <DataTemplate.Triggers>
+                                                            <DataTrigger Binding="{Binding IsVacant}" Value="True">
+                                                                <Setter TargetName="Frame" Property="Stroke" Value="{StaticResource BorderBrush}" />
+                                                                <Setter TargetName="Frame" Property="StrokeDashArray" Value="4 3" />
+                                                                <Setter TargetName="Frame" Property="Fill" Value="{StaticResource PanelBrush}" />
+                                                                <Setter TargetName="NameText" Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                                                                <Setter TargetName="NameText" Property="FontWeight" Value="Normal" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding IsOverloaded}" Value="True">
+                                                                <Setter TargetName="Frame" Property="Stroke" Value="{StaticResource CriticalBrush}" />
+                                                                <Setter TargetName="SpanText" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                            </DataTrigger>
+                                                        </DataTemplate.Triggers>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </TabItem>
+
+                <!-- 3: Assignments (ICS 204) -->
+                <TabItem>
+                    <Grid>
+                        <TextBlock Text="Start an operational period to draft a plan." Style="{StaticResource Hint}" Margin="16"
+                                   Visibility="{Binding HasPlan, Converter={x:Static vm:Converters.FalseToVisible}}" />
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding HasPlan, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel Margin="16">
+                                <DockPanel Margin="0,0,0,4">
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                                                Visibility="{Binding IsEditable, Converter={StaticResource BoolToVisibility}}">
+                                        <Button Style="{StaticResource PullButton}" CommandParameter="Assignments" Content="Pull committed units from COP" />
+                                        <ComboBox ItemsSource="{Binding AddableUnits}" SelectedItem="{Binding UnitToAdd}" DisplayMemberPath="Label" Width="200" Margin="12,0,0,0"
+                                                  ToolTip="Units at the incident or available; briefing dispatches available units" />
+                                        <Button Style="{StaticResource EditButton}" Content="+ Add unit" Command="{Binding AddAssignmentCommand}" />
+                                    </StackPanel>
+                                    <TextBlock Text="RESOURCE ASSIGNMENTS · unit → assignment" Style="{StaticResource SectionTitle}" VerticalAlignment="Center" />
+                                </DockPanel>
+                                <TextBlock Style="{StaticResource Hint}" Text="What each resource does this period, under which group, and for which objective. The COP column shows what the unit is doing now; red means the plan is no longer viable for it." />
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="190" />
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="230" />
+                                        <ColumnDefinition Width="30" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Unit" Style="{StaticResource ColumnHeader}" />
+                                    <TextBlock Grid.Column="1" Text="On the COP now" Style="{StaticResource ColumnHeader}" />
+                                    <TextBlock Grid.Column="2" Text="Group / division" Style="{StaticResource ColumnHeader}" />
+                                    <TextBlock Grid.Column="3" Text="Assignment" Style="{StaticResource ColumnHeader}" />
+                                    <TextBlock Grid.Column="4" Text="Objective" Style="{StaticResource ColumnHeader}" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Assignments}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type iap:AssignmentEntry}">
+                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,4">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="150" />
+                                                        <ColumnDefinition Width="190" />
+                                                        <ColumnDefinition Width="150" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="230" />
+                                                        <ColumnDefinition Width="30" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Callsign}" FontWeight="SemiBold" />
+                                                        <TextBlock Text="{Binding UnitType}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,6,0">
+                                                        <TextBlock Text="{Binding CopStatus}" TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Text="{Binding Problem, StringFormat='⚠ {0}'}" FontSize="10" TextWrapping="Wrap"
+                                                                   Foreground="{StaticResource CriticalBrush}"
+                                                                   Visibility="{Binding Problem, Converter={x:Static vm:Converters.TextToVisible}}" />
+                                                    </StackPanel>
+                                                    <ComboBox Grid.Column="2" IsEditable="True" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                              ItemsSource="{Binding DataContext.GroupNames, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                              Text="{Binding Group, UpdateSourceTrigger=PropertyChanged}" ToolTip="Empty: reports directly to Operations" />
+                                                    <ComboBox Grid.Column="3" IsEditable="True" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                              ItemsSource="{Binding DataContext.TacticSuggestions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                              Text="{Binding Assignment, UpdateSourceTrigger=PropertyChanged}" />
+                                                    <ComboBox Grid.Column="4" VerticalAlignment="Center"
+                                                              ItemsSource="{Binding DataContext.ObjectiveOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                              DisplayMemberPath="Label" SelectedValuePath="Id" SelectedValue="{Binding ObjectiveId}" />
+                                                    <Button Grid.Column="5" Style="{StaticResource RemoveButton}" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </TabItem>
+
+                <!-- 4: Communications (ICS 205) -->
+                <TabItem>
+                    <Grid>
+                        <TextBlock Text="Start an operational period to draft a plan." Style="{StaticResource Hint}" Margin="16"
+                                   Visibility="{Binding HasPlan, Converter={x:Static vm:Converters.FalseToVisible}}" />
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding HasPlan, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel Margin="16" MaxWidth="1100" HorizontalAlignment="Left">
+                                <DockPanel Margin="0,0,0,4">
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                        <Button Style="{StaticResource PullButton}" CommandParameter="Communications" Content="Pull from COP" />
+                                        <Button Style="{StaticResource EditButton}" Content="+ Channel" Command="{Binding AddChannelCommand}" />
+                                    </StackPanel>
+                                    <TextBlock Text="COMMUNICATIONS PLAN · who talks on which channel" Style="{StaticResource SectionTitle}" VerticalAlignment="Center" />
+                                </DockPanel>
+                                <TextBlock Style="{StaticResource Hint}" Text="One command channel, a tactical channel per group or division, and an inter-agency talkgroup when more than one service is on scene." />
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="30" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Function" Style="{StaticResource ColumnHeader}" />
+                                    <TextBlock Grid.Column="1" Text="Channel / talkgroup" Style="{StaticResource ColumnHeader}" />
+                                    <TextBlock Grid.Column="2" Text="Assigned to" Style="{StaticResource ColumnHeader}" />
+                                    <TextBlock Grid.Column="3" Text="Remarks" Style="{StaticResource ColumnHeader}" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Channels}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type iap:ChannelEntry}">
+                                            <Grid Margin="0,1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="170" />
+                                                    <ColumnDefinition Width="150" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="30" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox Text="{Binding Function, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,4,0" />
+                                                <TextBox Grid.Column="1" Text="{Binding Channel, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,4,0" FontFamily="Consolas" />
+                                                <TextBox Grid.Column="2" Text="{Binding AssignedTo, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,4,0" />
+                                                <TextBox Grid.Column="3" Text="{Binding Remarks, UpdateSourceTrigger=PropertyChanged}" />
+                                                <Button Grid.Column="4" Style="{StaticResource RemoveButton}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="NOTES" Style="{StaticResource PanelHeader}" Margin="0,12,0,4" />
+                                <TextBox Style="{StaticResource MultiLine}" Text="{Binding CommsNotes, UpdateSourceTrigger=PropertyChanged}" Height="60"
+                                         IsReadOnly="{Binding IsReadOnly}" ToolTip="e.g. phone numbers, call-sign conventions, radio discipline" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </TabItem>
+
+                <!-- 5: Medical (ICS 206) -->
+                <TabItem>
+                    <Grid>
+                        <TextBlock Text="Start an operational period to draft a plan." Style="{StaticResource Hint}" Margin="16"
+                                   Visibility="{Binding HasPlan, Converter={x:Static vm:Converters.FalseToVisible}}" />
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding HasPlan, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel Margin="16" MaxWidth="1100" HorizontalAlignment="Left">
+                                <DockPanel Margin="0,0,0,8">
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource PullButton}" CommandParameter="Medical" Content="Pull hospitals from GIS" />
+                                    <TextBlock Text="MEDICAL PLAN · casualty care and responder injuries" Style="{StaticResource SectionTitle}" VerticalAlignment="Center" />
+                                </DockPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="190" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Text="Medical lead" Style="{StaticResource FieldLabel}" />
+                                    <TextBox Grid.Column="1" Text="{Binding MedicalLead, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" />
+                                    <TextBlock Grid.Row="1" Text="Casualty clearing station" Style="{StaticResource FieldLabel}" />
+                                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding CasualtyClearingStation, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" />
+                                    <TextBlock Grid.Row="2" Text="Ambulance loading point" Style="{StaticResource FieldLabel}" />
+                                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding AmbulanceLoadingPoint, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" />
+                                </Grid>
+                                <DockPanel Margin="0,14,0,4">
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource EditButton}" Content="+ Hospital" Command="{Binding AddHospitalCommand}" />
+                                    <TextBlock Text="RECEIVING HOSPITALS (blue-light road time from the incident)" Style="{StaticResource PanelHeader}" VerticalAlignment="Center" Margin="0" />
+                                </DockPanel>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="70" />
+                                        <ColumnDefinition Width="70" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="30" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Hospital" Style="{StaticResource ColumnHeader}" />
+                                    <TextBlock Grid.Column="1" Text="Minutes" Style="{StaticResource ColumnHeader}" />
+                                    <TextBlock Grid.Column="2" Text="Distance" Style="{StaticResource ColumnHeader}" />
+                                    <TextBlock Grid.Column="3" Text="Capabilities" Style="{StaticResource ColumnHeader}" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Hospitals}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type iap:HospitalEntry}">
+                                            <Grid Margin="0,1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="70" />
+                                                    <ColumnDefinition Width="70" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="30" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,4,0" />
+                                                <TextBox Grid.Column="1" Text="{Binding TravelMinutes, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,4,0" />
+                                                <TextBlock Grid.Column="2" Text="{Binding Distance}" VerticalAlignment="Center" Foreground="{StaticResource MutedTextBrush}" />
+                                                <TextBox Grid.Column="3" Text="{Binding Capabilities, UpdateSourceTrigger=PropertyChanged}" />
+                                                <Button Grid.Column="4" Style="{StaticResource RemoveButton}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="IF A RESPONDER IS INJURED" Style="{StaticResource PanelHeader}" Margin="0,14,0,4" />
+                                <TextBox Style="{StaticResource MultiLine}" Text="{Binding EmergencyProcedures, UpdateSourceTrigger=PropertyChanged}" Height="60"
+                                         IsReadOnly="{Binding IsReadOnly}" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </TabItem>
+
+                <!-- 6: Safety (ICS 208) -->
+                <TabItem>
+                    <Grid>
+                        <TextBlock Text="Start an operational period to draft a plan." Style="{StaticResource Hint}" Margin="16"
+                                   Visibility="{Binding HasPlan, Converter={x:Static vm:Converters.FalseToVisible}}" />
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding HasPlan, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel Margin="16" MaxWidth="1100" HorizontalAlignment="Left">
+                                <DockPanel Margin="0,0,0,8">
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                        <Button Style="{StaticResource PullButton}" CommandParameter="Safety" Content="Pull hazards from COP" />
+                                        <Button Style="{StaticResource EditButton}" Content="+ Hazard" Command="{Binding AddHazardCommand}" />
+                                    </StackPanel>
+                                    <TextBlock Text="SAFETY PLAN · hazards, mitigations, PPE and the safety message" Style="{StaticResource SectionTitle}" VerticalAlignment="Center" />
+                                </DockPanel>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="300" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="30" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Hazard" Style="{StaticResource ColumnHeader}" />
+                                    <TextBlock Grid.Column="1" Text="Mitigation" Style="{StaticResource ColumnHeader}" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Hazards}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type iap:HazardEntry}">
+                                            <Grid Margin="0,1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="300" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="30" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox Text="{Binding Hazard, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,4,0" />
+                                                <TextBox Grid.Column="1" Text="{Binding Mitigation, UpdateSourceTrigger=PropertyChanged}" />
+                                                <Button Grid.Column="2" Style="{StaticResource RemoveButton}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <TextBlock Text="PERSONAL PROTECTIVE EQUIPMENT" Style="{StaticResource PanelHeader}" Margin="0,14,0,4" />
+                                <ItemsControl ItemsSource="{Binding Ppe}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type iap:TextEntry}">
+                                            <DockPanel Margin="0,1">
+                                                <TextBlock DockPanel.Dock="Left" Text="•" Width="14" VerticalAlignment="Center" />
+                                                <Button DockPanel.Dock="Right" Style="{StaticResource RemoveButton}" />
+                                                <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" />
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <StackPanel Orientation="Horizontal" Margin="14,3,0,0" Visibility="{Binding IsEditable, Converter={StaticResource BoolToVisibility}}">
+                                    <ComboBox ItemsSource="{Binding PpeSuggestions}" Text="{Binding NewPpe, UpdateSourceTrigger=PropertyChanged}" IsEditable="True" Width="360" />
+                                    <Button Style="{StaticResource EditButton}" Content="+ PPE" Command="{Binding AddPpeCommand}" />
+                                </StackPanel>
+
+                                <TextBlock Text="ACCOUNTABILITY" Style="{StaticResource PanelHeader}" Margin="0,14,0,4" />
+                                <TextBox Text="{Binding Accountability, UpdateSourceTrigger=PropertyChanged}" ToolTip="e.g. BA entry control at the inner cordon; tally system" />
+
+                                <TextBlock Text="SAFETY MESSAGE (read at every briefing)" Style="{StaticResource PanelHeader}" Margin="0,14,0,4" />
+                                <TextBox Style="{StaticResource MultiLine}" Text="{Binding SafetyMessage, UpdateSourceTrigger=PropertyChanged}" Height="80"
+                                         IsReadOnly="{Binding IsReadOnly}" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </TabItem>
+
+                <!-- 7: Review & approval -->
+                <TabItem>
+                    <Grid>
+                        <TextBlock Text="Start an operational period to draft a plan." Style="{StaticResource Hint}" Margin="16"
+                                   Visibility="{Binding HasPlan, Converter={x:Static vm:Converters.FalseToVisible}}" />
+                        <Grid Margin="16" Visibility="{Binding HasPlan, Converter={StaticResource BoolToVisibility}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="460" />
+                                <ColumnDefinition Width="16" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <DockPanel Grid.Column="0">
+                                <Border DockPanel.Dock="Top" Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <TextBlock Text="APPROVAL" Style="{StaticResource SectionTitle}" />
+                                        <TextBlock Text="{Binding PlanTitle}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding PlanStatus}" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,8" />
+
+                                        <StackPanel Visibility="{Binding CanSubmit, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock Style="{StaticResource Hint}" Text="The Planning Section submits the draft; errors must be fixed first. Warnings go to the IC with the plan." />
+                                            <Button Content="Submit for approval" Command="{Binding SubmitCommand}" HorizontalAlignment="Left" Margin="0" />
+                                        </StackPanel>
+
+                                        <StackPanel Visibility="{Binding CanDecide, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock Style="{StaticResource Hint}" Text="As Incident Commander: approve the plan to put it in force, or return it with what to change." />
+                                            <Button Content="Approve: put the plan in force" Command="{Binding ApproveCommand}" HorizontalAlignment="Left" Margin="0,0,0,8"
+                                                    BorderBrush="{StaticResource OkBrush}" />
+                                            <TextBox Style="{StaticResource FreeTextBox}" Text="{Binding ReturnComments, UpdateSourceTrigger=PropertyChanged}"
+                                                     ToolTip="What the planner should change" />
+                                            <Button Content="Return for revision" Command="{Binding ReturnPlanCommand}" HorizontalAlignment="Left" Margin="0,4,0,0" />
+                                        </StackPanel>
+
+                                        <StackPanel Visibility="{Binding CanBrief, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock Style="{StaticResource Hint}"
+                                                       Text="Briefing pushes the plan to the COP: staffs positions, forms groups, dispatches planned units that are available, places units in their groups and orders every unit whose assignment changed since the last briefing." />
+                                            <Button Content="Brief: push assignments" Command="{Binding BriefCommand}" HorizontalAlignment="Left" Margin="0"
+                                                    BorderBrush="{StaticResource AccentBrush}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock DockPanel.Dock="Top" Style="{StaticResource PanelHeader}" Margin="0,4,0,4">
+                                    <Run Text="ICS COMPLIANCE ·" />
+                                    <Run Text="{Binding ErrorCount, Mode=OneWay, StringFormat='{}{0} error(s),'}" />
+                                    <Run Text="{Binding WarningCount, Mode=OneWay, StringFormat='{}{0} warning(s)'}" />
+                                </TextBlock>
+                                <Grid>
+                                    <ListBox x:Name="IssueList" ItemsSource="{Binding Issues}" MouseDoubleClick="IssueList_MouseDoubleClick"
+                                             ToolTip="Double-click to go to the section">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type iap:IssueRow}">
+                                                <DockPanel Margin="0,2">
+                                                    <TextBlock x:Name="Mark" DockPanel.Dock="Left" Text="▲" Width="16" Foreground="{StaticResource WarningBrush}" />
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+                                                        <TextBlock Text="{Binding Section}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                    </StackPanel>
+                                                </DockPanel>
+                                                <DataTemplate.Triggers>
+                                                    <DataTrigger Binding="{Binding IsError}" Value="True">
+                                                        <Setter TargetName="Mark" Property="Text" Value="●" />
+                                                        <Setter TargetName="Mark" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    </DataTrigger>
+                                                </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                    <TextBlock Text="No compliance issues." Style="{StaticResource Hint}"
+                                               Visibility="{Binding Issues.Count, Converter={x:Static vm:Converters.ZeroToVisible}}" />
+                                </Grid>
+                            </DockPanel>
+
+                            <Border Grid.Column="2" Style="{StaticResource Card}" Margin="0">
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Top" Text="THE PLAN AS IT WILL BE BRIEFED" Style="{StaticResource SectionTitle}" />
+                                    <TextBox Style="{StaticResource FreeTextBox}" Text="{Binding DocumentText, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas"
+                                             VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" VerticalContentAlignment="Top"
+                                             Background="{StaticResource BackgroundBrush}" BorderThickness="0" />
+                                </DockPanel>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </TabItem>
+            </TabControl>
+        </Grid>
+
+        <!-- ===== Footer: result of the last action ===== -->
+        <Border Grid.Row="2" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="14,5">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Foreground="{StaticResource WarningBrush}" Text="● Unsaved changes"
+                           Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisibility}}" />
+                <TextBlock Text="{Binding Message}" TextTrimming="CharacterEllipsis">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding MessageFailed}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>

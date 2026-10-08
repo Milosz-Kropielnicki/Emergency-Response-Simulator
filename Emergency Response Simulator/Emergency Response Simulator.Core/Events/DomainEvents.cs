@@ -45,6 +45,15 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(ApprovalDecided), nameof(ApprovalDecided))]
 [JsonDerivedType(typeof(NotificationSent), nameof(NotificationSent))]
 [JsonDerivedType(typeof(NotificationAnswered), nameof(NotificationAnswered))]
+// Incident Action Plan (Phase 5)
+[JsonDerivedType(typeof(OperationalPeriodStarted), nameof(OperationalPeriodStarted))]
+[JsonDerivedType(typeof(IapDraftCreated), nameof(IapDraftCreated))]
+[JsonDerivedType(typeof(IapDraftSaved), nameof(IapDraftSaved))]
+[JsonDerivedType(typeof(IapSubmitted), nameof(IapSubmitted))]
+[JsonDerivedType(typeof(IapReturned), nameof(IapReturned))]
+[JsonDerivedType(typeof(IapApproved), nameof(IapApproved))]
+[JsonDerivedType(typeof(IapBriefed), nameof(IapBriefed))]
+[JsonDerivedType(typeof(ObjectiveStatusChanged), nameof(ObjectiveStatusChanged))]
 // Truth: the world as it really is
 [JsonDerivedType(typeof(WorldIncidentStarted), nameof(WorldIncidentStarted))]
 [JsonDerivedType(typeof(WorldIncidentChanged), nameof(WorldIncidentChanged))]
@@ -232,6 +241,46 @@ public sealed record ApprovalDecided(Guid ApprovalId, bool Approved, string? Not
 public sealed record NotificationSent(Guid NotificationId, Guid? IncidentId, string Recipient, string Message) : DomainEvent;
 
 public sealed record NotificationAnswered(Guid NotificationId, string Reply) : DomainEvent;
+
+// ---- Incident Action Plan (Design Document §8.2–8.7, §19) ----
+
+/// <summary>
+/// A new planning window. If it starts before the previous period's planned end, that period is cut short.
+/// </summary>
+public sealed record OperationalPeriodStarted(
+    Guid PeriodId,
+    Guid IncidentId,
+    int Number,
+    DateTimeOffset Start,
+    DateTimeOffset End,
+    string? Focus) : DomainEvent;
+
+/// <summary>A new version of the plan for a period, usually copied from an earlier one.</summary>
+public sealed record IapDraftCreated(
+    Guid PlanId,
+    Guid IncidentId,
+    Guid PeriodId,
+    int Version,
+    Guid? BasedOnId,
+    string? PreparedBy,
+    IapContent Content) : DomainEvent;
+
+/// <summary>The planner saved the draft. Carries the whole document so every saved state can be replayed.</summary>
+public sealed record IapDraftSaved(Guid PlanId, IapContent Content) : DomainEvent;
+
+public sealed record IapSubmitted(Guid PlanId, string SubmittedBy) : DomainEvent;
+
+/// <summary>The approver sent the plan back; it becomes an editable draft again.</summary>
+public sealed record IapReturned(Guid PlanId, string ReturnedBy, string Comments) : DomainEvent;
+
+/// <summary>The plan is in force. Earlier approved versions for the same period are superseded.</summary>
+public sealed record IapApproved(Guid PlanId, string ApprovedBy) : DomainEvent;
+
+/// <summary>The plan's assignments were pushed to the units as orders.</summary>
+public sealed record IapBriefed(Guid PlanId, int OrdersIssued) : DomainEvent;
+
+/// <summary>Progress on an operational objective, tracked across versions and periods.</summary>
+public sealed record ObjectiveStatusChanged(Guid IncidentId, Guid ObjectiveId, ObjectiveStatus Status) : DomainEvent;
 
 /// <summary>
 /// Weather as reported to command by a met service or station. May lag or differ from the true

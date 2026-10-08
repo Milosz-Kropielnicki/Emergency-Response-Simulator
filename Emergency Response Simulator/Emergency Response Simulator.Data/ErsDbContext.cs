@@ -151,13 +151,22 @@ public class ErsDbContext(DbContextOptions<ErsDbContext> options) : DbContext(op
         modelBuilder.Entity<IncidentActionPlan>(b =>
         {
             b.HasIndex(p => new { p.IncidentId, p.OperationalPeriodId, p.Version }).IsUnique();
-            b.OwnsMany(p => p.Objectives, o => o.ToJson());
-            b.OwnsMany(p => p.Organization, o => o.ToJson());
-            b.OwnsMany(p => p.Assignments, o => o.ToJson());
+            // The whole document is one jsonb value, the same shape that travels in the IAP events.
+            b.Property(p => p.Content)
+                .HasColumnType("jsonb")
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Deserialize<IapContent>(v, (JsonSerializerOptions?)null) ?? new IapContent(),
+                    new ValueComparer<IapContent>(
+                        (a, b) => JsonSerializer.Serialize(a, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(b, (JsonSerializerOptions?)null),
+                        v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null).GetHashCode(),
+                        v => v.Clone()));
+            b.Property(p => p.PreparedBy).HasMaxLength(200);
+            b.Property(p => p.SubmittedBy).HasMaxLength(200);
+            b.Property(p => p.ApprovedBy).HasMaxLength(200);
+            b.Property(p => p.ReturnedBy).HasMaxLength(200);
             b.HasOne(p => p.Incident).WithMany().OnDelete(DeleteBehavior.Cascade);
             b.HasOne(p => p.OperationalPeriod).WithMany().OnDelete(DeleteBehavior.Restrict);
-            b.HasOne(p => p.PreparedBy).WithMany().OnDelete(DeleteBehavior.SetNull);
-            b.HasOne(p => p.ApprovedBy).WithMany().OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<EventRecord>(b =>

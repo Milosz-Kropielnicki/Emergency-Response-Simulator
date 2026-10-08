@@ -147,6 +147,9 @@ public enum AlertCategory
     CommunicationFailure,
     Safety,
     Hazard,
+
+    /// <summary>The plan and reality have diverged, or a planning deadline is near (§8.6–8.7).</summary>
+    Planning,
 }
 
 public enum AlertSeverity

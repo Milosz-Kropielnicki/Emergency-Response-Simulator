@@ -21,7 +21,7 @@ public sealed record IncidentRow(
 public sealed record StatusOption(UnitStatus Status, string Label);
 
 /// <summary>Resource board row (Design Document §6.3–6.4).</summary>
-public sealed partial class UnitRow(MainViewModel owner, Unit unit, DateTimeOffset now) : ObservableObject
+public sealed partial class UnitRow(MainViewModel owner, Unit unit, DateTimeOffset now, string? planTask = null) : ObservableObject
 {
     public Guid Id { get; } = unit.Id;
     public string Callsign { get; } = unit.Callsign;
@@ -30,6 +30,9 @@ public sealed partial class UnitRow(MainViewModel owner, Unit unit, DateTimeOffs
     public UnitStatus Status { get; } = unit.Status;
     public string StatusText { get; } = EventDescriber.Humanize(unit.Status);
     public string Assignment { get; } = unit.AssignedIncident?.Number ?? "—";
+
+    /// <summary>The unit's assignment in its incident's approved IAP, e.g. "Exposure protection".</summary>
+    public string PlanTask { get; } = planTask ?? (unit.AssignedIncidentId is null ? "—" : "Not in plan");
     public string Location { get; } = unit.Status == UnitStatus.Available ? unit.HomeStation ?? "Station" :
         unit.Location is { } p ? $"{p.Y:F4}, {p.X:F4}" : "Unknown";
     public int Crew { get; } = unit.CrewSize;

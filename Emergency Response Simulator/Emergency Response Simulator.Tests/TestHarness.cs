@@ -24,6 +24,7 @@ internal sealed class TestHarness
         Engine = new SimulationEngine(Store, World, systems(Cop), new SimulationOptions { StartTime = Start });
         Cop.Follow(Store, Engine.SessionId);
         C2 = new C2Service(Cop, Engine);
+        Iap = new IapService(Cop, Engine, C2, Engine);
         Aar = new AarService(Store);
     }
 
@@ -32,6 +33,7 @@ internal sealed class TestHarness
     public PerceivedState Cop { get; } = new();
     public SimulationEngine Engine { get; }
     public C2Service C2 { get; }
+    public IapService Iap { get; }
     public AarService Aar { get; }
 
     public Task<SimEvent> Perceived(DomainEvent payload) =>

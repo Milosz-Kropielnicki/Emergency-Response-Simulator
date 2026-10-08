@@ -24,6 +24,9 @@ public sealed class PerceivedState : ICopService
     private readonly Dictionary<Guid, ResourceRequest> _requests = [];
     private readonly Dictionary<Guid, ApprovalRequest> _approvals = [];
     private readonly Dictionary<Guid, Notification> _notifications = [];
+    private readonly Dictionary<Guid, OperationalPeriod> _periods = [];
+    private readonly Dictionary<Guid, IncidentActionPlan> _plans = [];
+    private readonly Dictionary<Guid, ObjectiveStatus> _progress = [];
 
     public event EventHandler? Changed;
 
@@ -41,6 +44,13 @@ public sealed class PerceivedState : ICopService
     public IReadOnlyList<ResourceRequest> ResourceRequests => Snapshot(_requests);
     public IReadOnlyList<ApprovalRequest> Approvals => Snapshot(_approvals);
     public IReadOnlyList<Notification> Notifications => Snapshot(_notifications);
+    public IReadOnlyList<OperationalPeriod> OperationalPeriods => Snapshot(_periods);
+    public IReadOnlyList<IncidentActionPlan> ActionPlans => Snapshot(_plans);
+
+    public IReadOnlyDictionary<Guid, ObjectiveStatus> ObjectiveProgress
+    {
+        get { lock (_lock) return new Dictionary<Guid, ObjectiveStatus>(_progress); }
+    }
 
     public Incident? FindIncident(Guid incidentId)
     {
@@ -249,6 +259,65 @@ public sealed class PerceivedState : ICopService
             case NotificationAnswered e when _notifications.TryGetValue(e.NotificationId, out var answered):
                 answered.Reply = e.Reply;
                 answered.RepliedAt = at;
+                break;
+
+            case OperationalPeriodStarted e when _incidents.TryGetValue(e.IncidentId, out var planned):
+                // Starting a period early cuts the previous one short.
+                foreach (var earlier in _periods.Values.Where(p => p.IncidentId == e.IncidentId && p.End > e.Start && p.Start <= e.Start))
+                    earlier.End = e.Start;
+                var period = new OperationalPeriod
+                {
+                    Id = e.PeriodId, IncidentId = e.IncidentId, Incident = planned, Number = e.Number,
+                    Start = e.Start, End = e.End, Focus = e.Focus,
+                };
+                _periods[e.PeriodId] = period;
+                planned.OperationalPeriods.Add(period);
+                break;
+
+            case IapDraftCreated e when _periods.TryGetValue(e.PeriodId, out var draftPeriod):
+                _plans[e.PlanId] = new IncidentActionPlan
+                {
+                    Id = e.PlanId, IncidentId = e.IncidentId, Incident = _incidents.GetValueOrDefault(e.IncidentId),
+                    OperationalPeriodId = e.PeriodId, OperationalPeriod = draftPeriod, Version = e.Version,
+                    BasedOnId = e.BasedOnId, PreparedBy = e.PreparedBy, Content = e.Content.Clone(),
+                    CreatedAt = at, LastSavedAt = at,
+                };
+                break;
+
+            case IapDraftSaved e when _plans.TryGetValue(e.PlanId, out var saved):
+                saved.Content = e.Content.Clone();
+                saved.LastSavedAt = at;
+                break;
+
+            case IapSubmitted e when _plans.TryGetValue(e.PlanId, out var submitted):
+                submitted.Status = IapStatus.PendingApproval;
+                submitted.SubmittedBy = e.SubmittedBy;
+                submitted.SubmittedAt = at;
+                submitted.ReturnedBy = null;
+                submitted.ReturnComments = null;
+                break;
+
+            case IapReturned e when _plans.TryGetValue(e.PlanId, out var returned):
+                returned.Status = IapStatus.Draft;
+                returned.ReturnedBy = e.ReturnedBy;
+                returned.ReturnComments = e.Comments;
+                break;
+
+            case IapApproved e when _plans.TryGetValue(e.PlanId, out var approved):
+                foreach (var older in _plans.Values.Where(p => p.OperationalPeriodId == approved.OperationalPeriodId
+                                                               && p.Status == IapStatus.Approved))
+                    older.Status = IapStatus.Superseded;
+                approved.Status = IapStatus.Approved;
+                approved.ApprovedBy = e.ApprovedBy;
+                approved.ApprovedAt = at;
+                break;
+
+            case IapBriefed e when _plans.TryGetValue(e.PlanId, out var briefed):
+                briefed.BriefedAt = at;
+                break;
+
+            case ObjectiveStatusChanged e:
+                _progress[e.ObjectiveId] = e.Status;
                 break;
 
             case IncidentCreated e:

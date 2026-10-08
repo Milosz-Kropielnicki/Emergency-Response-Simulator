@@ -207,6 +207,63 @@ Everything below goes through `IC2Service`, is validated against the live COP, a
   - a Reassign button on the resource board
   - a history filter for orders, requests and approvals
 
+## IAP builder (Phase 5)
+
+The Incident Action Plan is event-sourced like the rest of the COP. Each step is an IAP event (`OperationalPeriodStarted`, `IapDraftCreated`, `IapDraftSaved`, `IapSubmitted`, `IapReturned`, `IapApproved`, `IapBriefed`, `ObjectiveStatusChanged`), so plans appear in the history, replay and AAR. Saved drafts carry the whole document (`IapContent`). The `incident_action_plans` table stores the same document as jsonb (migration `IapBuilder`).
+
+- **Operational periods:** numbered per incident. Each lasts between 10 minutes and 24 hours. Starting the next period early cuts the previous one short.
+- **Versions and approval workflow:** a period has versions v1, v2, and so on.
+  - A plan moves Draft → Pending approval → Approved. Returning a plan with comments sends it back to Draft.
+  - Approving a new version supersedes the earlier approved one.
+  - Only one version per period can be open at a time.
+  - Approved versions are read-only. A revision is a new version, copied from the latest one.
+- **Starting a draft:**
+  - The first draft of a period is pulled from the COP.
+  - A later period's first draft carries the previous plan forward. Achieved objectives drop out; open ones keep their ids, so progress tracking continues. Everything else is refreshed from the COP.
+- **Objectives:** strategic → operational → tactical.
+  - Each operational objective has a responsible section or group, resources, a performance target with an optional due time, and its tactics.
+  - Suggestions come from `IapTemplates`.
+- **Organisation:** the plan's own ICS 203. The builder draws it as an org chart (vacant positions dashed, spans over the limit in red).
+- **Assignments:** each unit gets a group, an assignment and the objective it serves. A live column shows what the COP says about the unit.
+- **Communications, medical and safety plans:**
+  - The communications plan (ICS 205) gets default talkgroups for the agencies on scene, plus a tactical channel per group.
+  - The medical plan (ICS 206) lists the nearest receiving hospitals from GIS, with blue-light road times. Maternity, dental and rehabilitation hospitals are excluded.
+  - The safety plan (ICS 208) lists hazards from the COP's threats and hazard zones, with suggested mitigations, PPE, accountability and the safety message.
+- **Compliance (`IapCompliance`):**
+  - Errors block submission and approval:
+    - no objectives
+    - a strategic objective without operational objectives
+    - no IC
+    - no channels
+    - no receiving hospital
+    - no safety message
+    - threats on the COP but no hazards in the plan
+    - assignments to unknown groups
+  - Warnings go to the approver with the plan:
+    - objectives that can't be measured or have no tactics
+    - span of control over the limit in the planned organisation
+    - committed units missing from the plan
+    - assignments the COP shows are not viable
+- **Brief (push to the COP):** applies the approved plan through C2:
+  - staffs positions
+  - forms missing groups and stands down groups the plan no longer has once they are empty
+  - dispatches planned units that are available
+  - places units in their groups
+  - orders each unit whose assignment changed since the last briefing (orders get the normal read-back)
+- **Plan against reality (`AttentionMonitor`, category Planning):**
+  - a busy incident with no IAP
+  - a period ending (10 min warning) or ended
+  - a period with no approved plan
+  - a plan awaiting approval
+  - an approved plan not yet briefed
+  - "Plan not viable: Engine 12 is out of service"
+  - an operational objective past its due time
+- **UI:**
+  - an IAP Builder window, opened from the header or the incident panel. It has sections for period and situation (with end-of-period reassessment), each ICS form, and review and approval (compliance list and the plan as text).
+  - the plan summary in the incident panel
+  - an "IAP task" column on the resource board
+  - an "Action plans" history filter
+
 ## Local setup
 
 ```powershell

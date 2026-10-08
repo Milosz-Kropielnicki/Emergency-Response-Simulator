@@ -63,6 +63,9 @@ public sealed class CopView : ICopService
     public IReadOnlyList<ResourceRequest> ResourceRequests => _current.ResourceRequests;
     public IReadOnlyList<ApprovalRequest> Approvals => _current.Approvals;
     public IReadOnlyList<Notification> Notifications => _current.Notifications;
+    public IReadOnlyList<OperationalPeriod> OperationalPeriods => _current.OperationalPeriods;
+    public IReadOnlyList<IncidentActionPlan> ActionPlans => _current.ActionPlans;
+    public IReadOnlyDictionary<Guid, ObjectiveStatus> ObjectiveProgress => _current.ObjectiveProgress;
     public Incident? FindIncident(Guid incidentId) => _current.FindIncident(incidentId);
     public Unit? FindUnit(Guid unitId) => _current.FindUnit(unitId);
 }

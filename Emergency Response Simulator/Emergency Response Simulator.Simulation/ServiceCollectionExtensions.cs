@@ -17,7 +17,7 @@ public static class ServiceCollectionExtensions
 {
     /// <summary>
     /// Registers the engine and its systems, the live COP (and the switchable <see cref="CopView"/> for
-    /// display), C2, AAR and the plume client.
+    /// display), C2, the IAP builder, AAR and the plume client.
     /// An <see cref="IEventStore"/> must be registered separately (in-memory or PostgreSQL).
     /// </summary>
     public static IServiceCollection AddSimulation(this IServiceCollection services, IConfiguration configuration)
@@ -64,6 +64,9 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IC2Service, C2Service>();
         services.AddSingleton<IAarService, AarService>();
+        services.AddSingleton<IIapService>(sp => new IapService(
+            sp.GetRequiredService<ICopService>(), sp.GetRequiredService<IEventPublisher>(), sp.GetRequiredService<IC2Service>(),
+            sp.GetRequiredService<ISimulationControl>(), sp.GetRequiredService<IRoutingService>(), sp.GetService<IGisService>()));
 
         services.AddHttpClient<IPlumeService, HttpPlumeService>((sp, http) =>
         {

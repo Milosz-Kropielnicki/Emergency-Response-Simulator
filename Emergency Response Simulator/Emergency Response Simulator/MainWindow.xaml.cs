@@ -14,6 +14,7 @@ namespace Emergency_Response_Simulator
     {
         private readonly MainViewModel _viewModel;
         private readonly MapController _map;
+        private IapWindow? _iapWindow;
 
         public MainWindow(MainViewModel viewModel, CopView cop, IServiceProvider services, IConfiguration configuration)
         {
@@ -23,11 +24,29 @@ namespace Emergency_Response_Simulator
             // The GIS service only exists when a database is configured.
             _map = new MapController(MapView, viewModel, cop, services.GetService<IGisService>(),
                 services.GetRequiredService<AvlService>(), configuration.GetSection("Map"));
+            viewModel.IapRequested += (_, _) => ShowIapBuilder();
             Loaded += async (_, _) =>
             {
                 await viewModel.Timeline.LoadAsync();
                 await _map.LoadStaticLayersAsync();
             };
+        }
+
+        /// <summary>One builder window; asking again brings it to the front.</summary>
+        private void ShowIapBuilder()
+        {
+            if (_iapWindow is null)
+            {
+                _iapWindow = new IapWindow(_viewModel.Iap) { Owner = this };
+                _iapWindow.Closed += (_, _) => _iapWindow = null;
+                _iapWindow.Show();
+            }
+            else
+            {
+                if (_iapWindow.WindowState == WindowState.Minimized)
+                    _iapWindow.WindowState = WindowState.Normal;
+                _iapWindow.Activate();
+            }
         }
 
         private void TopHoverStrip_MouseEnter(object sender, MouseEventArgs e) => _viewModel.IsTopPanelOpen = true;

@@ -90,6 +90,8 @@
                     </TextBlock>
                     <TextBlock Text="{Binding EventStoreLabel}" Foreground="{StaticResource MutedTextBrush}"
                                VerticalAlignment="Center" Margin="0,0,16,0" />
+                    <Button Content="📋 IAP Builder" Command="{Binding OpenIapCommand}" Margin="0,0,12,0"
+                            ToolTip="Incident Action Plan for the selected incident: objectives, organisation, assignments, comms, medical and safety plans" />
                     <Button Command="{Binding TogglePlayCommand}" MinWidth="80" ToolTip="Start or pause the simulation">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
@@ -330,6 +332,18 @@
                                 <StackPanel Margin="4">
                                     <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="Bold" TextWrapping="Wrap" />
                                     <TextBlock Text="{Binding Summary}" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,2,0,10" />
+
+                                    <!-- Planning state: the plan in force and the builder (Phase 5). -->
+                                    <Border Style="{StaticResource Badge}" Padding="8,5" Margin="0,0,0,10">
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Content="Open IAP" Padding="8,1" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                    Command="{Binding DataContext.OpenIapCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                            <StackPanel>
+                                                <TextBlock Text="INCIDENT ACTION PLAN" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                <TextBlock Text="{Binding DataContext.PlanSummary, RelativeSource={RelativeSource AncestorType=Window}}" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Border>
 
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -614,6 +628,7 @@
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
                                     <DataGridTextColumn Header="Assignment" Binding="{Binding Assignment}" />
+                                    <DataGridTextColumn Header="IAP task" Binding="{Binding PlanTask}" MaxWidth="200" />
                                     <DataGridTextColumn Header="ETA" Binding="{Binding Eta}" />
                                     <DataGridTemplateColumn Header="Comms">
                                         <DataGridTemplateColumn.CellTemplate>

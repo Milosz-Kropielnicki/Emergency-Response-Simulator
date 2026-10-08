@@ -70,6 +70,17 @@ public static class EventDescriber
             ApprovalDecided e => Entry("APPROVAL", (e.Approved ? "Approved" : "Denied") + (e.Note is { } n ? $": {n}" : "")),
             NotificationSent e => Entry("NOTIFICATION", $"To {e.Recipient}: \"{e.Message}\"", e.IncidentId),
             NotificationAnswered e => Entry("NOTIFICATION", e.Reply),
+            OperationalPeriodStarted e => Entry("IAP", $"Operational period {e.Number} for {Incident(e.IncidentId)}: " +
+                $"{e.Start.ToLocalTime():HH:mm}–{e.End.ToLocalTime():HH:mm}" + (e.Focus is { } focus ? $" ({focus})" : ""), e.IncidentId, important: true),
+            IapDraftCreated e => Entry("IAP", $"IAP version {e.Version} drafted for {Incident(e.IncidentId)}" +
+                (e.PreparedBy is { } by ? $" by {by}" : "") + (e.BasedOnId is null ? "" : " from the previous version"), e.IncidentId),
+            IapDraftSaved e => Entry("IAP", $"IAP draft saved: {e.Content.Objectives.Count} objective(s), {e.Content.Assignments.Count} assignment(s)"),
+            IapSubmitted e => Entry("IAP", $"IAP submitted for approval by {e.SubmittedBy}", important: true),
+            IapReturned e => Entry("IAP", $"IAP returned by {e.ReturnedBy}: \"{e.Comments}\"", important: true),
+            IapApproved e => Entry("IAP", $"IAP approved by {e.ApprovedBy}; now in force", important: true),
+            IapBriefed e => Entry("IAP", $"IAP briefed: {e.OrdersIssued} assignment order(s) issued"),
+            ObjectiveStatusChanged e => Entry("IAP", $"Objective marked {Humanize(e.Status).ToLowerInvariant()}", e.IncidentId,
+                important: e.Status == ObjectiveStatus.NotAchieved),
             WeatherObserved e => Entry("WEATHER", $"{e.Source}: wind from {e.WindFromDegrees:F0}° at {e.WindSpeedMps:F1} m/s, {e.TemperatureC:F0}°C"),
             AgencyRegistered e => Entry("SETUP", $"Agency on duty: {e.Name}"),
             UnitRegistered e => Entry("SETUP", $"{e.Callsign} ({ResourceGroups.Label(e.Type)}) available at {e.HomeStation ?? "station"}", unit: e.UnitId),
