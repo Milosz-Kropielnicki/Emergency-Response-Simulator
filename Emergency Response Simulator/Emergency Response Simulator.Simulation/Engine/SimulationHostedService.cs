@@ -1,4 +1,5 @@
 using Emergency_Response_Simulator.Core.Contracts;
+using Emergency_Response_Simulator.Simulation.Hazards;
 using Emergency_Response_Simulator.Simulation.Routing;
 using Emergency_Response_Simulator.Simulation.Services;
 using Emergency_Response_Simulator.Simulation.Scenarios;
@@ -16,6 +17,7 @@ public sealed class SimulationHostedService(
     RoutingService routing,
     // Taken so the AVL feed is listening before the first fix is published.
     AvlService avl,
+    HazardTerrain terrain,
     Microsoft.Extensions.Options.IOptions<SimulationOptions> options,
     ILogger<SimulationHostedService> logger) : BackgroundService
 {
@@ -24,8 +26,8 @@ public sealed class SimulationHostedService(
         _ = cop;
         _ = avl;
 
-        // Units need the road network before anyone can be dispatched.
-        await routing.LoadAsync(stoppingToken);
+        // Units need the road network before anyone can be dispatched; hazards need the terrain before they spread.
+        await Task.WhenAll(routing.LoadAsync(stoppingToken), terrain.LoadAsync(stoppingToken));
 
         foreach (var scenario in scenarios)
         {

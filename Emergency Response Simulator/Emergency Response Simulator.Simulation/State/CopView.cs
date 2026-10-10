@@ -59,6 +59,7 @@ public sealed class CopView : ICopService
     public IReadOnlyList<Alert> Alerts => _current.Alerts;
     public IReadOnlyList<Zone> Zones => _current.Zones;
     public PerceivedWeather? Weather => _current.Weather;
+    public IReadOnlyList<Hospital> Hospitals => _current.Hospitals;
     public IReadOnlyList<Order> Orders => _current.Orders;
     public IReadOnlyList<ResourceRequest> ResourceRequests => _current.ResourceRequests;
     public IReadOnlyList<ApprovalRequest> Approvals => _current.Approvals;

@@ -4,7 +4,10 @@ using System.Windows.Threading;
 using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.Simulation.Hazards;
+using Emergency_Response_Simulator.Simulation.Routing;
 using Emergency_Response_Simulator.Simulation.Services;
+using Emergency_Response_Simulator.Simulation.State;
 using Emergency_Response_Simulator.ViewModels;
 using Mapsui;
 using Mapsui.Layers;
@@ -20,8 +23,10 @@ namespace Emergency_Response_Simulator.Mapping;
 
 /// <summary>
 /// Builds and maintains the map: base tiles for the selected view, static GIS layers from PostGIS,
-/// and operational layers (zones, incidents, units, wind) projected from the COP. Also handles map
-/// clicks for feature info, nearest-facility lookups and zone drawing.
+/// and operational layers (zones, incidents, units, wind, hospitals) projected from the COP. The traffic view
+/// adds congestion from the city's traffic feed. Instructor-only layers draw ground truth from the engine's
+/// snapshot: real hazards, people, true unit positions and live traffic. Also handles map clicks for feature
+/// info, nearest-facility lookups and zone drawing.
 /// </summary>
 public sealed class MapController
 {
@@ -49,15 +54,29 @@ public sealed class MapController
     private readonly MemoryLayer _units = new("Units");
     private readonly MemoryLayer _weather = new("Wind");
     private readonly MemoryLayer _drawing = new("Drawing");
+    private readonly MemoryLayer _hospitals = new("Hospitals");
+    private readonly MemoryLayer _traffic = new("Traffic");
+    private readonly MemoryLayer _truth = new("Ground truth: hazards");
+    private readonly MemoryLayer _people = new("Ground truth: people");
+    private readonly MemoryLayer _trueUnits = new("Ground truth: units");
+
+    private readonly InstructorViewModel _instructor;
+    private readonly RoutingService _routing;
+    private readonly TrafficFeed _feed;
+    private readonly LiveTraffic _live;
 
     private string _view = BaseMaps.Street;
     private ILayer _baseLayer;
     private int _refreshQueued;
 
     public MapController(MapControl control, MainViewModel viewModel, ICopService cop, IGisService? gis, AvlService avl,
-        IConfiguration mapSettings)
+        IConfiguration mapSettings, RoutingService routing, TrafficFeed feed, LiveTraffic live)
     {
         _avl = avl;
+        _instructor = viewModel.Instructor;
+        _routing = routing;
+        _feed = feed;
+        _live = live;
         _control = control;
         _viewModel = viewModel;
         _cop = cop;
@@ -79,7 +98,10 @@ public sealed class MapController
             _map.Layers.Add(layer);
         }
 
-        foreach (var layer in new[] { _zones, _reports, _routes, _trails, _incidents, _units, _weather, _drawing })
+        foreach (var layer in new[]
+                 {
+                     _traffic, _zones, _truth, _reports, _routes, _trails, _people, _incidents, _hospitals, _units, _trueUnits, _weather, _drawing,
+                 })
         {
             layer.Features = [];
             layer.Style = null; // operational features carry their own styles
@@ -96,6 +118,7 @@ public sealed class MapController
         _control.MapTapped += OnMapTapped;
         _control.MapPointerMoved += OnMapPointerMoved;
         _cop.Changed += (_, _) => QueueOperationalRefresh();
+        _instructor.Refreshed += (_, _) => RefreshTruth();
         _viewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(MainViewModel.SelectedUnitId))
@@ -180,6 +203,8 @@ public sealed class MapController
                 if (e.PropertyName != nameof(ToggleItem.IsOn)) return;
                 if (toggle.Key.StartsWith("op:") || toggle.Key.StartsWith("zones:"))
                     RefreshOperational();
+                else if (toggle.Key.StartsWith("truth:"))
+                    RefreshTruth();
                 else
                     ApplyVisibility();
             };
@@ -216,6 +241,7 @@ public sealed class MapController
         _staticLayers[GisLayerKeys.Roads].Style = StaticLayerStyle(GisLayerKeys.Roads);
         ApplyVisibility();
         RefreshOperational();
+        RefreshTruth();
     }
 
     /// <summary>A layer shows when its toggle is on, or when the current view depends on it.</summary>
@@ -336,7 +362,9 @@ public sealed class MapController
 
         _weather.Features = IsOn(MapLayerKeys.Weather) || _view == BaseMaps.Weather ? WindFeatures() : [];
 
-        foreach (var layer in new[] { _zones, _reports, _routes, _trails, _incidents, _units, _weather })
+        _hospitals.Features = IsOn(MapLayerKeys.Hospitals) ? _cop.Hospitals.Select(HospitalFeature).ToList() : [];
+
+        foreach (var layer in new[] { _zones, _reports, _routes, _trails, _incidents, _hospitals, _units, _weather })
             layer.DataHasChanged();
         _map.RefreshGraphics();
     }
@@ -421,6 +449,147 @@ public sealed class MapController
         feature[UnitIdField] = unit.Id;
         AddStyles(feature, MapStyles.Unit(unit.Agency?.Type, unit.Status, moving ? unit.Heading : null, selected, unit.CommsConnected));
         return feature;
+    }
+
+    private static IFeature HospitalFeature(Hospital hospital)
+    {
+        var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(hospital.Location.ToPoint())), hospital.Name,
+            [
+                $"Emergency department: {hospital.Occupied}/{hospital.Capacity}" + (hospital.OnDiversion ? ", ON DIVERSION" : ""),
+                hospital.Note ?? "",
+                $"As reported at {MainViewModel.Time(hospital.ReportedAt)}",
+            ],
+            label: $"{hospital.Name.Replace(" Hospital", "").Replace(" University", "")} {hospital.Occupied}/{hospital.Capacity}");
+        AddStyles(feature, MapStyles.HospitalStatus(hospital.OnDiversion, !hospital.OnDiversion && hospital.Load >= 0.9));
+        return feature;
+    }
+
+    // ---- Traffic and ground truth ----
+
+    /// <summary>
+    /// The traffic view shows the city's traffic feed (what command can see, a couple of minutes old); the
+    /// instructor's live-traffic layer shows the roads as they really are. Ground-truth layers come from the
+    /// engine's snapshot via the instructor view, refreshed once a second.
+    /// </summary>
+    private void RefreshTruth()
+    {
+        var snapshot = _instructor.Snapshot;
+
+        TrafficSnapshot? traffic = IsOn(MapLayerKeys.TruthTraffic) ? _live.Snapshot
+            : _view == BaseMaps.Traffic && !_viewModel.IsReplay ? _feed.Snapshot
+            : null;
+        _traffic.Features = traffic is not null && _routing.Network is { } network ? CongestionFeatures(network, traffic) : [];
+
+        _truth.Features = IsOn(MapLayerKeys.TruthHazards) ? TruthHazardFeatures(snapshot).ToList() : [];
+        _people.Features = IsOn(MapLayerKeys.TruthPeople) ? PeopleFeatures(snapshot).ToList() : [];
+        _trueUnits.Features = IsOn(MapLayerKeys.TruthUnits) ? TrueUnitFeatures(snapshot).ToList() : [];
+
+        foreach (var layer in new[] { _traffic, _truth, _people, _trueUnits })
+            layer.DataHasChanged();
+        _map.RefreshGraphics();
+    }
+
+    private static List<IFeature> CongestionFeatures(RoadNetwork network, TrafficSnapshot traffic)
+    {
+        var features = new List<IFeature>();
+        foreach (var (edgeId, factor) in traffic.Factors)
+        {
+            if (factor >= 0.8) continue;
+            var edge = network.Edge(edgeId);
+            var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(network.EdgeLine(edgeId))), edge.Name ?? "Road",
+                [factor < LiveTraffic.GridlockFactor ? "Gridlocked" : $"Traffic at {factor:P0} of normal speed",
+                 traffic.DarkSignals.Contains(edgeId) ? "Junction ahead: traffic signals out" : "",
+                 $"As of {MainViewModel.Time(traffic.At, seconds: true)}"]);
+            AddStyles(feature, MapStyles.Congestion(factor));
+            features.Add(feature);
+        }
+        return features;
+    }
+
+    private static IEnumerable<IFeature> TruthHazardFeatures(WorldSnapshot snapshot)
+    {
+        foreach (var outage in snapshot.Outages)
+        {
+            var area = Wgs84.CreatePolygon(Wgs84.Circle(outage.Centre, outage.RadiusMeters));
+            var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(area)), "Power outage (truth)",
+                [outage.Cause, $"Since {MainViewModel.Time(outage.StartedAt)}, restoring {MainViewModel.Time(outage.RestoreAt)}"],
+                label: "POWER OUT");
+            AddStyles(feature, MapStyles.Outage);
+            yield return feature;
+        }
+
+        foreach (var hazard in snapshot.Hazards)
+        {
+            var lines = new[] { hazard.Description, $"{hazard.AreaSquareMeters:N0} m² affected", $"Since {MainViewModel.Time(hazard.StartedAt)}" };
+            if (hazard.Zones.Count > 0)
+            {
+                foreach (var (level, zone) in hazard.Zones)
+                {
+                    var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(zone)), $"{hazard.Description} (truth)",
+                        [.. lines, $"{level} concentration"], label: level == HazardLevel.Low ? hazard.Substance?.ToUpperInvariant() : null);
+                    AddStyles(feature, MapStyles.TruthHazard(hazard.Kind, level));
+                    yield return feature;
+                }
+            }
+            else if (hazard.Footprint is { } footprint)
+            {
+                var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(footprint)), $"{hazard.Description} (truth)", lines,
+                    label: MainViewModel.Humanize(hazard.Kind).ToUpperInvariant());
+                AddStyles(feature, MapStyles.TruthHazard(hazard.Kind));
+                yield return feature;
+            }
+        }
+
+        foreach (var blocked in snapshot.Obstructions)
+        {
+            var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(blocked.Area)), "Road blocked (truth)", [blocked.Description]);
+            AddStyles(feature, MapStyles.Obstruction);
+            yield return feature;
+        }
+
+        foreach (var site in snapshot.Sites)
+        {
+            var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(site.Location.ToPoint())), $"{site.Name} (truth)",
+                [MainViewModel.Humanize(site.Kind), site.Triggered ? "Set off" : "Not yet reached by any hazard"], label: site.Name);
+            AddStyles(feature, MapStyles.Site(site.Triggered));
+            yield return feature;
+        }
+    }
+
+    private static IEnumerable<IFeature> PeopleFeatures(WorldSnapshot snapshot)
+    {
+        foreach (var person in snapshot.Civilians)
+        {
+            var (x, y) = WebMercator.FromLonLat(person.Location.Longitude, person.Location.Latitude);
+            var feature = new PointFeature(x, y);
+            AddStyles(feature, MapStyles.Civilian(person.State));
+            yield return feature;
+        }
+
+        foreach (var casualty in snapshot.Casualties.Where(c => c.State != CasualtyState.AtHospital))
+        {
+            var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(casualty.Location.ToPoint())), "Casualty (truth)",
+                [Core.Events.EventDescriber.TriageLabel(casualty.Triage), MainViewModel.Humanize(casualty.State)]);
+            AddStyles(feature, MapStyles.Casualty(casualty.Triage));
+            yield return feature;
+        }
+    }
+
+    /// <summary>Units whose real position is well away from where the COP shows them, or whose radio is dead.</summary>
+    private IEnumerable<IFeature> TrueUnitFeatures(WorldSnapshot snapshot)
+    {
+        foreach (var unit in snapshot.Units)
+        {
+            var shown = _cop.FindUnit(unit.Id)?.Location is { } p ? GeoPoint.FromPoint(p) : (GeoPoint?)null;
+            var off = shown is { } s ? GeoMath.DistanceMeters(s, unit.Location) : double.PositiveInfinity;
+            if (off < 50 && !unit.RadioFailed && !unit.BrokenDown) continue;
+
+            var state = unit.BrokenDown ? "broken down" : unit.RadioFailed ? "radio dead" : $"{off:F0} m from COP";
+            var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(unit.Location.ToPoint())), $"{unit.Callsign} (truth)",
+                [MainViewModel.Humanize(unit.Phase), state], label: $"{unit.Callsign}: {state}");
+            AddStyles(feature, MapStyles.TrueUnit);
+            yield return feature;
+        }
     }
 
     private static IFeature RouteFeature(Unit unit, bool selected)

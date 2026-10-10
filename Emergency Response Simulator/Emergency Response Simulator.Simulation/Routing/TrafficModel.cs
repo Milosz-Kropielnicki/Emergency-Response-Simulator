@@ -1,18 +1,20 @@
 namespace Emergency_Response_Simulator.Simulation.Routing;
 
-/// <summary>How much traffic slows vehicles on a class of road at a given time.</summary>
+/// <summary>How much traffic slows vehicles on a piece of road at a given time.</summary>
 public interface ITrafficModel
 {
     /// <summary>Multiplier on free-flow speed: 1 = empty roads, 0.5 = half speed.</summary>
-    double SpeedFactor(RoadClass roadClass, DateTimeOffset at, bool emergency);
+    double SpeedFactor(RoadEdge edge, DateTimeOffset at, bool emergency);
 }
 
 /// <summary>
 /// Typical weekday congestion by time of day. Main roads suffer most at peak times; vehicles under
-/// blue lights recover part of the delay. Phase 6 adds live, simulated congestion on top.
+/// blue lights recover part of the delay. <see cref="LiveTraffic"/> adds simulated congestion on top.
 /// </summary>
 public sealed class TimeOfDayTraffic : ITrafficModel
 {
+    public double SpeedFactor(RoadEdge edge, DateTimeOffset at, bool emergency) => SpeedFactor(edge.Class, at, emergency);
+
     public double SpeedFactor(RoadClass roadClass, DateTimeOffset at, bool emergency)
     {
         var local = at.ToLocalTime();
@@ -50,5 +52,5 @@ public sealed class TimeOfDayTraffic : ITrafficModel
 /// <summary>Empty roads: for tests and night-time what-ifs.</summary>
 public sealed class FreeFlowTraffic : ITrafficModel
 {
-    public double SpeedFactor(RoadClass roadClass, DateTimeOffset at, bool emergency) => 1.0;
+    public double SpeedFactor(RoadEdge edge, DateTimeOffset at, bool emergency) => 1.0;
 }

@@ -946,6 +946,29 @@
                     <!-- Notifications -->
                     <Border Grid.Column="3" Style="{StaticResource Panel}" BorderThickness="0">
                         <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="RECEIVING HOSPITALS (as last reported)" Style="{StaticResource PanelHeader}" />
+                            <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding DataContext.Hospitals, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          Margin="0,0,0,8">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:HospitalRow}">
+                                        <DockPanel Margin="0,0,0,4" ToolTip="{Binding Note}">
+                                            <TextBlock DockPanel.Dock="Right" Text="{Binding Reported}" FontFamily="Consolas"
+                                                       Foreground="{StaticResource MutedTextBrush}" Margin="6,0,0,0" />
+                                            <TextBlock x:Name="Load" DockPanel.Dock="Right" Text="{Binding Load}" FontFamily="Consolas" Margin="6,0,0,0" />
+                                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                        </DockPanel>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding NearFull}" Value="True">
+                                                <Setter TargetName="Load" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding OnDiversion}" Value="True">
+                                                <Setter TargetName="Load" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                <Setter TargetName="Load" Property="Text" Value="DIVERTING" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                             <TextBlock DockPanel.Dock="Top" Text="NOTIFICATIONS (outside organisations)" Style="{StaticResource PanelHeader}" />
                             <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
                                 <ComboBox ItemsSource="{Binding Recipients}" Text="{Binding Recipient, UpdateSourceTrigger=PropertyChanged}"
@@ -1028,6 +1051,115 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
                 </DockPanel>
+            </TabItem>
+
+            <!-- Instructor: ground truth the trainee never sees (Design Document §10.1, §21) -->
+            <TabItem DataContext="{Binding Instructor}">
+                <TabItem.Header>
+                    <TextBlock>
+                        <Run Text="INSTRUCTOR · GROUND TRUTH" Foreground="#C792EA" />
+                        <Run Text="{Binding Summary, Mode=OneWay}" Foreground="{StaticResource WarningBrush}" />
+                    </TextBlock>
+                </TabItem.Header>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.4*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Truth against the COP -->
+                    <Border Grid.Column="0" Style="{StaticResource Panel}" BorderThickness="0,0,1,0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="TRUTH vs COP (what command does not know)" Style="{StaticResource PanelHeader}" />
+                            <TextBlock DockPanel.Dock="Bottom" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                       Text="Instructor and AAR only. Ground-truth map layers are under GROUND TRUTH (INSTRUCTOR) in the layer panel." />
+                            <Grid>
+                                <ListBox ItemsSource="{Binding Divergences}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:DivergenceRow}">
+                                            <Grid Margin="0,0,0,6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="150" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock x:Name="Topic" Text="{Binding Topic}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,8,0" />
+                                                <StackPanel Grid.Column="1">
+                                                    <TextBlock TextWrapping="Wrap">
+                                                        <Run Text="Truth:" Foreground="#C792EA" /> <Run Text="{Binding Truth, Mode=OneWay}" />
+                                                    </TextBlock>
+                                                    <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}">
+                                                        <Run Text="COP:" /> <Run Text="{Binding Cop, Mode=OneWay}" />
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </Grid>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Severity}" Value="Unknown">
+                                                    <Setter TargetName="Topic" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Severity}" Value="Lagging">
+                                                    <Setter TargetName="Topic" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <TextBlock Style="{StaticResource EmptyHint}" Text="The COP matches the world.">
+                                    <TextBlock.Visibility>
+                                        <Binding Path="Divergences.Count" Converter="{x:Static vm:Converters.ZeroToVisible}" />
+                                    </TextBlock.Visibility>
+                                </TextBlock>
+                            </Grid>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Cascades -->
+                    <Border Grid.Column="1" Style="{StaticResource Panel}" BorderThickness="0,0,1,0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="CASCADING EFFECTS (newest first)" Style="{StaticResource PanelHeader}" />
+                            <Grid>
+                                <ListBox ItemsSource="{Binding Cascades}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:CascadeRow}">
+                                            <DockPanel Margin="0,0,0,6">
+                                                <TextBlock DockPanel.Dock="Left" Text="{Binding Time}" Width="62" FontFamily="Consolas"
+                                                           Foreground="{StaticResource MutedTextBrush}" />
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Cause}" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock TextWrapping="Wrap">
+                                                        <Run Text="→" Foreground="#C792EA" /> <Run Text="{Binding Effect, Mode=OneWay}" />
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <TextBlock Style="{StaticResource EmptyHint}" Text="No knock-on effects yet.">
+                                    <TextBlock.Visibility>
+                                        <Binding Path="Cascades.Count" Converter="{x:Static vm:Converters.ZeroToVisible}" />
+                                    </TextBlock.Visibility>
+                                </TextBlock>
+                            </Grid>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- The world as it is -->
+                    <Border Grid.Column="2" Style="{StaticResource Panel}" BorderThickness="0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="THE WORLD RIGHT NOW" Style="{StaticResource PanelHeader}" />
+                            <ListBox ItemsSource="{Binding Facts}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:WorldFact}">
+                                        <StackPanel Margin="0,0,0,6">
+                                            <TextBlock Text="{Binding Label}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding Value}" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
+                    </Border>
+                </Grid>
             </TabItem>
         </TabControl>
     </Grid>

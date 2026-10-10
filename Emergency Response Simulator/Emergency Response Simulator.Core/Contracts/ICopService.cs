@@ -31,6 +31,9 @@ public interface ICopService
     /// <summary>Latest weather report received, or null if none yet. Not the true weather.</summary>
     PerceivedWeather? Weather { get; }
 
+    /// <summary>Receiving hospitals as they last reported themselves (Design Document §17).</summary>
+    IReadOnlyList<Hospital> Hospitals { get; }
+
     // Command and control (Design Document §9)
     IReadOnlyList<Order> Orders { get; }
     IReadOnlyList<ResourceRequest> ResourceRequests { get; }

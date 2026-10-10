@@ -214,3 +214,40 @@ public enum IapStatus
     Approved,
     Superseded,
 }
+
+/// <summary>Physical hazards the simulation engine models (Design Document §10.4).</summary>
+public enum HazardKind
+{
+    Fire,
+    Flood,
+    Plume,
+}
+
+/// <summary>Things in the world a hazard can set off when it reaches them (Design Document §10.5).</summary>
+public enum HazardSiteKind
+{
+    /// <summary>Stored chemicals: a fire reaching them starts a toxic release.</summary>
+    ChemicalStore,
+
+    /// <summary>An electricity substation: fire or flood takes out power to the area it feeds.</summary>
+    Substation,
+}
+
+/// <summary>Casualty priority (triage sieve): P1 immediate, P2 urgent, P3 delayed.</summary>
+public enum Triage
+{
+    Immediate,
+    Urgent,
+    Delayed,
+    Deceased,
+}
+
+/// <summary>Where a casualty is in the chain from injury to hospital.</summary>
+public enum CasualtyState
+{
+    AwaitingTreatment,
+    TreatedOnScene,
+    Transporting,
+    AtHospital,
+    Deceased,
+}

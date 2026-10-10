@@ -27,6 +27,7 @@ public sealed class PerceivedState : ICopService
     private readonly Dictionary<Guid, OperationalPeriod> _periods = [];
     private readonly Dictionary<Guid, IncidentActionPlan> _plans = [];
     private readonly Dictionary<Guid, ObjectiveStatus> _progress = [];
+    private readonly Dictionary<Guid, Hospital> _hospitals = [];
 
     public event EventHandler? Changed;
 
@@ -40,6 +41,7 @@ public sealed class PerceivedState : ICopService
     public IReadOnlyList<Alert> Alerts => Snapshot(_alerts);
     public IReadOnlyList<Zone> Zones => Snapshot(_zones);
     public PerceivedWeather? Weather { get; private set; }
+    public IReadOnlyList<Hospital> Hospitals => Snapshot(_hospitals);
     public IReadOnlyList<Order> Orders => Snapshot(_orders);
     public IReadOnlyList<ResourceRequest> ResourceRequests => Snapshot(_requests);
     public IReadOnlyList<ApprovalRequest> Approvals => Snapshot(_approvals);
@@ -95,7 +97,36 @@ public sealed class PerceivedState : ICopService
         switch (payload)
         {
             case AgencyRegistered e:
-                _agencies[e.AgencyId] = new Agency { Id = e.AgencyId, Name = e.Name, ShortName = e.ShortName, Type = e.Type };
+                _agencies[e.AgencyId] = new Agency
+                {
+                    Id = e.AgencyId, Name = e.Name, ShortName = e.ShortName, Type = e.Type, AiControlled = e.AiControlled,
+                };
+                break;
+
+            case HospitalRegistered e:
+                _hospitals[e.HospitalId] = new Hospital
+                {
+                    Id = e.HospitalId, Name = e.Name, Location = e.Location, Capacity = e.EdCapacity, Occupied = e.Occupied,
+                    ReportedAt = at,
+                };
+                break;
+
+            case HospitalStatusReported e when _hospitals.TryGetValue(e.HospitalId, out var hospital):
+                hospital.Occupied = e.Occupied;
+                hospital.Capacity = e.Capacity;
+                hospital.OnDiversion = e.OnDiversion;
+                hospital.Note = e.Note;
+                hospital.ReportedAt = at;
+                break;
+
+            case UnitTasked e when _units.TryGetValue(e.UnitId, out var tasked):
+                // A job from the unit's own agency, not one of command's incidents.
+                Unassign(tasked);
+                Contact(tasked, at);
+                tasked.Status = UnitStatus.Dispatched;
+                tasked.Tasking = $"{e.TaskedBy}: {e.Task}";
+                tasked.PlannedRoute = null;
+                tasked.RouteDistanceMeters = null;
                 break;
 
             case UnitRegistered e:
@@ -348,6 +379,7 @@ public sealed class PerceivedState : ICopService
 
             case UnitDispatched e when _units.TryGetValue(e.UnitId, out var unit):
                 Unassign(unit);
+                unit.Tasking = null;
                 unit.PlannedRoute = null; // a new assignment means a new journey
                 unit.RouteDistanceMeters = null;
                 unit.Status = UnitStatus.Dispatched;
@@ -373,7 +405,10 @@ public sealed class PerceivedState : ICopService
                 Contact(unit, at);
                 unit.Status = e.Status;
                 if (e.Status is UnitStatus.Available or UnitStatus.OutOfService)
+                {
                     Unassign(unit);
+                    unit.Tasking = null;
+                }
                 if (e.Status is not (UnitStatus.Dispatched or UnitStatus.EnRoute))
                 {
                     unit.PlannedRoute = null;

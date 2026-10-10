@@ -98,6 +98,21 @@ public static class EventDescriber
             RoadObstructionCleared => Entry("TRUTH", "Road obstruction cleared"),
             UnitBrokeDown e => Entry("TRUTH", $"{Unit(e.UnitId)} breaks down: {e.Fault}", unit: e.UnitId),
             UnitRadioFailed e => Entry("TRUTH", $"{Unit(e.UnitId)} radio {(e.Failed ? "fails" : "recovers")}", unit: e.UnitId),
+            HospitalRegistered e => Entry("SETUP", $"Receiving hospital: {e.Name} (ED {e.Occupied}/{e.EdCapacity})"),
+            HospitalStatusReported e => Entry("HOSPITAL", $"{e.Name}: ED {e.Occupied}/{e.Capacity}" +
+                (e.OnDiversion ? " — ON DIVERSION" : "") + (e.Note is { } note ? $". {note}" : ""), important: e.OnDiversion),
+            UnitTasked e => Entry("AGENCY", $"{Unit(e.UnitId)} tasked by {e.TaskedBy}: {e.Task}", unit: e.UnitId),
+            HazardStarted e => Entry("TRUTH", $"{Humanize(e.Kind)} hazard begins: {e.Description}"),
+            HazardFootprintChanged e => Entry("TRUTH", $"Hazard now covers {e.AreaSquareMeters:N0} m²"),
+            HazardRateChanged e => Entry("TRUTH", $"Hazard rate now {e.Rate:0.##}: {e.Reason}"),
+            HazardEnded e => Entry("TRUTH", $"Hazard ended: {e.Reason}"),
+            HazardSitePlaced e => Entry("TRUTH", $"{Humanize(e.Kind)} at risk if a hazard reaches it: {e.Name}"),
+            CasualtyInjured e => Entry("TRUTH", $"Casualty ({TriageLabel(e.Triage)}): {e.Cause}"),
+            CasualtyChanged e => Entry("TRUTH", $"Casualty now {TriageLabel(e.Triage)}, {Humanize(e.State).ToLowerInvariant()}"),
+            HospitalCapacityChanged e => Entry("TRUTH", $"Hospital capacity now {e.Capacity}: {e.Reason}"),
+            PowerOutageStarted e => Entry("TRUTH", $"Power out within {e.RadiusMeters:F0} m: {e.Cause}"),
+            PowerRestored => Entry("TRUTH", "Power restored"),
+            CascadeOccurred e => Entry("CASCADE", $"{e.Cause} → {e.Effect}", unit: e.UnitId),
             UnitPositionReported => null, // dozens per minute; shown on the map instead
             _ => Entry(simEvent.Type.ToUpperInvariant(), simEvent.Type),
         };
@@ -116,6 +131,14 @@ public static class EventDescriber
     }
 
     private static string Accuracy(double? meters) => meters is { } m ? $" (±{m:F0} m)" : "";
+
+    public static string TriageLabel(Triage triage) => triage switch
+    {
+        Triage.Immediate => "P1",
+        Triage.Urgent => "P2",
+        Triage.Delayed => "P3",
+        _ => "deceased",
+    };
 
     /// <summary>"StructureFire" → "Structure fire".</summary>
     public static string Humanize<T>(T value) where T : Enum

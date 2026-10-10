@@ -15,9 +15,11 @@ namespace Emergency_Response_Simulator.Simulation.Systems;
 /// command has declared closed; they re-plan when a closure is declared mid-journey; and they only find an
 /// unreported obstruction by reaching it, when they stop, report it and re-route (§7.5).
 /// Without road data the route is a straight line with a detour factor.
+/// With live traffic (Phase 6) crews plan with the traffic feed their navigation receives but drive at the speed the
+/// roads really allow, and re-route when a jam costs them far more than their navigation promised.
 /// What a unit does always happens in the world; command only hears about it if the unit's radio works.
 /// </summary>
-public sealed class UnitResponseSystem(RoutingService? routing = null) : ISimulationSystem
+public sealed class UnitResponseSystem(RoutingService? routing = null, LiveTraffic? live = null) : ISimulationSystem
 {
     public static readonly TimeSpan TurnoutTime = TimeSpan.FromSeconds(45);
     public static readonly TimeSpan SizeUpTime = TimeSpan.FromSeconds(60);
@@ -33,6 +35,9 @@ public sealed class UnitResponseSystem(RoutingService? routing = null) : ISimula
 
     /// <summary>How long a broken-down crew takes to diagnose the fault and report it.</summary>
     public static readonly TimeSpan BreakdownReportDelay = TimeSpan.FromMinutes(2);
+
+    /// <summary>How often a moving crew compares its progress with its navigation's estimate.</summary>
+    public static readonly TimeSpan TrafficCheckInterval = TimeSpan.FromSeconds(60);
 
     /// <summary>Roads are longer than the straight line between two points (fallback without road data).</summary>
     private const double DetourFactor = 1.3;
@@ -51,13 +56,20 @@ public sealed class UnitResponseSystem(RoutingService? routing = null) : ISimula
                 continue;
             }
 
+            // Another system (e.g. an ambulance crew leaving for hospital) has set a destination.
+            if (unit.PendingPlanReason is { } reason && unit.Phase is ResponsePhase.Travelling or ResponsePhase.Transporting)
+            {
+                unit.PendingPlanReason = null;
+                Plan(context, unit, reason);
+            }
+
             switch (unit.Phase)
             {
                 case ResponsePhase.TurningOut when context.SimTime - unit.PhaseStartedAt >= TurnoutTime:
                     StartTravel(context, unit);
                     break;
 
-                case ResponsePhase.Travelling:
+                case ResponsePhase.Travelling or ResponsePhase.Transporting:
                     Travel(context, unit);
                     break;
 
@@ -70,7 +82,7 @@ public sealed class UnitResponseSystem(RoutingService? routing = null) : ISimula
 
             // Committed vehicles keep sending AVL heartbeats while stationary, which is how
             // command knows they are still in contact (and notices when they stop).
-            if (unit.OrderedIncidentId is not null && unit.Phase != ResponsePhase.Travelling
+            if (unit.OrderedIncidentId is not null && unit.Phase is not (ResponsePhase.Travelling or ResponsePhase.Transporting)
                 && context.SimTime - unit.LastFixAt >= HeartbeatInterval)
             {
                 Fix(context, unit, eta: null);
@@ -118,7 +130,7 @@ public sealed class UnitResponseSystem(RoutingService? routing = null) : ISimula
             if (context.SimTime - since < ObstructionAssessTime)
             {
                 if (context.SimTime - unit.LastFixAt >= FixInterval)
-                    Fix(context, unit, unit.RemainingTime);
+                    Fix(context, unit, Remaining(context, unit));
                 return;
             }
 
@@ -139,6 +151,8 @@ public sealed class UnitResponseSystem(RoutingService? routing = null) : ISimula
             return;
         }
 
+        CheckTraffic(context, unit);
+
         var remaining = context.Delta.TotalSeconds;
         while (remaining > 0 && unit.LegIndex < unit.Route.Count)
         {
@@ -150,11 +164,11 @@ public sealed class UnitResponseSystem(RoutingService? routing = null) : ISimula
                 unit.HeldUpSince = context.SimTime;
                 unit.HeldUpBy = obstruction;
                 unit.SpeedKph = 0;
-                Fix(context, unit, unit.RemainingTime);
+                Fix(context, unit, Remaining(context, unit));
                 return;
             }
 
-            var speed = leg.SpeedKph / 3.6;
+            var speed = Speed(context, unit, leg) / 3.6;
             var needed = (leg.LengthMeters - unit.LegProgressMeters) / speed;
             if (needed <= remaining)
             {
@@ -181,10 +195,52 @@ public sealed class UnitResponseSystem(RoutingService? routing = null) : ISimula
             current.From.Latitude + (current.To.Latitude - current.From.Latitude) * fraction,
             current.From.Longitude + (current.To.Longitude - current.From.Longitude) * fraction);
         unit.Heading = GeoMath.BearingDegrees(current.From, current.To);
-        unit.SpeedKph = current.SpeedKph;
+        unit.SpeedKph = Speed(context, unit, current);
 
         if (context.SimTime - unit.LastFixAt >= FixInterval)
-            Fix(context, unit, unit.RemainingTime);
+            Fix(context, unit, Remaining(context, unit));
+    }
+
+    /// <summary>How fast the unit really manages on a leg: live road speed when simulated, else the planned speed.</summary>
+    private double Speed(SimulationContext context, WorldUnit unit, RouteLeg leg) =>
+        live is not null && routing?.Network is { } network
+            ? live.LegSpeedKph(network, leg, unit.Type, context.SimTime, emergency: true)
+            : leg.SpeedKph;
+
+    /// <summary>Time left at the speeds the roads really allow now (what the crew's progress is heading for).</summary>
+    private TimeSpan Remaining(SimulationContext context, WorldUnit unit)
+    {
+        if (live is null || routing?.Network is null) return unit.RemainingTime;
+        double seconds = 0;
+        for (var i = unit.LegIndex; i < unit.Route.Count; i++)
+        {
+            var leg = unit.Route[i];
+            var length = i == unit.LegIndex ? leg.LengthMeters - unit.LegProgressMeters : leg.LengthMeters;
+            seconds += Math.Max(0, length) / (Speed(context, unit, leg) / 3.6);
+        }
+        return TimeSpan.FromSeconds(seconds);
+    }
+
+    /// <summary>
+    /// Stuck in a jam the navigation did not know about: once the drive is taking far longer than planned, ask the
+    /// navigation (which plans with the traffic feed) for something better, and take it if it is clearly faster.
+    /// </summary>
+    private void CheckTraffic(SimulationContext context, WorldUnit unit)
+    {
+        if (live is null || routing?.Network is null || context.SimTime - unit.LastTrafficCheckAt < TrafficCheckInterval) return;
+        unit.LastTrafficCheckAt = context.SimTime;
+
+        var actual = Remaining(context, unit);
+        var promised = unit.RemainingTime;
+        if (actual < promised * 1.5 || actual - promised < TimeSpan.FromSeconds(90)) return;
+
+        var alternative = Compute(context, unit);
+        if (alternative is null) return;
+
+        // Judge the alternative at the speeds the roads really allow, not just what the feed says.
+        var alternativeActual = alternative.Legs.Sum(l => l.LengthMeters / (Speed(context, unit, l) / 3.6));
+        if (alternativeActual < actual.TotalSeconds * 0.8)
+            Adopt(context, unit, alternative, "Re-routed: heavy traffic");
     }
 
     /// <summary>
@@ -214,6 +270,14 @@ public sealed class UnitResponseSystem(RoutingService? routing = null) : ISimula
         unit.Location = unit.Destination;
         unit.SpeedKph = 0;
         unit.Route = [];
+        if (unit.Phase == ResponsePhase.Transporting)
+        {
+            // MedicalSystem takes it from here: handover, then the crew clears.
+            unit.Phase = ResponsePhase.AtHospital;
+            unit.PhaseStartedAt = context.SimTime;
+            Fix(context, unit, TimeSpan.Zero);
+            return;
+        }
         unit.Phase = ResponsePhase.OnScene;
         unit.PhaseStartedAt = context.SimTime;
         Fix(context, unit, TimeSpan.Zero);
@@ -221,13 +285,19 @@ public sealed class UnitResponseSystem(RoutingService? routing = null) : ISimula
     }
 
     /// <summary>Plans (or re-plans) the journey from the unit's current position and tells command.</summary>
-    private void Plan(SimulationContext context, WorldUnit unit, string reason)
+    private void Plan(SimulationContext context, WorldUnit unit, string reason) =>
+        Adopt(context, unit, Compute(context, unit) ?? StraightLine(unit.Location, unit.Destination, unit.Type), reason);
+
+    private RouteResult? Compute(SimulationContext context, WorldUnit unit)
     {
         var avoid = context.World.DeclaredNoGoAreas.Values.Concat(unit.KnownObstructions.Values).ToList();
-        var route = routing?.Route(unit.Location, unit.Destination,
-                        new RouteOptions(unit.Type, context.SimTime, Emergency: true, Avoid: avoid))
-                    ?? StraightLine(unit.Location, unit.Destination, unit.Type);
+        return routing?.Route(unit.Location, unit.Destination,
+            new RouteOptions(unit.Type, context.SimTime, Emergency: true, Avoid: avoid));
+    }
 
+    private void Adopt(SimulationContext context, WorldUnit unit, RouteResult route, string reason)
+    {
+        unit.LastTrafficCheckAt = context.SimTime;
         unit.Route = route.Legs;
         unit.LegIndex = 0;
         unit.LegProgressMeters = 0;
@@ -237,7 +307,7 @@ public sealed class UnitResponseSystem(RoutingService? routing = null) : ISimula
 
         Report(context, unit, new RouteReported(unit.Id, unit.OrderedIncidentId, route.Path, route.DistanceMeters, route.Duration, reason),
             EventSources.Avl);
-        Fix(context, unit, route.Duration);
+        Fix(context, unit, Remaining(context, unit));
     }
 
     private static RouteResult StraightLine(GeoPoint from, GeoPoint to, UnitType type)

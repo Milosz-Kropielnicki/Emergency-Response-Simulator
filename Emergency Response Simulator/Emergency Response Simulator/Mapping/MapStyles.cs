@@ -1,5 +1,6 @@
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.Simulation.Hazards;
 using Emergency_Response_Simulator.ViewModels;
 using Mapsui;
 using Mapsui.Styles;
@@ -358,6 +359,159 @@ public static class MapStyles
         RotateWithMap = true,
         Fill = new Brush(Color.FromArgb(200, 120, 200, 255)),
         Outline = new Pen(Color.FromArgb(230, 10, 30, 50), 1.5),
+    };
+
+    /// <summary>A receiving hospital with its last reported load: red when diverting, amber when nearly full.</summary>
+    public static IStyle HospitalStatus(bool onDiversion, bool nearFull)
+    {
+        var color = onDiversion ? new Color(230, 30, 30) : nearFull ? new Color(255, 170, 0) : new Color(40, 180, 90);
+        return new StyleCollection
+        {
+            Styles =
+            {
+                new SymbolStyle
+                {
+                    SymbolType = SymbolType.Rectangle, SymbolScale = 0.55, Fill = new Brush(Color.White), Outline = new Pen(color, 4),
+                },
+                new LabelStyle
+                {
+                    LabelColumn = LabelField, ForeColor = Color.White, BackColor = new Brush(Color.FromArgb(210, color.R / 2, color.G / 2, color.B / 2)),
+                    Font = new Font { Size = 10 }, Offset = new Offset(0, -20), CornerRounding = 3, MaxVisible = ResolutionAtZoom(12),
+                },
+            },
+        };
+    }
+
+    /// <summary>
+    /// Congestion on a stretch of road: amber when slow, red when heavy, dark red when gridlocked. Used for the
+    /// trainee's traffic feed and the instructor's live traffic alike.
+    /// </summary>
+    public static IStyle Congestion(double factor) => factor switch
+    {
+        < 0.2 => Gridlock,
+        < 0.5 => Heavy,
+        _ => Slow,
+    };
+
+    private static readonly IStyle Gridlock = CongestionPen(new Color(150, 0, 20), 7);
+    private static readonly IStyle Heavy = CongestionPen(new Color(235, 40, 40), 6);
+    private static readonly IStyle Slow = CongestionPen(new Color(255, 170, 0), 5);
+
+    private static VectorStyle CongestionPen(Color color, double width) => new()
+    {
+        Line = new Pen(Color.FromArgb(230, color.R, color.G, color.B), width), Fill = null, Outline = null,
+    };
+
+    // ---- Ground truth (instructor only, drawn in purple so it is never mistaken for the COP) ----
+
+    public static readonly Color TruthColor = new(199, 146, 234);
+
+    public static IStyle TruthHazard(HazardKind kind, HazardLevel level = HazardLevel.Low)
+    {
+        var (fill, alpha) = kind switch
+        {
+            HazardKind.Fire => (new Color(255, 80, 20), 110),
+            HazardKind.Flood => (new Color(40, 110, 230), 110),
+            _ => (new Color(200, 40, 160), level switch { HazardLevel.High => 120, HazardLevel.Moderate => 80, _ => 45 }),
+        };
+        return new StyleCollection
+        {
+            Styles =
+            {
+                new VectorStyle
+                {
+                    Fill = new Brush(Color.FromArgb(alpha, fill.R, fill.G, fill.B)),
+                    Outline = new Pen(TruthColor, 2) { PenStyle = PenStyle.Dash },
+                },
+                TruthLabel,
+            },
+        };
+    }
+
+    public static IStyle Outage { get; } = new StyleCollection
+    {
+        Styles =
+        {
+            new VectorStyle
+            {
+                Fill = new Brush(Color.FromArgb(30, 20, 20, 20)),
+                Outline = new Pen(new Color(255, 220, 0), 2.5) { PenStyle = PenStyle.LongDash },
+            },
+            TruthLabelStyle(),
+        },
+    };
+
+    public static IStyle Obstruction { get; } = new StyleCollection
+    {
+        Styles =
+        {
+            new VectorStyle
+            {
+                Line = new Pen(new Color(255, 220, 0), 6) { PenStyle = PenStyle.Dash },
+                Fill = new Brush(Color.FromArgb(90, 255, 220, 0)),
+                Outline = new Pen(new Color(30, 30, 30), 1.5),
+            },
+        },
+    };
+
+    public static IStyle Site(bool triggered) => new StyleCollection
+    {
+        Styles =
+        {
+            new SymbolStyle
+            {
+                SymbolType = SymbolType.Rectangle, SymbolScale = 0.45,
+                Fill = new Brush(triggered ? new Color(255, 40, 40) : new Color(255, 220, 0)), Outline = new Pen(TruthColor, 3),
+            },
+            TruthLabelStyle(),
+        },
+    };
+
+    public static IStyle Civilian(Simulation.State.CivilianState state) => CivilianStyles[(int)state];
+
+    private static readonly IStyle[] CivilianStyles = Enum.GetValues<Simulation.State.CivilianState>().Select(state => (IStyle)new SymbolStyle
+    {
+        SymbolType = SymbolType.Ellipse, SymbolScale = 0.13, Outline = null,
+        Fill = new Brush(state switch
+        {
+            Simulation.State.CivilianState.Normal => new Color(170, 170, 170),
+            Simulation.State.CivilianState.Aware => new Color(255, 230, 60),
+            Simulation.State.CivilianState.Evacuating => new Color(60, 220, 110),
+            Simulation.State.CivilianState.Converging => new Color(255, 140, 0),
+            Simulation.State.CivilianState.Sheltering => new Color(80, 150, 255),
+            Simulation.State.CivilianState.Injured => new Color(255, 30, 30),
+            _ => new Color(60, 120, 80),
+        }),
+    }).ToArray();
+
+    public static IStyle Casualty(Triage triage) => new SymbolStyle
+    {
+        SymbolType = SymbolType.Triangle, SymbolScale = 0.28, Outline = new Pen(Color.White, 1),
+        Fill = new Brush(triage switch
+        {
+            Triage.Immediate => new Color(230, 20, 20),
+            Triage.Urgent => new Color(255, 190, 0),
+            Triage.Delayed => new Color(40, 180, 70),
+            _ => new Color(20, 20, 20),
+        }),
+    };
+
+    /// <summary>Where a unit really is, when that differs from what the COP shows.</summary>
+    public static IStyle TrueUnit { get; } = new StyleCollection
+    {
+        Styles =
+        {
+            new SymbolStyle { SymbolType = SymbolType.Ellipse, SymbolScale = 0.55, Fill = null, Outline = new Pen(TruthColor, 3) },
+            TruthLabelStyle(offsetY: 18),
+        },
+    };
+
+    private static readonly LabelStyle TruthLabel = TruthLabelStyle();
+
+    private static LabelStyle TruthLabelStyle(double offsetY = 0) => new()
+    {
+        LabelColumn = LabelField, ForeColor = Color.White, BackColor = new Brush(Color.FromArgb(210, 90, 50, 120)),
+        Font = new Font { Size = 10, Italic = true }, Offset = new Offset(0, offsetY), CornerRounding = 3,
     };
 
     /// <summary>Which zones toggle each zone layer controls.</summary>

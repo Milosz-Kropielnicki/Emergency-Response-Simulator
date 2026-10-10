@@ -29,8 +29,9 @@ public partial class MainViewModel : ObservableObject
     private DateTimeOffset _messageExpires;
 
     public MainViewModel(CopView cop, ISimulationControl simulation, IC2Service c2, IIapService iap, TimelineViewModel timeline,
-        IRoutingService routing, DataSourceInfo dataSource)
+        IRoutingService routing, DataSourceInfo dataSource, InstructorViewModel instructor)
     {
+        Instructor = instructor;
         _cop = cop;
         _simulation = simulation;
         _c2 = c2;
@@ -61,6 +62,12 @@ public partial class MainViewModel : ObservableObject
     }
 
     public string EventStoreLabel { get; }
+
+    /// <summary>Ground truth for the instructor (its own tab and map layers); never mixed into the COP views.</summary>
+    public InstructorViewModel Instructor { get; }
+
+    /// <summary>Receiving hospitals as they last reported themselves.</summary>
+    public ObservableCollection<HospitalRow> Hospitals { get; } = [];
 
     public TimelineViewModel Timeline { get; }
 
@@ -136,6 +143,7 @@ public partial class MainViewModel : ObservableObject
                 new(MapLayerKeys.Routes, "Planned routes", true),
                 new(MapLayerKeys.Trails, "Unit trails (AVL)", true),
                 new(MapLayerKeys.Weather, "Wind (reported)"),
+                new(MapLayerKeys.Hospitals, "Hospitals (reported load)", true),
             ]),
             new("ZONES",
             [
@@ -147,6 +155,14 @@ public partial class MainViewModel : ObservableObject
                 new(MapLayerKeys.PerimeterZones, "Incident perimeters", true),
             ]),
         };
+
+        groups.Add(new LayerGroup("GROUND TRUTH (INSTRUCTOR)",
+        [
+            new(MapLayerKeys.TruthHazards, "Hazards, outages & blockages"),
+            new(MapLayerKeys.TruthPeople, "Civilians & casualties"),
+            new(MapLayerKeys.TruthUnits, "True unit positions"),
+            new(MapLayerKeys.TruthTraffic, "Live traffic"),
+        ]));
 
         // Area boundaries are switched from the top panel ("Area codes"), not listed here.
         foreach (var group in GisLayerKeys.All.Where(d => d.Key != GisLayerKeys.AreaBoundaries).GroupBy(d => d.Group))
@@ -512,6 +528,7 @@ public partial class MainViewModel : ObservableObject
         RefreshComms();
         RefreshZones();
         RefreshWeather();
+        RefreshHospitals();
         IncidentDetail.Load(SelectedIncidentId is { } selected ? _cop.FindIncident(selected) : null, selectionChanged: false);
         Command.Refresh();
         Ics.Load(SelectedIncidentId is { } forIcs ? _cop.FindIncident(forIcs) : null);
@@ -547,6 +564,16 @@ public partial class MainViewModel : ObservableObject
         ActiveZones.Clear();
         foreach (var zone in _cop.Zones.OrderBy(z => z.EffectiveFrom))
             ActiveZones.Add(new ActiveZoneItem(zone.Id, zone.Name, Humanize(zone.Type)));
+    }
+
+    private void RefreshHospitals()
+    {
+        Hospitals.Clear();
+        foreach (var hospital in _cop.Hospitals.OrderBy(h => h.Name))
+        {
+            Hospitals.Add(new HospitalRow(hospital.Name, $"ED {hospital.Occupied}/{hospital.Capacity}", hospital.Note ?? "",
+                Time(hospital.ReportedAt), hospital.OnDiversion, !hospital.OnDiversion && hospital.Load >= 0.9));
+        }
     }
 
     private void RefreshWeather()
@@ -622,7 +649,8 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedUnitRow));
 
         ResourceSummary.Clear();
-        foreach (var group in _cop.Units.GroupBy(u => ResourceGroups.For(u.Type)).OrderBy(g => g.Key))
+        // Only command's own resources: other agencies' units are not available to it.
+        foreach (var group in _cop.Units.Where(u => u.Agency?.AiControlled != true).GroupBy(u => ResourceGroups.For(u.Type)).OrderBy(g => g.Key))
         {
             ResourceSummary.Add(new ResourceSummary(group.Key,
                 group.Count(u => u.Status == UnitStatus.Available), group.Count()));

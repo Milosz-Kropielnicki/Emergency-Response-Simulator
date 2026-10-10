@@ -42,6 +42,35 @@ internal sealed class TestHarness
     public Task<SimEvent> Truth(DomainEvent payload) =>
         Engine.PublishAsync(payload, EventVisibility.Truth, EventSources.Scenario);
 
+    /// <summary>Every event in the session so far, truth and perceived.</summary>
+    public async Task<List<SimEvent>> EventsAsync()
+    {
+        var events = new List<SimEvent>();
+        await foreach (var e in Store.ReadAsync(Engine.SessionId))
+            events.Add(e);
+        return events;
+    }
+
+    /// <summary>Advances the engine in fixed steps.</summary>
+    public async Task RunAsync(TimeSpan total, TimeSpan? step = null)
+    {
+        var increment = step ?? TimeSpan.FromSeconds(5);
+        for (var elapsed = TimeSpan.Zero; elapsed < total; elapsed += increment)
+            await Engine.StepAsync(increment);
+    }
+
+    /// <summary>Steps until <paramref name="condition"/> holds; false if it doesn't within <paramref name="limit"/>.</summary>
+    public async Task<bool> RunUntilAsync(Func<bool> condition, TimeSpan limit, TimeSpan? step = null)
+    {
+        var increment = step ?? TimeSpan.FromSeconds(5);
+        for (var elapsed = TimeSpan.Zero; elapsed < limit; elapsed += increment)
+        {
+            if (condition()) return true;
+            await Engine.StepAsync(increment);
+        }
+        return condition();
+    }
+
     public async Task<Guid> RegisterUnitAsync(string callsign = "Engine 12", UnitType type = UnitType.Engine)
     {
         var id = Guid.NewGuid();

@@ -164,7 +164,8 @@ public sealed class CommandResponseSystem : ISimulationSystem
 
         Guid? agencyId = provider is not null
             ? ProviderAgency(context, provider, agencyType)
-            : context.World.Agencies.Where(a => a.Value.Type == agencyType).Select(a => (Guid?)a.Key).FirstOrDefault();
+            : context.World.Agencies.Where(a => a.Value.Type == agencyType && !a.Value.AiControlled)
+                .Select(a => (Guid?)a.Key).FirstOrDefault();
 
         var prefix = provider is null ? "Relief" : provider.Split(' ')[0];
         var entry = EntryPoints[_arrivals % EntryPoints.Length];

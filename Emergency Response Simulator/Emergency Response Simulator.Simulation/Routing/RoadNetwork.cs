@@ -40,6 +40,7 @@ public sealed class RoadNetwork
     private readonly List<GeoPoint> _nodes = [];
     private readonly List<RoadEdge> _edges = [];
     private readonly List<List<int>> _outgoing = [];
+    private readonly List<List<int>> _incoming = [];
     private readonly HashSet<int> _contraflow = []; // reverse edges of one-way roads, only used as a fallback
     private readonly Dictionary<(long, long), int> _nodeIndex = [];
     private readonly STRtree<int> _edgeIndex = new();
@@ -79,6 +80,35 @@ public sealed class RoadNetwork
 
     public RoadEdge Edge(int id) => _edges[id];
     public GeoPoint NodeLocation(int id) => _nodes[id];
+
+    /// <summary>Edges driven into a vertex (queues spill back along these), excluding contraflow fallbacks.</summary>
+    public IReadOnlyList<int> IncomingEdges(int node) => _incoming[node];
+
+    /// <summary>Edges leaving a vertex, excluding contraflow fallbacks.</summary>
+    public IEnumerable<int> OutgoingEdges(int node) => _outgoing[node].Where(e => !_contraflow.Contains(e));
+
+    public bool IsContraflow(int edgeId) => _contraflow.Contains(edgeId);
+
+    /// <summary>The edge's geometry as a WGS84 line.</summary>
+    public LineString EdgeLine(int edgeId)
+    {
+        var edge = _edges[edgeId];
+        return Wgs84.Factory.CreateLineString([ToCoordinate(_nodes[edge.From]), ToCoordinate(_nodes[edge.To])]);
+    }
+
+    /// <summary>Edges whose segment passes within <paramref name="radiusMeters"/> of a point (approximate, by envelope then distance).</summary>
+    public IEnumerable<RoadEdge> EdgesNear(GeoPoint point, double radiusMeters)
+    {
+        var dLat = radiusMeters / 111_320.0;
+        var dLon = radiusMeters / (111_320.0 * Math.Cos(point.Latitude * Math.PI / 180));
+        var envelope = new Envelope(point.Longitude - dLon, point.Longitude + dLon, point.Latitude - dLat, point.Latitude + dLat);
+        return _edgeIndex.Query(envelope)
+            .Select(id => _edges[id])
+            .Where(e => !_contraflow.Contains(e.Id) && DistanceToSegment(point, _nodes[e.From], _nodes[e.To]) <= radiusMeters);
+    }
+
+    /// <summary>Speed on an empty road for this vehicle, before any traffic.</summary>
+    public static double FreeSpeedKph(RoadEdge edge, UnitType vehicle) => edge.SpeedKph * VehicleFactor(vehicle);
 
     /// <summary>The fastest route from <paramref name="from"/> to <paramref name="to"/>, or null if unreachable.</summary>
     public RouteResult? Route(GeoPoint from, GeoPoint to, RouteOptions options, ITrafficModel traffic)
@@ -215,9 +245,9 @@ public sealed class RoadNetwork
     }
 
     private static double EffectiveSpeed(RoadEdge edge, RouteOptions options, ITrafficModel traffic) =>
-        edge.SpeedKph * VehicleFactor(options.Vehicle) * traffic.SpeedFactor(edge.Class, options.DepartAt, options.Emergency);
+        Math.Max(1, FreeSpeedKph(edge, options.Vehicle) * traffic.SpeedFactor(edge, options.DepartAt, options.Emergency));
 
-    private static double VehicleFactor(UnitType type) => type switch
+    public static double VehicleFactor(UnitType type) => type switch
     {
         UnitType.Ladder or UnitType.Tanker or UnitType.Hazmat or UnitType.WaterTender
             or UnitType.HeavyMachinery or UnitType.Bus => 0.85,
@@ -244,6 +274,7 @@ public sealed class RoadNetwork
         id = _nodes.Count;
         _nodes.Add(new GeoPoint(c.Y, c.X));
         _outgoing.Add([]);
+        _incoming.Add([]);
         _nodeIndex[key] = id;
         return id;
     }
@@ -254,6 +285,7 @@ public sealed class RoadNetwork
         _edges.Add(edge);
         _outgoing[from].Add(edge.Id);
         if (contraflow) _contraflow.Add(edge.Id);
+        else _incoming[to].Add(edge.Id);
 
         var a = _nodes[from];
         var b = _nodes[to];

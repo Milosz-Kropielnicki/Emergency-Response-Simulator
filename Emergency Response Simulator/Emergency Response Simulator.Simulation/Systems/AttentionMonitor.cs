@@ -12,7 +12,7 @@ namespace Emergency_Response_Simulator.Simulation.Systems;
 /// knows, not ground truth — and raises an alert once when a condition starts, re-arming when it clears:
 /// critical incidents, resource shortages, situation changes (wind shifts) and communication failures,
 /// plus alerts derived from the AVL feed (§7.4): units stopped en route, off their reported route, delayed
-/// by a re-route, or whose AVL has gone quiet.
+/// by a re-route or by traffic, or whose AVL has gone quiet; and hospitals reporting they are nearly full or diverting.
 /// </summary>
 public sealed class AttentionMonitor(ICopService cop, AttentionOptions options, IRoutingService? routing = null) : ISimulationSystem
 {
@@ -28,6 +28,9 @@ public sealed class AttentionMonitor(ICopService cop, AttentionOptions options, 
 
         /// <summary>Expected arrival: time of the last fix plus the ETA it carried.</summary>
         public DateTimeOffset? Arrival;
+
+        /// <summary>Expected arrival when the current route was reported, to notice traffic eating into it.</summary>
+        public DateTimeOffset? RouteArrival;
         public int OffRouteFixes;
         public DateTimeOffset? LastFixSeen;
     }
@@ -43,6 +46,24 @@ public sealed class AttentionMonitor(ICopService cop, AttentionOptions options, 
         CheckAvl(context);
         CheckCommand(context);
         CheckPlanning(context);
+        CheckHospitals(context);
+    }
+
+    /// <summary>Hospitals that say they are nearly full or diverting ambulances (§17), from their own reports.</summary>
+    private void CheckHospitals(SimulationContext context)
+    {
+        foreach (var hospital in cop.Hospitals)
+        {
+            Track(context, $"hospital-diversion:{hospital.Id}", hospital.OnDiversion,
+                AlertCategory.ResourceShortage, AlertSeverity.Critical,
+                $"{hospital.Name} on diversion",
+                $"Emergency department full ({hospital.Occupied}/{hospital.Capacity}). Ambulances will be sent elsewhere; " +
+                "consider notifying other hospitals.");
+            Track(context, $"hospital-near:{hospital.Id}", !hospital.OnDiversion && hospital.Load >= 0.9,
+                AlertCategory.ResourceShortage, AlertSeverity.Warning,
+                $"{hospital.Name}: emergency department near capacity",
+                $"{hospital.Occupied}/{hospital.Capacity} occupied; can accept {hospital.Available} more.");
+        }
     }
 
     /// <summary>
@@ -187,7 +208,8 @@ public sealed class AttentionMonitor(ICopService cop, AttentionOptions options, 
 
     private void CheckResourceShortages(SimulationContext context)
     {
-        foreach (var group in cop.Units.GroupBy(u => ResourceGroups.For(u.Type)))
+        // Other agencies' AI-run units are not command's to count on.
+        foreach (var group in cop.Units.Where(u => u.Agency?.AiControlled != true).GroupBy(u => ResourceGroups.For(u.Type)))
         {
             var total = group.Count();
             if (total < options.ShortageMinimumFleet) continue;
@@ -288,14 +310,29 @@ public sealed class AttentionMonitor(ICopService cop, AttentionOptions options, 
                         unit.AssignedIncidentId, unit.Id);
                 }
                 watch.Route = unit.PlannedRoute;
+                watch.RouteArrival = arrival;
                 watch.OffRouteFixes = 0;
                 _active.Remove($"deviation:{unit.Id}");
+                _active.Remove($"traffic:{unit.Id}");
+            }
+
+            // Same route, but the expected arrival keeps slipping while the unit is moving: it is stuck in traffic.
+            // Raised once per route (stop-start driving must not make it flap); a new route re-arms it.
+            if (enRoute && unit.SpeedKph >= 1 && watch.RouteArrival is { } promised && arrival is { } expected
+                && expected - promised >= options.TrafficDelayAlert && _active.Add($"traffic:{unit.Id}"))
+            {
+                Raise(context, AlertCategory.SituationChange, AlertSeverity.Warning,
+                    $"{unit.Callsign} delayed: heavy traffic",
+                    $"Expected arrival now {expected.ToLocalTime():HH:mm:ss}, {(expected - promised).TotalMinutes:F1} min later " +
+                    $"than when the route was planned. Position: {where}.",
+                    unit.AssignedIncidentId, unit.Id);
             }
             if (!enRoute || unit.SpeedKph >= 1)
                 watch.Arrival = arrival; // while held up, keep the arrival the unit was heading for
 
             if (!enRoute)
             {
+                _active.Remove($"traffic:{unit.Id}");
                 watch.StoppedSince = null;
                 _active.Remove($"stopped:{unit.Id}");
                 _active.Remove($"avl:{unit.Id}");
@@ -402,6 +439,9 @@ public sealed class AttentionOptions
     public double RouteDeviationMeters { get; set; } = 150;
     /// <summary>Alert when a re-route pushes expected arrival back by at least this much.</summary>
     public TimeSpan EtaIncreaseAlert { get; set; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>Alert when traffic pushes expected arrival back by at least this much without a re-route.</summary>
+    public TimeSpan TrafficDelayAlert { get; set; } = TimeSpan.FromMinutes(2);
 
     /// <summary>Suggest an IAP once an incident is this old with at least <see cref="PlanningUnitThreshold"/> units committed.</summary>
     public TimeSpan PlanningExpectedAfter { get; set; } = TimeSpan.FromMinutes(20);

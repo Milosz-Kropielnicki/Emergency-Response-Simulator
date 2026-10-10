@@ -1,6 +1,7 @@
 using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Simulation.Engine;
+using Emergency_Response_Simulator.Simulation.Hazards;
 using Emergency_Response_Simulator.Simulation.Routing;
 using Emergency_Response_Simulator.Simulation.Scenarios;
 using Emergency_Response_Simulator.Simulation.Services;
@@ -17,7 +18,8 @@ public static class ServiceCollectionExtensions
 {
     /// <summary>
     /// Registers the engine and its systems, the live COP (and the switchable <see cref="CopView"/> for
-    /// display), C2, the IAP builder, AAR and the plume client.
+    /// display), C2, the IAP builder, AAR and the plume client. The world simulation (Phase 6: hazards, civilians,
+    /// medical, traffic, infrastructure, weather, AI agencies) runs unless "Simulation:WorldModels" is false.
     /// An <see cref="IEventStore"/> must be registered separately (in-memory or PostgreSQL).
     /// </summary>
     public static IServiceCollection AddSimulation(this IServiceCollection services, IConfiguration configuration)
@@ -26,6 +28,8 @@ public static class ServiceCollectionExtensions
         services.Configure<HazardModelOptions>(configuration.GetSection(HazardModelOptions.SectionName));
         var attention = configuration.GetSection(AttentionOptions.SectionName).Get<AttentionOptions>() ?? new AttentionOptions();
         services.AddSingleton(attention);
+        var civilians = configuration.GetSection(CivilianOptions.SectionName).Get<CivilianOptions>() ?? new CivilianOptions();
+        services.AddSingleton(civilians);
 
         services.AddSingleton(new SimulationSession(Guid.NewGuid()));
         services.AddSingleton<WorldState>();
@@ -47,15 +51,35 @@ public static class ServiceCollectionExtensions
         });
         services.AddSingleton(sp => new CopView(sp.GetRequiredService<ICopService>()));
 
-        services.AddSingleton<ITrafficModel, TimeOfDayTraffic>();
+        // Vehicles drive at live (true) speeds; command's estimates and crews' navigation plan with the lagged feed.
+        services.AddSingleton(new LiveTraffic(new TimeOfDayTraffic()));
+        services.AddSingleton(new TrafficFeed(new TimeOfDayTraffic()));
+        services.AddSingleton<ITrafficModel>(sp => sp.GetRequiredService<TrafficFeed>());
         services.AddSingleton<RoutingService>();
+        services.AddSingleton<HazardTerrain>();
+        services.AddSingleton<IHazardTerrain>(sp => sp.GetRequiredService<HazardTerrain>());
         services.AddSingleton<IRoutingService>(sp => sp.GetRequiredService<RoutingService>());
         services.AddSingleton(sp => new AvlService(
             sp.GetRequiredService<ICopService>(), sp.GetRequiredService<IEventStore>(), sp.GetRequiredService<SimulationSession>().Id));
         services.AddSingleton<IAvlService>(sp => sp.GetRequiredService<AvlService>());
 
-        services.AddSingleton<ISimulationSystem>(sp => new UnitResponseSystem(sp.GetRequiredService<RoutingService>()));
+        var worldModels = configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.WorldModels)}", true);
+        services.AddSingleton<ISimulationSystem>(sp => new UnitResponseSystem(sp.GetRequiredService<RoutingService>(),
+            worldModels ? sp.GetRequiredService<LiveTraffic>() : null));
         services.AddSingleton<ISimulationSystem, CommandResponseSystem>();
+        if (worldModels)
+        {
+            services.AddSingleton<ISimulationSystem>(_ => new WeatherSystem());
+            services.AddSingleton<ISimulationSystem>(sp => new HazardSystem(sp.GetRequiredService<IHazardTerrain>()));
+            services.AddSingleton<ISimulationSystem>(sp => new InfrastructureSystem(sp.GetRequiredService<IRoutingService>()));
+            services.AddSingleton<ISimulationSystem>(sp => new MedicalSystem(sp.GetRequiredService<IRoutingService>()));
+            services.AddSingleton<ISimulationSystem>(sp => new CivilianSystem(sp.GetRequiredService<IHazardTerrain>(),
+                sp.GetRequiredService<CivilianOptions>(), sp.GetRequiredService<IRoutingService>()));
+            services.AddSingleton<ISimulationSystem>(sp => new AgencyAiSystem(sp.GetRequiredService<RoutingService>()));
+            services.AddSingleton<ISimulationSystem>(sp => new TrafficSystem(sp.GetRequiredService<RoutingService>(),
+                sp.GetRequiredService<LiveTraffic>(), sp.GetRequiredService<TrafficFeed>()));
+            services.AddSingleton<ISimulationSystem>(sp => new HazardReportingSystem(sp.GetRequiredService<IRoutingService>()));
+        }
         services.AddSingleton<ISimulationSystem>(sp => new AttentionMonitor(
             sp.GetRequiredService<ICopService>(), sp.GetRequiredService<AttentionOptions>(), sp.GetRequiredService<IRoutingService>()));
         if (configuration[$"{SimulationOptions.SectionName}:Scenario"] == BarrowStreetScenario.Key)

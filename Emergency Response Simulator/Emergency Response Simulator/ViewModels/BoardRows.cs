@@ -26,10 +26,13 @@ public sealed partial class UnitRow(MainViewModel owner, Unit unit, DateTimeOffs
     public Guid Id { get; } = unit.Id;
     public string Callsign { get; } = unit.Callsign;
     public string Type { get; } = ResourceGroups.Label(unit.Type);
-    public string Agency { get; } = unit.Agency?.ShortName ?? "—";
+    public string Agency { get; } = (unit.Agency?.ShortName ?? "—") + (unit.Agency?.AiControlled == true ? " (own control)" : "");
+
+    /// <summary>Run by another agency's control room: visible, but not command's to dispatch.</summary>
+    public bool IsAiControlled { get; } = unit.Agency?.AiControlled == true;
     public UnitStatus Status { get; } = unit.Status;
     public string StatusText { get; } = EventDescriber.Humanize(unit.Status);
-    public string Assignment { get; } = unit.AssignedIncident?.Number ?? "—";
+    public string Assignment { get; } = unit.AssignedIncident?.Number ?? unit.Tasking ?? "—";
 
     /// <summary>The unit's assignment in its incident's approved IAP, e.g. "Exposure protection".</summary>
     public string PlanTask { get; } = planTask ?? (unit.AssignedIncidentId is null ? "—" : "Not in plan");
@@ -44,14 +47,14 @@ public sealed partial class UnitRow(MainViewModel owner, Unit unit, DateTimeOffs
         : $"No contact {(now - (unit.LastContactAt ?? now)).TotalMinutes:F0} min";
     public string LastContact { get; } = unit.LastContactAt is { } at ? MainViewModel.Time(at) : "—";
 
-    public bool CanDispatch => Status == UnitStatus.Available && owner.SelectedIncidentId is not null;
-    public bool CanCancel => Status is UnitStatus.Dispatched or UnitStatus.EnRoute;
+    public bool CanDispatch => !IsAiControlled && Status == UnitStatus.Available && owner.SelectedIncidentId is not null;
+    public bool CanCancel => !IsAiControlled && Status is UnitStatus.Dispatched or UnitStatus.EnRoute;
 
     /// <summary>Committed elsewhere and an incident is selected: offer to move it there.</summary>
-    public bool CanReassign => owner.SelectedIncidentId is { } selected && unit.AssignedIncidentId is { } current
+    public bool CanReassign => !IsAiControlled && owner.SelectedIncidentId is { } selected && unit.AssignedIncidentId is { } current
                                && current != selected && Status != UnitStatus.OutOfService;
 
-    public IReadOnlyList<StatusOption> NextStatuses { get; } =
+    public IReadOnlyList<StatusOption> NextStatuses { get; } = unit.Agency?.AiControlled == true ? [] :
         UnitStatusRules.NextStatuses(unit.Status)
             // Dispatch and cancellation go through their own commands so the assignment is recorded.
             .Where(s => s is not (UnitStatus.Dispatched or UnitStatus.Cancelled))
@@ -69,6 +72,9 @@ public sealed partial class UnitRow(MainViewModel owner, Unit unit, DateTimeOffs
         }
     }
 }
+
+/// <summary>A receiving hospital as it last reported itself (Design Document §17).</summary>
+public sealed record HospitalRow(string Name, string Load, string Note, string Reported, bool OnDiversion, bool NearFull);
 
 /// <summary>Alert feed row with acknowledgement (Design Document §6.9).</summary>
 public sealed record AlertRow(

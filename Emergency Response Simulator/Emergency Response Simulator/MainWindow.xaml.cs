@@ -2,6 +2,7 @@
 using System.Windows.Input;
 using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Mapping;
+using Emergency_Response_Simulator.Simulation.Routing;
 using Emergency_Response_Simulator.Simulation.Services;
 using Emergency_Response_Simulator.Simulation.State;
 using Emergency_Response_Simulator.ViewModels;
@@ -23,7 +24,9 @@ namespace Emergency_Response_Simulator
 
             // The GIS service only exists when a database is configured.
             _map = new MapController(MapView, viewModel, cop, services.GetService<IGisService>(),
-                services.GetRequiredService<AvlService>(), configuration.GetSection("Map"));
+                services.GetRequiredService<AvlService>(), configuration.GetSection("Map"),
+                services.GetRequiredService<RoutingService>(), services.GetRequiredService<TrafficFeed>(),
+                services.GetRequiredService<LiveTraffic>());
             viewModel.IapRequested += (_, _) => ShowIapBuilder();
             Loaded += async (_, _) =>
             {

@@ -39,4 +39,10 @@ public class Unit : Resource
 
     public Guid? AssignedIncidentId { get; set; }
     public Incident? AssignedIncident { get; set; }
+
+    /// <summary>
+    /// A job the unit's own agency gave it outside command's incidents, e.g. "Garda: RTC, Fitzwilliam Street"
+    /// (COP state, not stored in the database).
+    /// </summary>
+    public string? Tasking { get; set; }
 }

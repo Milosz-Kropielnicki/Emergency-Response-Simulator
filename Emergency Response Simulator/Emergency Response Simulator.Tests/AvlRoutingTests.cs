@@ -14,13 +14,13 @@ namespace Emergency_Response_Simulator.Tests;
 /// <summary>Phase 3: routing, AVL feed, derived alerts, AVL + GIS integration.</summary>
 public class AvlRoutingTests
 {
-    private const double Spacing = 200; // metres between grid streets
+    internal const double Spacing = 200; // metres between grid streets
 
     /// <summary>
     /// A 6 × 6 grid of two-way local streets 200 m apart, south-west corner at <see cref="TestHarness.Dublin"/>.
     /// Row r runs east–west, column c runs north–south. Row 3 is a one-way primary road eastbound.
     /// </summary>
-    private static RoadNetwork Grid(Action<List<GisFeature>>? customise = null)
+    internal static RoadNetwork Grid(Action<List<GisFeature>>? customise = null)
     {
         var features = new List<GisFeature>();
         for (var r = 0; r < 6; r++)
@@ -35,10 +35,10 @@ public class AvlRoutingTests
         return RoadNetwork.Build(features);
     }
 
-    private static GeoPoint At(int row, int col) =>
+    internal static GeoPoint At(int row, int col) =>
         GeoMath.Destination(GeoMath.Destination(TestHarness.Dublin, 0, row * Spacing), 90, col * Spacing);
 
-    private static GisFeature Road(string name, IEnumerable<GeoPoint> points, string highway, string? oneway = null)
+    internal static GisFeature Road(string name, IEnumerable<GeoPoint> points, string highway, string? oneway = null)
     {
         var feature = new GisFeature
         {

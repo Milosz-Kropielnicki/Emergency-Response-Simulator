@@ -47,6 +47,7 @@ public class ErsDbContext(DbContextOptions<ErsDbContext> options) : DbContext(op
         {
             b.Property(a => a.Name).HasMaxLength(200);
             b.Property(a => a.ShortName).HasMaxLength(40);
+            b.Ignore(a => a.AiControlled); // set by AgencyRegistered events
         });
 
         modelBuilder.Entity<User>(b =>
@@ -75,6 +76,7 @@ public class ErsDbContext(DbContextOptions<ErsDbContext> options) : DbContext(op
             // Route tracking is live COP state rebuilt from events; it is not persisted.
             b.Ignore(u => u.PlannedRoute);
             b.Ignore(u => u.RouteDistanceMeters);
+            b.Ignore(u => u.Tasking);
             b.HasOne(u => u.AssignedIncident).WithMany(i => i.AssignedUnits)
                 .HasForeignKey(u => u.AssignedIncidentId).OnDelete(DeleteBehavior.SetNull);
         });

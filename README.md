@@ -65,7 +65,7 @@ The simulator separates **what is happening** from **what command believes is ha
 | `IIapService` | What should we do? | Contract only, Phase 5 |
 | `IGisService` | What exists where? | Implemented on PostGIS |
 | `IAvlService` | Where are my resources? | Contract only, Phase 3 |
-| `IPlumeService` | Where is the hazard going? | HTTP client plus Python stub model; real model comes in Phase 12 |
+| `IPlumeService` | Where is the hazard going? | HTTP client plus Python stub model (the trainee's prediction); a simple truth plume runs in-engine since Phase 6; real model comes in Phase 12 |
 | `ICommsService` | Who said what, on which channel? | Contract only, Phase 7 |
 | `IAarService` | How did we get here? | Timeline and replay implemented; metrics come in Phase 9 |
 | `ISimulationControl` | Start, pause, speed | Implemented (`SimulationEngine`) |
@@ -112,7 +112,7 @@ Road closures, evacuation zones, perimeters, search areas and operational zones 
 | Street | OpenStreetMap | — |
 | Satellite | Esri World Imagery | — |
 | Weather | Esri Dark Gray Canvas | Arrows for the *reported* wind (`WeatherObserved`), not the true wind |
-| Traffic | Esri Dark Gray Canvas | Roads styled by class; congestion arrives with the traffic simulation in Phase 6 |
+| Traffic | Esri Dark Gray Canvas | Roads styled by class, plus congestion from the city traffic feed (Phase 6) |
 | Terrain | OpenTopoMap | Elevation grid |
 
 ## COP (Phase 2)
@@ -263,6 +263,83 @@ The Incident Action Plan is event-sourced like the rest of the COP. Each step is
   - the plan summary in the incident panel
   - an "IAP task" column on the resource board
   - an "Action plans" history filter
+
+## Simulation engine & basic AI (Phase 6)
+
+The world now runs on its own. Each system advances `WorldState` every tick and records what changes as **truth** events. Command learns about any of it only through **perceived** events: calls, crew reports, hospital and utility reports, AVL. `Simulation:WorldModels = false` turns it all off and leaves the scripted world of earlier phases. Chance is seeded from ids, so a session replays the same way.
+
+- **Hazards** (`Simulation/Hazards`, advanced by `HazardSystem`). A real structure fire or explosion gets a fire hazard; a flood incident gets a flood; a hazmat release gets a plume.
+
+  | Model | How it works |
+  |---|---|
+  | Fire spread | Cellular automaton on 15 m cells. Spread depends on fuel (buildings burn, water doesn't) and wind behind the fire: about 2 m/min in still air, about 6 m/min downwind at 7 m/s. Engines working at the scene put out burning cells within 90 m and cool the cells around them. |
+  | Flood | Water enters at the source and runs downhill over the elevation grid. Streets under 25 cm or more become real obstructions, which crews find by driving into them. |
+  | Simple plume | Ground-level Gaussian plume with Briggs urban dispersion, class D. Low, moderate and high zones come from AEGL-style thresholds. The cloud only reaches as far as the wind has carried it, swings with the wind, and clears after the release stops. Phase 12 brings the full models. |
+
+  Terrain (`HazardTerrain`) comes from the imported buildings, water and elevation layers, and is uniform when there is no GIS. Footprints are recorded every minute (`HazardFootprintChanged`).
+- **Agents:**
+  - *Civilians* (`CivilianSystem`):
+    - notice the hazard (smoke, smell, water), then evacuate, come to look, shelter or panic;
+    - get hurt in the fire, the cloud or deep water;
+    - some ring 999 a minute or two later, with locations 30–250 m out.
+    - People inside a declared evacuation or shelter-in-place zone are warned over 2–10 minutes; 85 % comply. Evacuees with cars drive out as vehicle agents.
+  - *Casualties and EMS* (`MedicalSystem`):
+    - Untreated casualties deteriorate: P3 → P2 → P1 → dead.
+    - Ambulance crews at the scene treat the most urgent casualty, then take one P1 or two others to the nearest hospital that has room.
+    - Handover takes 8 minutes, and the crew then becomes available again.
+    - The first crew sends casualty counts to command.
+  - *Responders*: crews drive at the speed the roads really allow (`LiveTraffic`). Their navigation plans with the traffic feed, and they re-route when a jam costs them far more than promised.
+- **Traffic** (`TrafficSystem`, every 10 s). Each road segment gets a congestion factor from:
+  - queues spilling back up to three junctions from closures and blockages, growing over 12 minutes;
+  - signalised junctions going dark in power cuts (45 % flow, 80 % with police directing traffic);
+  - evacuee cars filling streets (Greenshields).
+
+  Below 20 % of normal speed a road is gridlocked. Command's traffic view and ETA estimates use `TrafficFeed`, a copy refreshed every two minutes, so jams appear late.
+- **Cascading effects** are recorded as `CascadeOccurred` truth events, e.g. fire reaches the chemical store → chlorine release → drums rupture (rate × 2.5); fire reaches the substation → power out within 600 m → signals dark at 6 junctions → "Ambulance 14 delayed about 1.6 min". Others:
+  - a hospital on generators loses 15 % of its capacity;
+  - a full hospital diverts arriving ambulances;
+  - a closure causes gridlock on the roads leading into it.
+- **Dynamic scenario updates:**
+
+  | Changes | How |
+  |---|---|
+  | Wind | `WeatherSystem` drifts the true wind ±25° around the prevailing direction. The met service reports every 30 minutes, rounded and 10 minutes old. |
+  | Release rate | `HazardRateChanged`, e.g. drums rupturing |
+  | Road closures | Floodwater opens and closes them |
+  | Casualty count | Follows the actual casualties and only ever grows |
+  | Hospital capacity | Surge plan (+30 %) when command notifies the hospital; a burst pipe, or generators in a power cut |
+
+  Hospitals report their load every 15 minutes, and straight away at 90 % or on diversion. The attention monitor alerts on what they *report*, and also when an en-route unit's ETA slips two minutes or more in traffic.
+- **AI-controlled agencies** (`AgencyAiSystem`): agencies registered with `AiControlled` run their own control rooms. In the demo roster these are North District fire, Dublin South ambulance and Garda Roads Policing.
+  - Their units are on the COP (resource board: "(own control)", with their job in the Assignment column), but C2 refuses to dispatch them.
+  - They take routine jobs around the city.
+  - Six minutes into a major incident, their own callers have told them about it. Without being asked, they:
+    - set a traffic cordon;
+    - direct traffic at dark junctions;
+    - send ambulances when casualties wait;
+    - send an engine to a large fire nobody is fighting.
+  - They go to the incident's real location and tell command what they did. A major incident takes priority over their routine work.
+- **Truth vs perception:**
+  - `HazardReportingSystem` is the bridge: fire crews send a size-up and progress every 5 minutes. Their area estimates carry a consistent per-crew bias; they warn about exposures they can see ("hazard placards for chlorine on unit 4"). Crews sent to the wrong place report "nothing showing here, heavy smoke to the E". Crews inside the cloud report the smell, then symptoms.
+  - The engine takes an immutable `WorldSnapshot` after every step.
+  - `TruthComparison` lists where the COP and the world disagree:
+    - an incident not on the COP;
+    - casualties found versus casualties reported;
+    - hazards nobody has reported;
+    - a dead radio the COP still shows as in contact;
+    - a hospital that diverts while the COP thinks it has room;
+    - the true wind versus the reported wind.
+- **UI:**
+  - **Instructor · Ground truth** tab: truth vs COP, the cascade chain, and the world right now.
+  - **Ground truth (instructor)** map layers, off by default and drawn in purple: real hazards, outages, blockages and chemical/substation sites; civilians and casualties; true unit positions where they differ from the COP; live traffic.
+  - The trainee's **Traffic** view now shows feed congestion.
+  - Hospitals appear on the map with their reported load, and are listed beside Notifications in Command & Control.
+  - A "World & cascades" filter in the history log.
+- **Barrow Street** is now emergent:
+  - The neighbour is right: a chlorine store sits 70 m north-east.
+  - Left unchecked, the fire reaches it at about minute 9, after the wind backs south-west, and the substation at about minute 21–24.
+  - The demo response's first engine warns about the placards a minute before the store is reached.
+  - St. James's loses two resus bays at minute 10.
 
 ## Local setup
 

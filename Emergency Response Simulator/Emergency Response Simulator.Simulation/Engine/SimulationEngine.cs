@@ -40,7 +40,16 @@ public sealed class SimulationEngine : ISimulationControl, IEventPublisher
         var start = (options.StartTime ?? DateTimeOffset.UtcNow).ToUniversalTime();
         SimTime = start.AddTicks(-(start.Ticks % TimeSpan.TicksPerSecond));
         TimeScale = options.InitialTimeScale;
+        Snapshot = WorldSnapshot.Capture(world, SimTime);
     }
+
+    /// <summary>
+    /// Ground truth as of the end of the last step, safe to read from any thread (instructor views).
+    /// </summary>
+    public WorldSnapshot Snapshot { get; private set; }
+
+    /// <summary>Raised after each step, on the engine's thread, once <see cref="Snapshot"/> is up to date.</summary>
+    public event EventHandler? Stepped;
 
     public Guid SessionId { get; }
     public DateTimeOffset SimTime { get; private set; }
@@ -115,11 +124,14 @@ public sealed class SimulationEngine : ISimulationControl, IEventPublisher
 
             foreach (var (visibility, source, payload) in context.Emitted)
                 await AppendLockedAsync(visibility, source, payload, cancellationToken);
+
+            Snapshot = WorldSnapshot.Capture(World, SimTime);
         }
         finally
         {
             _gate.Release();
         }
+        Stepped?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Ticks in real time until cancelled. The engine starts paused.</summary>

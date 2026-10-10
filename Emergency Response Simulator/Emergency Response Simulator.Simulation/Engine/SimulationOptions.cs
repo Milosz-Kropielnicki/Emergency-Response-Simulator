@@ -29,4 +29,10 @@ public sealed class SimulationOptions
 
     /// <summary>Presentation mode for scripted scenarios: the scenario makes the first dispatch decisions itself.</summary>
     public bool DemoAutoResponse { get; set; }
+
+    /// <summary>
+    /// Run the world simulation (hazards, civilians, casualties and hospitals, live traffic, power, weather drift and
+    /// AI-run agencies). Off gives the scripted-only world of earlier phases.
+    /// </summary>
+    public bool WorldModels { get; set; } = true;
 }

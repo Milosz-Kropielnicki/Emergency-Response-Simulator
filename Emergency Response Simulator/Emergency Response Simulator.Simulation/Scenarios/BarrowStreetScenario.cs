@@ -11,6 +11,9 @@ namespace Emergency_Response_Simulator.Simulation.Scenarios;
 /// chemical store next door. Fictional, set on real streets.
 /// Information arrives late, imprecise and partly wrong; the trainee must open the incident, decide
 /// what to believe, commit resources and react to the wind shift and a unit falling silent.
+/// With the world models running (Phase 6) the fire really spreads with the wind: left unchecked it reaches the
+/// chlorine store next door (a toxic release that worsens when the drums rupture) and then the substation that
+/// feeds the area (power, traffic signals and hospital capacity follow).
 /// </summary>
 public static class BarrowStreetScenario
 {
@@ -25,6 +28,12 @@ public static class BarrowStreetScenario
     /// carriageways. Crews approaching along Pearse Street run into it and must detour via Grand Canal Street.
     /// </summary>
     public static readonly IReadOnlyList<GeoPoint> ObstructionLine = [new(53.34180, -6.23780), new(53.34280, -6.23780)];
+
+    /// <summary>The unit next door that really does store chlorine-based chemicals (the neighbour is right).</summary>
+    public static readonly GeoPoint ChemicalStore = GeoMath.Destination(FireLocation, 45, 70);
+
+    /// <summary>The substation feeding Grand Canal Dock, downwind once the wind backs south-west.</summary>
+    public static readonly GeoPoint Substation = GeoMath.Destination(FireLocation, 50, 160);
 
     /// <param name="demoAutoResponse">
     /// Presentation mode: at minute 2 the scenario itself opens the incident and dispatches a first response,
@@ -56,6 +65,21 @@ public static class BarrowStreetScenario
             .. demo,
             new(TimeSpan.FromSeconds(5), "Lorry sheds its load on MacMahon Bridge (truth, unreported)",
                 _ => [Truth(new RoadObstructed(lorry, ObstructionLine, "lorry has shed its load across both lanes"))]),
+
+            new(TimeSpan.FromSeconds(5), "Chlorine store and substation near the warehouse (truth: set off only if the fire reaches them)",
+                _ => [
+                    Truth(new HazardSitePlaced(Guid.NewGuid(), HazardSiteKind.ChemicalStore, "unit 4 (cleaning chemicals store)",
+                        ChemicalStore, "chlorine", Quantity: 1000)),
+                    Truth(new HazardSitePlaced(Guid.NewGuid(), HazardSiteKind.Substation, "Grand Canal Street substation",
+                        Substation, ServiceRadiusMeters: 600)),
+                ]),
+
+            new(TimeSpan.FromMinutes(1), "Drums rupture in the heat: release rate rises (truth, only once a release has run 4 min)",
+                context => ChlorineRelease(context) is { } release
+                    ? [Truth(new HazardRateChanged(release.Id, release.Rate * 2.5, "drums rupturing in the heat"))]
+                    : [],
+                Condition: context => ChlorineRelease(context) is { } release && context.SimTime - release.StartedAt >= TimeSpan.FromMinutes(4),
+                Until: TimeSpan.FromMinutes(60)),
 
             new(TimeSpan.FromSeconds(20), "Fire and explosion start in the warehouse (truth)",
                 _ => [Truth(new WorldIncidentStarted(fire, IncidentType.Explosion, FireLocation, Severity: 0.4, ActualCasualties: 6))]),
@@ -107,6 +131,11 @@ public static class BarrowStreetScenario
                     "Request authority to evacuate to the community centre on Pearse Street.",
                     "Garda Inspector, Pearse Street"))]),
 
+            new(TimeSpan.FromMinutes(10), "St. James's loses two resus bays to a burst pipe (truth: hospital capacity drops)",
+                context => context.World.Hospitals.Values.FirstOrDefault(h => h.Name.StartsWith("St. James's")) is { } james
+                    ? [Truth(new HospitalCapacityChanged(james.Id, james.Capacity - 3, "burst pipe: two resus bays out of use"))]
+                    : []),
+
             new(TimeSpan.FromMinutes(10), "Hospital reports pressure on the emergency department",
                 _ => [Perceived(new AlertRaised(Guid.NewGuid(), AlertCategory.Critical, AlertSeverity.Critical,
                     "St. James's Hospital: ED near capacity",
@@ -129,9 +158,13 @@ public static class BarrowStreetScenario
         ]);
     }
 
+    private static State.WorldHazard? ChlorineRelease(SimulationContext context) =>
+        context.World.Hazards.Values.FirstOrDefault(h => h.Kind == HazardKind.Plume && !h.Ended && h.Rate > 0);
+
     private static Guid? TravellingEngine(SimulationContext context) =>
         context.World.Units.Values
-            .Where(u => u.Type == UnitType.Engine && u.Phase == State.ResponsePhase.Travelling && !u.BrokenDown)
+            .Where(u => u.Type == UnitType.Engine && u.Phase == State.ResponsePhase.Travelling && !u.BrokenDown
+                        && !(u.AgencyId is { } agency && context.World.Agencies.TryGetValue(agency, out var a) && a.AiControlled))
             .OrderBy(u => u.Callsign, StringComparer.Ordinal)
             .FirstOrDefault()?.Id;
 

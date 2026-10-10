@@ -6,8 +6,9 @@ using Emergency_Response_Simulator.Simulation.Engine;
 namespace Emergency_Response_Simulator.Simulation.Scenarios;
 
 /// <summary>
-/// A small fictional roster around Dublin so the shell has resources to show.
-/// No incidents: those arrive with the scenario editor and simulation systems.
+/// A small fictional roster around Dublin so the shell has resources to show, the receiving hospitals
+/// (real names, illustrative capacities), and neighbouring agencies run by the simulation, whose units
+/// command can see but not dispatch. No incidents: those come from scenarios.
 /// </summary>
 public sealed class DemoRosterScenario : IScenario
 {
@@ -39,6 +40,26 @@ public sealed class DemoRosterScenario : IScenario
         await AddUnit("Police 14", UnitType.Patrol, police, new GeoPoint(53.3440, -6.2672), "Central", 2);
         await AddUnit("Police 21", UnitType.Patrol, police, new GeoPoint(53.3520, -6.2440), "North", 2);
         await AddUnit("Traffic 5", UnitType.Traffic, police, new GeoPoint(53.3405, -6.2550), "Central", 1);
+
+        // Neighbouring services with their own control rooms (AI-controlled, Design Document §10.3).
+        var northFire = Guid.NewGuid();
+        var southEms = Guid.NewGuid();
+        var trafficCorps = Guid.NewGuid();
+        await Register(new AgencyRegistered(northFire, "City Fire Brigade, North District", "Fire N", AgencyType.Fire, AiControlled: true));
+        await Register(new AgencyRegistered(southEms, "Ambulance Service, Dublin South", "EMS S", AgencyType.Ems, AiControlled: true));
+        await Register(new AgencyRegistered(trafficCorps, "Garda Roads Policing", "Garda RP", AgencyType.Police, AiControlled: true));
+        await AddUnit("Engine 31", UnitType.Engine, northFire, new GeoPoint(53.3585, -6.2560), "Station 11", 5, "Structural", "BreathingApparatus");
+        await AddUnit("Engine 33", UnitType.Engine, northFire, new GeoPoint(53.3585, -6.2560), "Station 11", 4, "Structural");
+        await AddUnit("Ambulance 52", UnitType.AmbulanceAls, southEms, new GeoPoint(53.3245, -6.2385), "Donnybrook", 2, "ALS");
+        await AddUnit("Ambulance 55", UnitType.AmbulanceBls, southEms, new GeoPoint(53.3245, -6.2385), "Donnybrook", 2, "BLS");
+        await AddUnit("Garda RP 41", UnitType.Traffic, trafficCorps, new GeoPoint(53.3462, -6.2515), "Pearse Street", 2);
+        await AddUnit("Garda RP 43", UnitType.Motorcycle, trafficCorps, new GeoPoint(53.3372, -6.2460), "Pearse Street", 1);
+
+        // Receiving hospitals: emergency department places and how many are already in use.
+        await Register(new HospitalRegistered(Guid.NewGuid(), "St. James's Hospital", new GeoPoint(53.3415, -6.2949), EdCapacity: 40, Occupied: 35));
+        await Register(new HospitalRegistered(Guid.NewGuid(), "Mater Misericordiae University Hospital", new GeoPoint(53.3597, -6.2659), EdCapacity: 45, Occupied: 33));
+        await Register(new HospitalRegistered(Guid.NewGuid(), "St. Vincent's University Hospital", new GeoPoint(53.3168, -6.2128), EdCapacity: 35, Occupied: 24));
+        await Register(new HospitalRegistered(Guid.NewGuid(), "Beaumont Hospital", new GeoPoint(53.3905, -6.2232), EdCapacity: 40, Occupied: 31));
 
         await publisher.PublishAsync(
             new WeatherChanged(WindFromDegrees: 270, WindSpeedMps: 4.5, TemperatureC: 14, RelativeHumidity: 0.72),

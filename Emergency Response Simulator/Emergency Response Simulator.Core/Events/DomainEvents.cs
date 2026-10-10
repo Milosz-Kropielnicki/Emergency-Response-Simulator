@@ -54,6 +54,10 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(IapApproved), nameof(IapApproved))]
 [JsonDerivedType(typeof(IapBriefed), nameof(IapBriefed))]
 [JsonDerivedType(typeof(ObjectiveStatusChanged), nameof(ObjectiveStatusChanged))]
+// Simulation world, as reported (Phase 6)
+[JsonDerivedType(typeof(HospitalRegistered), nameof(HospitalRegistered))]
+[JsonDerivedType(typeof(HospitalStatusReported), nameof(HospitalStatusReported))]
+[JsonDerivedType(typeof(UnitTasked), nameof(UnitTasked))]
 // Truth: the world as it really is
 [JsonDerivedType(typeof(WorldIncidentStarted), nameof(WorldIncidentStarted))]
 [JsonDerivedType(typeof(WorldIncidentChanged), nameof(WorldIncidentChanged))]
@@ -62,6 +66,18 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(RoadObstructed), nameof(RoadObstructed))]
 [JsonDerivedType(typeof(UnitBrokeDown), nameof(UnitBrokeDown))]
 [JsonDerivedType(typeof(RoadObstructionCleared), nameof(RoadObstructionCleared))]
+// Truth: hazards, casualties, infrastructure and cascades (Phase 6)
+[JsonDerivedType(typeof(HazardStarted), nameof(HazardStarted))]
+[JsonDerivedType(typeof(HazardFootprintChanged), nameof(HazardFootprintChanged))]
+[JsonDerivedType(typeof(HazardRateChanged), nameof(HazardRateChanged))]
+[JsonDerivedType(typeof(HazardEnded), nameof(HazardEnded))]
+[JsonDerivedType(typeof(HazardSitePlaced), nameof(HazardSitePlaced))]
+[JsonDerivedType(typeof(CasualtyInjured), nameof(CasualtyInjured))]
+[JsonDerivedType(typeof(CasualtyChanged), nameof(CasualtyChanged))]
+[JsonDerivedType(typeof(HospitalCapacityChanged), nameof(HospitalCapacityChanged))]
+[JsonDerivedType(typeof(PowerOutageStarted), nameof(PowerOutageStarted))]
+[JsonDerivedType(typeof(PowerRestored), nameof(PowerRestored))]
+[JsonDerivedType(typeof(CascadeOccurred), nameof(CascadeOccurred))]
 // Engine control
 [JsonDerivedType(typeof(SimulationStarted), nameof(SimulationStarted))]
 [JsonDerivedType(typeof(SimulationPaused), nameof(SimulationPaused))]
@@ -70,7 +86,11 @@ public abstract record DomainEvent;
 
 // ---- Scenario setup ----
 
-public sealed record AgencyRegistered(Guid AgencyId, string Name, string ShortName, AgencyType Type) : DomainEvent;
+/// <param name="AiControlled">Run by the simulation (another control room), not by the trainee.</param>
+public sealed record AgencyRegistered(Guid AgencyId, string Name, string ShortName, AgencyType Type, bool AiControlled = false) : DomainEvent;
+
+/// <summary>A receiving hospital and its emergency department as known at the start; also its true starting state.</summary>
+public sealed record HospitalRegistered(Guid HospitalId, string Name, GeoPoint Location, int EdCapacity, int Occupied) : DomainEvent;
 
 public sealed record UnitRegistered(
     Guid UnitId,
@@ -282,6 +302,17 @@ public sealed record IapBriefed(Guid PlanId, int OrdersIssued) : DomainEvent;
 /// <summary>Progress on an operational objective, tracked across versions and periods.</summary>
 public sealed record ObjectiveStatusChanged(Guid IncidentId, Guid ObjectiveId, ObjectiveStatus Status) : DomainEvent;
 
+// ---- Simulation world, as reported (Phase 6) ----
+
+/// <summary>A hospital tells command how full its emergency department is (it may already be out of date).</summary>
+public sealed record HospitalStatusReported(Guid HospitalId, string Name, int Occupied, int Capacity, bool OnDiversion, string? Note) : DomainEvent;
+
+/// <summary>
+/// A unit's own agency gives it a job outside command's incidents: an AI-run control room handling its routine
+/// calls, or acting on its own initiative at the major incident (Design Document §10.3).
+/// </summary>
+public sealed record UnitTasked(Guid UnitId, Guid TaskId, string TaskedBy, string Task, GeoPoint Location) : DomainEvent;
+
 /// <summary>
 /// Weather as reported to command by a met service or station. May lag or differ from the true
 /// <see cref="WeatherChanged"/>; the COP's weather view shows only this.
@@ -330,6 +361,63 @@ public sealed record RoadObstructionCleared(Guid ObstructionId) : DomainEvent;
 
 /// <summary>A vehicle really breaks down. AVL shows it stop; the crew reports the cause a little later.</summary>
 public sealed record UnitBrokeDown(Guid UnitId, string Fault) : DomainEvent;
+
+/// <summary>A hazard really begins: fire takes hold, water starts rising, a toxic release starts (§10.4).</summary>
+/// <param name="Rate">Flood: inflow in m³/s. Plume: release rate in kg/s. Fire: unused (0).</param>
+/// <param name="Inventory">Plume: kilograms available to release; the release stops when it runs out.</param>
+public sealed record HazardStarted(
+    Guid HazardId,
+    Guid? WorldIncidentId,
+    HazardKind Kind,
+    GeoPoint Origin,
+    string Description,
+    double Rate = 0,
+    string? Substance = null,
+    double Inventory = 0) : DomainEvent;
+
+/// <summary>Where the hazard really is now: the burning area, the flooded area, the toxic cloud above its lowest threshold.</summary>
+/// <param name="Areas">Outer rings of the affected areas.</param>
+/// <param name="Intensity">Fire: area burning now (m²). Flood: deepest water (m). Plume: release rate (kg/s).</param>
+public sealed record HazardFootprintChanged(
+    Guid HazardId,
+    IReadOnlyList<IReadOnlyList<GeoPoint>> Areas,
+    double AreaSquareMeters,
+    double Intensity) : DomainEvent;
+
+/// <summary>A release rate or inflow really changes (§10.6): drums rupture, a river keeps rising, a leak is plugged.</summary>
+public sealed record HazardRateChanged(Guid HazardId, double Rate, string Reason) : DomainEvent;
+
+public sealed record HazardEnded(Guid HazardId, string Reason) : DomainEvent;
+
+/// <summary>Something a hazard can set off: a chemical store, a substation (§10.5). Nothing happens until a hazard reaches it.</summary>
+/// <param name="Quantity">Chemical store: kilograms held.</param>
+/// <param name="ServiceRadiusMeters">Substation: the area it supplies.</param>
+public sealed record HazardSitePlaced(
+    Guid SiteId,
+    HazardSiteKind Kind,
+    string Name,
+    GeoPoint Location,
+    string? Substance = null,
+    double Quantity = 0,
+    double ServiceRadiusMeters = 0) : DomainEvent;
+
+/// <summary>Someone is really hurt. Command knows only what callers, crews and hospitals tell it.</summary>
+public sealed record CasualtyInjured(Guid CasualtyId, Guid? WorldIncidentId, GeoPoint Location, Triage Triage, string Cause) : DomainEvent;
+
+public sealed record CasualtyChanged(Guid CasualtyId, Triage Triage, CasualtyState State, Guid? HospitalId = null) : DomainEvent;
+
+/// <summary>A hospital's true emergency capacity changes: surge plan activated, running on generators.</summary>
+public sealed record HospitalCapacityChanged(Guid HospitalId, int Capacity, string Reason) : DomainEvent;
+
+public sealed record PowerOutageStarted(Guid OutageId, GeoPoint Centre, double RadiusMeters, string Cause) : DomainEvent;
+
+public sealed record PowerRestored(Guid OutageId) : DomainEvent;
+
+/// <summary>
+/// One link in a chain of knock-on effects (§10.5), e.g. "Power out around the substation" → "6 junctions' traffic
+/// signals dark" → "Ambulance 14 delayed 2.5 min". Recorded for the instructor and the AAR.
+/// </summary>
+public sealed record CascadeOccurred(string Cause, string Effect, Guid? UnitId = null, Guid? HazardId = null) : DomainEvent;
 
 // ---- Engine control ----
 

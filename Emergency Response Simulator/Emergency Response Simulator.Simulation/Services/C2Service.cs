@@ -12,11 +12,21 @@ namespace Emergency_Response_Simulator.Simulation.Services;
 /// </summary>
 public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2Service
 {
+    /// <summary>
+    /// Units of an AI-run agency (Design Document §10.3) take orders from their own control room; command can see
+    /// them, and ask for them through a request or notification, but not dispatch them.
+    /// </summary>
+    private static CommandResult? NotUnderCommand(Unit unit) => unit.Agency is { AiControlled: true } agency
+        ? CommandResult.Fail($"{unit.Callsign} belongs to {agency.Name}, which is not under your command. Ask them through a notification or mutual-aid request.")
+        : null;
+
     public async Task<CommandResult> DispatchAsync(
         Guid unitId, Guid incidentId, Guid? orderedBy = null, CancellationToken cancellationToken = default)
     {
         if (cop.FindUnit(unitId) is not { } unit)
             return CommandResult.Fail("Unknown unit.");
+        if (NotUnderCommand(unit) is { } refused)
+            return refused;
         if (cop.FindIncident(incidentId) is not { } incident)
             return CommandResult.Fail("Unknown incident.");
         if (incident.Status == IncidentStatus.Closed)
@@ -32,6 +42,8 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2S
     {
         if (cop.FindUnit(unitId) is not { } unit)
             return CommandResult.Fail("Unknown unit.");
+        if (NotUnderCommand(unit) is { } refused)
+            return refused;
         if (unit.AssignedIncidentId is not { } incidentId)
             return CommandResult.Fail($"{unit.Callsign} has no assignment to cancel.");
 
@@ -43,6 +55,8 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2S
     {
         if (cop.FindUnit(unitId) is not { } unit)
             return CommandResult.Fail("Unknown unit.");
+        if (NotUnderCommand(unit) is { } refused)
+            return refused;
         if (unit.Status == UnitStatus.OutOfService)
             return CommandResult.Fail($"{unit.Callsign} is out of service.");
         if (cop.FindIncident(newIncidentId) is not { } incident)
@@ -176,6 +190,8 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2S
     {
         if (cop.FindUnit(unitId) is not { } unit)
             return CommandResult.Fail("Unknown unit.");
+        if (NotUnderCommand(unit) is { } refused)
+            return refused;
         if (!UnitStatusRules.CanTransition(unit.Status, status))
             return CommandResult.Fail(
                 $"{unit.Callsign} cannot go from {EventDescriber.Humanize(unit.Status)} to {EventDescriber.Humanize(status)}.");
