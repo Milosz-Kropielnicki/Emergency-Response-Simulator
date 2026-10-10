@@ -35,4 +35,10 @@ public sealed class SimulationOptions
     /// AI-run agencies). Off gives the scripted-only world of earlier phases.
     /// </summary>
     public bool WorldModels { get; set; } = true;
+
+    /// <summary>
+    /// Simulate communications (Phase 7): channel airtime, garbled and lost messages, coverage, batteries, the 999
+    /// queue. Off, every message reaches command at once and intact.
+    /// </summary>
+    public bool CommsRealism { get; set; } = true;
 }

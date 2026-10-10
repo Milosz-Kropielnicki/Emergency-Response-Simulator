@@ -14,30 +14,7 @@
 
     <Window.Resources>
         <!-- Time · title · detail row used by the incident, alert and comms feeds. -->
-        <DataTemplate x:Key="FeedItemTemplate" DataType="{x:Type vm:FeedItem}">
-            <Grid Margin="0,0,0,8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="44" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="{Binding Time}" Foreground="{StaticResource MutedTextBrush}" FontFamily="Consolas" />
-                <StackPanel Grid.Column="1">
-                    <TextBlock x:Name="Title" Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding Detail}" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
-                </StackPanel>
-            </Grid>
-            <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding Severity}" Value="Critical">
-                    <Setter TargetName="Title" Property="Foreground" Value="{StaticResource CriticalBrush}" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Severity}" Value="Warning">
-                    <Setter TargetName="Title" Property="Foreground" Value="{StaticResource WarningBrush}" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Severity}" Value="High">
-                    <Setter TargetName="Title" Property="Foreground" Value="{StaticResource WarningBrush}" />
-                </DataTrigger>
-            </DataTemplate.Triggers>
-        </DataTemplate>
+
 
         <!-- A unit with a drop-down to move it between ICS groups. -->
         <DataTemplate x:Key="UnitPlacementTemplate" DataType="{x:Type vm:UnitPlacementRow}">
@@ -295,9 +272,9 @@
                     Visibility="{Binding IsRightPanelOpen, Converter={StaticResource BoolToVisibility}}">
                 <TabControl SelectedIndex="{Binding RightPanelTab}">
                     <TabItem Header="COMMS HUB">
-                        <DockPanel>
-                    
-                            <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding CommsChannels}" Margin="0,0,0,8">
+                        <DockPanel DataContext="{Binding CommsHub}">
+                            <!-- Which traffic to show -->
+                            <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding Filters}" Margin="0,0,0,6">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
                                         <WrapPanel />
@@ -306,17 +283,184 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type vm:ToggleItem}">
                                         <ToggleButton Content="{Binding Label}" IsChecked="{Binding IsOn}"
-                                                      Margin="0,0,4,4" Padding="8,3" FontSize="12" />
+                                                      Margin="0,0,4,4" Padding="6,2" FontSize="11" />
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                            <Rectangle DockPanel.Dock="Top" Height="1" Fill="{StaticResource BorderBrush}" Margin="0,0,0,8" />
+
+                            <!-- Channels: who is on air and how busy -->
+                            <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding ChannelStates}" Margin="0,0,0,6">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:ChannelRow}">
+                                        <Grid Margin="0,0,0,2" ToolTip="{Binding Name}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="12" />
+                                                <ColumnDefinition Width="100" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="60" />
+                                                <ColumnDefinition Width="34" />
+                                            </Grid.ColumnDefinitions>
+                                            <Ellipse x:Name="Led" Width="8" Height="8" Fill="{StaticResource OkBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Id}" FontFamily="Consolas" FontSize="11" />
+                                            <TextBlock Grid.Column="2" FontSize="11" TextTrimming="CharacterEllipsis" Foreground="{StaticResource MutedTextBrush}">
+                                                <Run Text="{Binding OnAir, Mode=OneWay}" /> <Run Text="{Binding Patched, Mode=OneWay}" />
+                                            </TextBlock>
+                                            <ProgressBar Grid.Column="3" Value="{Binding Utilisation, Mode=OneWay}" Maximum="1" Height="6" Margin="4,0" />
+                                            <TextBlock x:Name="Load" Grid.Column="4" Text="{Binding Load}" FontSize="11" TextAlignment="Right" />
+                                        </Grid>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding Busy}" Value="True">
+                                                <Setter TargetName="Led" Property="Fill" Value="{StaticResource CriticalBrush}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Congested}" Value="True">
+                                                <Setter TargetName="Load" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Push to talk -->
+                            <Border DockPanel.Dock="Top" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="6" Margin="0,0,0,6">
+                                <StackPanel>
+                                    <DockPanel>
+                                        <ComboBox DockPanel.Dock="Left" ItemsSource="{Binding TalkChannels}" SelectedItem="{Binding TalkChannel}" Width="120"
+                                                  ToolTip="Channel to transmit on" />
+                                        <ComboBox ItemsSource="{Binding CallSigns}" Text="{Binding TalkTo, UpdateSourceTrigger=PropertyChanged}" IsEditable="True"
+                                                  Margin="4,0,0,0" ToolTip="Who you are calling (their call sign must be in what you say)" />
+                                    </DockPanel>
+                                    <TextBox Text="{Binding TalkText, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                             AcceptsReturn="False" MinHeight="40" ToolTip="Plain language: call sign, who you are, the message. Keep it short." />
+                                    <DockPanel Margin="0,4,0,0">
+                                        <Button DockPanel.Dock="Right" Content="Send" Command="{Binding SendCommand}" Margin="4,0,0,0" Padding="8,2"
+                                                ToolTip="Transmit without push-to-talk timing" />
+                                        <Button x:Name="PttButton" Padding="8,4" FontWeight="SemiBold"
+                                                PreviewMouseLeftButtonDown="PttButton_PreviewMouseLeftButtonDown"
+                                                PreviewMouseLeftButtonUp="PttButton_PreviewMouseLeftButtonUp"
+                                                LostMouseCapture="PttButton_LostMouseCapture"
+                                                ToolTip="Hold while you speak: let go too early and the end of the message is lost">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                                    <Setter Property="Content" Value="HOLD TO TALK" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Talking}" Value="True">
+                                                            <Setter Property="Content" Value="● TRANSMITTING…" />
+                                                            <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </DockPanel>
+                                    <TextBlock x:Name="ChannelHint" Text="{Binding TalkChannelState}" FontSize="11" Margin="0,3,0,0"
+                                               Foreground="{StaticResource MutedTextBrush}" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Missed 999 calls -->
+                            <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding MissedCalls}" Margin="0,0,0,4">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:MissedCallRow}">
+                                        <DockPanel Margin="0,0,0,3">
+                                            <Button DockPanel.Dock="Right" Content="Call back" Padding="6,0" FontSize="11"
+                                                    Command="{Binding DataContext.CommsHub.CallBackCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding Id}" />
+                                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource WarningBrush}">
+                                                <Run Text="{Binding Time, Mode=OneWay}" /> <Run Text="Missed 999 call:" FontWeight="SemiBold" />
+                                                <Run Text="{Binding Detail, Mode=OneWay}" />
+                                            </TextBlock>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Patches and channel assignment -->
+                            <Expander DockPanel.Dock="Bottom" Header="Patches &amp; channel assignment" Margin="0,6,0,0">
+                                <StackPanel Margin="0,4,0,0">
+                                    <DockPanel>
+                                        <Button DockPanel.Dock="Right" Content="Patch" Command="{Binding PatchCommand}" Margin="4,0,0,0" Padding="6,0" />
+                                        <ComboBox DockPanel.Dock="Left" ItemsSource="{Binding AllRadioChannels}" SelectedItem="{Binding PatchA}" Width="130" />
+                                        <TextBlock Text="↔" Margin="4,0" VerticalAlignment="Center" />
+                                        <ComboBox ItemsSource="{Binding AllRadioChannels}" SelectedItem="{Binding PatchB}" />
+                                    </DockPanel>
+                                    <ItemsControl ItemsSource="{Binding Patches}" Margin="0,4,0,0">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:PatchRow}">
+                                                <DockPanel Margin="0,0,0,2">
+                                                    <Button DockPanel.Dock="Right" Content="Remove" Padding="6,0" FontSize="11"
+                                                            Command="{Binding DataContext.CommsHub.RemovePatchCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding Id}" />
+                                                    <TextBlock>
+                                                        <Run Text="{Binding Channels, Mode=OneWay}" />
+                                                        <Run Text="{Binding State, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    </TextBlock>
+                                                </DockPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <DockPanel Margin="0,8,0,0">
+                                        <Button DockPanel.Dock="Right" Content="Move" Command="{Binding MoveUnitCommand}" Margin="4,0,0,0" Padding="6,0" />
+                                        <ComboBox DockPanel.Dock="Right" ItemsSource="{Binding TalkChannels}" SelectedItem="{Binding MoveChannel}" Width="110"
+                                                  Margin="4,0,0,0" />
+                                        <ComboBox ItemsSource="{Binding Units}" SelectedItem="{Binding MoveUnit}" DisplayMemberPath="Label"
+                                                  ToolTip="Move a crew to another channel" />
+                                    </DockPanel>
+                                </StackPanel>
+                            </Expander>
+
+                            <Rectangle DockPanel.Dock="Top" Height="1" Fill="{StaticResource BorderBrush}" Margin="0,2,0,6" />
+
+                            <!-- What was heard -->
                             <Grid>
-                                <ListBox ItemsSource="{Binding CommsFeed}" ItemTemplate="{StaticResource FeedItemTemplate}" />
+                                <ListBox ItemsSource="{Binding Feed}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:CommsRow}">
+                                            <Grid Margin="0,0,0,6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="56" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Time}" FontFamily="Consolas" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock Text="{Binding Channel}" FontFamily="Consolas" FontSize="9" Foreground="{StaticResource AccentBrush}"
+                                                               TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1">
+                                                    <TextBlock x:Name="Speakers" Text="{Binding Speakers}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                    <TextBlock x:Name="Body" Text="{Binding Text}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding Notes}" TextWrapping="Wrap" FontSize="11" FontStyle="Italic"
+                                                               Foreground="{StaticResource WarningBrush}" />
+                                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                        <Border x:Name="QualityBadge" Style="{StaticResource Badge}" Visibility="Collapsed">
+                                                            <TextBlock Text="{Binding Quality}" FontSize="10" />
+                                                        </Border>
+                                                        <Button Content="Say again" Padding="6,0" FontSize="11"
+                                                                Visibility="{Binding CanRepeat, Converter={StaticResource BoolToVisibility}}"
+                                                                Command="{Binding DataContext.CommsHub.RequestRepeatCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding Id}" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Grid>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding FromControl}" Value="True">
+                                                    <Setter TargetName="Speakers" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Quality}" Value="Broken">
+                                                    <Setter TargetName="QualityBadge" Property="Visibility" Value="Visible" />
+                                                    <Setter TargetName="Body" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Quality}" Value="Garbled">
+                                                    <Setter TargetName="QualityBadge" Property="Visibility" Value="Visible" />
+                                                    <Setter TargetName="Body" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
                                 <TextBlock Style="{StaticResource EmptyHint}"
-                                           Text="No traffic yet. Calls, field reports and radio will appear here.">
+                                           Text="No traffic yet. Radio, 999 calls and agency messages appear here as they are heard.">
                                     <TextBlock.Visibility>
-                                        <Binding Path="CommsFeed.Count" Converter="{x:Static vm:Converters.ZeroToVisible}" />
+                                        <Binding Path="Feed.Count" Converter="{x:Static vm:Converters.ZeroToVisible}" />
                                     </TextBlock.Visibility>
                                 </TextBlock>
                             </Grid>
@@ -833,6 +977,17 @@
                                             <TextBlock Text="{Binding ReadBack}" TextWrapping="Wrap" FontStyle="Italic"
                                                        Foreground="{StaticResource MutedTextBrush}" />
                                             <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
+                                                        Visibility="{Binding CanConfirm, Converter={StaticResource BoolToVisibility}}">
+                                                <Button Content="Read-back correct" Padding="6,0" FontSize="11" Margin="0,0,4,0"
+                                                        ToolTip="Close the loop: the read-back matches the order"
+                                                        Command="{Binding DataContext.Command.ConfirmReadBackCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding Id}" />
+                                                <Button Content="Wrong: repeat order" Padding="6,0" FontSize="11"
+                                                        ToolTip="The read-back was wrong or unclear: send the order again"
+                                                        Command="{Binding DataContext.Command.RepeatOrderCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding Id}" />
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
                                                         Visibility="{Binding IsOpen, Converter={StaticResource BoolToVisibility}}">
                                                 <Button Content="Complete" Padding="6,0" FontSize="11" Margin="0,0,4,0"
                                                         Command="{Binding DataContext.Command.CompleteOrderCommand, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -846,6 +1001,14 @@
                                             <DataTrigger Binding="{Binding AwaitingReadBack}" Value="True">
                                                 <Setter TargetName="State" Property="Foreground" Value="{StaticResource WarningBrush}" />
                                                 <Setter TargetName="State" Property="Text" Value="Awaiting read-back" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding ReadBackGarbled}" Value="True">
+                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                <Setter TargetName="State" Property="Text" Value="Read-back unclear" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Confirmed}" Value="True">
+                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource OkBrush}" />
+                                                <Setter TargetName="State" Property="Text" Value="Read-back confirmed" />
                                             </DataTrigger>
                                         </DataTemplate.Triggers>
                                     </DataTemplate>

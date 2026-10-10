@@ -14,6 +14,11 @@ public interface ISimulationSystem
     int Order => 0;
 
     void Update(SimulationContext context);
+
+    /// <summary>Called once when the engine is built, before any event is applied (e.g. to switch a model on).</summary>
+    void Attach(WorldState world)
+    {
+    }
 }
 
 public sealed class SimulationContext(WorldState world, DateTimeOffset simTime, TimeSpan delta)

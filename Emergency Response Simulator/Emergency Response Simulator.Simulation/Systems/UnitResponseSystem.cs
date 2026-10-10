@@ -2,6 +2,7 @@ using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.Simulation.Comms;
 using Emergency_Response_Simulator.Simulation.Engine;
 using Emergency_Response_Simulator.Simulation.Routing;
 using Emergency_Response_Simulator.Simulation.State;
@@ -338,9 +339,12 @@ public sealed class UnitResponseSystem(RoutingService? routing = null, LiveTraff
         Report(context, unit, new UnitPositionReported(unit.Id, unit.Location, unit.SpeedKph, unit.Heading, eta), EventSources.Avl);
     }
 
+    /// <summary>Spoken reports go by radio; status changes, routes and fixes go by mobile data (Phase 7).</summary>
     private static void Report(SimulationContext context, WorldUnit unit, DomainEvent payload, string source = EventSources.Comms)
     {
-        if (!unit.RadioFailed)
-            context.EmitPerceived(payload, source);
+        if (payload is ReportReceived report)
+            CommsNet.Report(context, unit, report);
+        else
+            CommsNet.Data(context, unit, payload, source);
     }
 }

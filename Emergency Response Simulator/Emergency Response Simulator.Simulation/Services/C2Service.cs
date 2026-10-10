@@ -307,6 +307,9 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2S
             return CommandResult.Fail(targetKind == OrderTargetKind.Position
                 ? "That position is not staffed for this incident."
                 : $"Unknown {targetKind.ToString().ToLowerInvariant()}.");
+        if (targetKind == OrderTargetKind.Unit && targetId is { } radioUnit && cop.FindUnit(radioUnit) is { Channel: { } unitChannel } heard
+            && !cop.ControlHears(unitChannel))
+            return CommandResult.Fail($"{heard.Callsign} is on {unitChannel}, which you can't reach. Patch {unitChannel} to one of your channels first.");
 
         var orderId = Guid.NewGuid();
         var result = await PublishAsync(new OrderIssued(orderId, incidentId, targetKind,
@@ -334,6 +337,94 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2S
 
         return await PublishAsync(new ApprovalDecided(approvalId, approve, string.IsNullOrWhiteSpace(note) ? null : note.Trim()),
             cancellationToken);
+    }
+
+    // ---- Communications ----
+
+    public async Task<CommandResult> TransmitAsync(string channelId, string? to, string text, double? heldSeconds = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return CommandResult.Fail("Say something.");
+        if (cop.Channels.FirstOrDefault(c => c.Info.Id == channelId) is not { Info.Kind: ChannelKind.Radio })
+            return CommandResult.Fail("Unknown radio channel.");
+        if (!cop.ControlHears(channelId))
+            return CommandResult.Fail($"Control has no radio on {channelId}. Patch it to one of your channels first.");
+
+        var messageId = Guid.NewGuid();
+        var result = await PublishAsync(new RadioCallMade(messageId, channelId, string.IsNullOrWhiteSpace(to) ? null : to.Trim(), text.Trim(),
+            heldSeconds), cancellationToken);
+        return result with { EntityId = messageId };
+    }
+
+    public async Task<CommandResult> RequestRepeatAsync(Guid messageId, CancellationToken cancellationToken = default)
+    {
+        if (cop.CommsLog.FirstOrDefault(m => m.Id == messageId) is not { } message)
+            return CommandResult.Fail("Unknown message.");
+        if (message.FromControl || message.ChannelId is RadioPlan.Calls or RadioPlan.Chat)
+            return CommandResult.Fail("Only a radio message from the field can be repeated.");
+        if (message.RepeatRequested)
+            return CommandResult.Fail("Already asked to say again.");
+        return await PublishAsync(new RepeatRequested(messageId), cancellationToken);
+    }
+
+    public async Task<CommandResult> ConfirmReadBackAsync(Guid orderId, bool correct, CancellationToken cancellationToken = default)
+    {
+        if (cop.Orders.FirstOrDefault(o => o.Id == orderId) is not { } order)
+            return CommandResult.Fail("Unknown order.");
+        if (order.Status != OrderStatus.Acknowledged)
+            return CommandResult.Fail("There is no read-back to confirm yet.");
+        if (order.ReadBackConfirmedAt is not null)
+            return CommandResult.Fail("Read-back already confirmed.");
+        return await PublishAsync(new ReadBackConfirmed(orderId, correct), cancellationToken);
+    }
+
+    public async Task<CommandResult> AssignChannelAsync(Guid unitId, string channelId, CancellationToken cancellationToken = default)
+    {
+        if (cop.FindUnit(unitId) is not { } unit)
+            return CommandResult.Fail("Unknown unit.");
+        if (NotUnderCommand(unit) is { } refused)
+            return refused;
+        if (RadioPlan.Find(channelId) is not { Kind: ChannelKind.Radio })
+            return CommandResult.Fail("Crews can only be moved to one of your own radio channels.");
+        if (unit.Agency?.RadioChannel is { } foreign)
+            return CommandResult.Fail($"{unit.Callsign}'s radios only work on {foreign}. Patch {foreign} to your channel instead.");
+        if (unit.Channel == channelId)
+            return CommandResult.Fail($"{unit.Callsign} is already on {channelId}.");
+        if (unit.Channel is { } current && !cop.ControlHears(current))
+            return CommandResult.Fail($"You can't reach {unit.Callsign} on {current} to tell it.");
+        return await PublishAsync(new UnitChannelAssigned(unitId, channelId), cancellationToken);
+    }
+
+    public async Task<CommandResult> PatchChannelsAsync(string channelA, string channelB, CancellationToken cancellationToken = default)
+    {
+        var channels = cop.Channels.Where(c => c.Info.Kind == ChannelKind.Radio).Select(c => c.Info.Id).ToHashSet();
+        if (!channels.Contains(channelA) || !channels.Contains(channelB))
+            return CommandResult.Fail("Choose two radio channels.");
+        if (channelA == channelB)
+            return CommandResult.Fail("Choose two different channels.");
+        if (cop.Patches.Any(p => (p.ChannelA == channelA && p.ChannelB == channelB) || (p.ChannelA == channelB && p.ChannelB == channelA)))
+            return CommandResult.Fail($"{channelA} and {channelB} are already patched (or being patched).");
+
+        var patchId = Guid.NewGuid();
+        var result = await PublishAsync(new ChannelPatchRequested(patchId, channelA, channelB), cancellationToken);
+        return result with { EntityId = patchId };
+    }
+
+    public async Task<CommandResult> RemovePatchAsync(Guid patchId, CancellationToken cancellationToken = default)
+    {
+        if (cop.Patches.All(p => p.Id != patchId))
+            return CommandResult.Fail("Unknown patch.");
+        return await PublishAsync(new ChannelPatchRemoved(patchId), cancellationToken);
+    }
+
+    public async Task<CommandResult> CallBackAsync(Guid callId, CancellationToken cancellationToken = default)
+    {
+        if (cop.MissedCalls.FirstOrDefault(c => c.Id == callId) is not { } missed)
+            return CommandResult.Fail("Unknown missed call.");
+        if (missed.CalledBackAt is not null)
+            return CommandResult.Fail("Already called back.");
+        return await PublishAsync(new CallbackMade(callId), cancellationToken);
     }
 
     public async Task<CommandResult> NotifyAsync(string recipient, string message, Guid? incidentId = null,

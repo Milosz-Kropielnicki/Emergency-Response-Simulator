@@ -1,6 +1,7 @@
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.Simulation.Comms;
 using Emergency_Response_Simulator.Simulation.Engine;
 using Emergency_Response_Simulator.Simulation.State;
 
@@ -57,9 +58,18 @@ public sealed class CommandResponseSystem : ISimulationSystem
         foreach (var pending in world.PendingOrders.ToList())
         {
             var order = pending.Order;
+
+            // With communications simulated, nobody can answer an order they never heard (Phase 7).
+            if (world.Radio.Active && pending.HeardAt is null)
+            {
+                if (context.SimTime - pending.IssuedAt >= OrderGiveUp)
+                    world.PendingOrders.Remove(pending);
+                continue;
+            }
+
             var span = SupervisingSpan(world, order);
             var baseDelay = order.TargetKind == OrderTargetKind.Unit ? UnitReadBackDelay : SupervisorReadBackDelay;
-            var due = pending.IssuedAt + baseDelay * (span?.DelayFactor ?? 1);
+            var due = (pending.HeardAt ?? pending.IssuedAt) + baseDelay * (span?.DelayFactor ?? 1);
             if (context.SimTime < due) continue;
 
             // A unit with a dead radio can't answer; keep trying until we give up.
@@ -77,12 +87,17 @@ public sealed class CommandResponseSystem : ISimulationSystem
             if (roll < loss)
                 continue; // lost in the noise of an overloaded supervisor: nobody reads it back
 
-            var garbled = roll < loss * 2; // the next band of bad luck: heard, but not properly
+            // The next band of bad luck: heard, but not properly. Or it was heard badly over the radio.
+            var garbled = roll < loss * 2 || pending.HeardGarbled;
             var speaker = order.TargetName;
             var readBack = garbled
                 ? $"{speaker}: copy… {string.Join(' ', order.Text.Split(' ').Take(3))}… say again, you're breaking up"
                 : $"{speaker}: copy, {order.Text}";
-            context.EmitPerceived(new OrderAcknowledged(order.OrderId, readBack, garbled), EventSources.Comms);
+            var ack = new OrderAcknowledged(order.OrderId, readBack, garbled);
+            if (order.TargetKind == OrderTargetKind.Unit && order.TargetId is { } speakingUnit && world.Units.TryGetValue(speakingUnit, out var crew))
+                CommsNet.Voice(context, crew, $"Control, {readBack}", ack, priority: 4);
+            else
+                CommsNet.Voice(context, RadioPlan.FireCommand, speaker, $"Control, {readBack}", ack);
         }
     }
 
@@ -131,7 +146,9 @@ public sealed class CommandResponseSystem : ISimulationSystem
                       $"are reserved for High or Critical incidents; this incident is {priority}.";
 
                 pending.ArriveAt = approved ? context.SimTime + lead : null;
-                context.EmitPerceived(new ResourceRequestDecided(request.RequestId, approved, approver, reason, pending.ArriveAt), EventSources.Engine);
+                CommsNet.Chat(context, approver,
+                    approved ? $"Request approved: {request.Description}. Expected on scene {pending.ArriveAt?.ToLocalTime():HH:mm}." : reason!,
+                    new ResourceRequestDecided(request.RequestId, approved, approver, reason, pending.ArriveAt), TimeSpan.Zero);
                 if (!approved) world.PendingRequests.Remove(pending);
                 continue;
             }
@@ -191,9 +208,21 @@ public sealed class CommandResponseSystem : ISimulationSystem
         id = Guid.NewGuid();
         _providerAgencies[provider] = id;
         var shortName = string.Concat(provider.Split(' ').Select(w => char.IsUpper(w[0]) ? w[0].ToString() : ""));
-        context.EmitPerceived(new AgencyRegistered(id, provider, shortName, type), EventSources.Engine);
+        context.EmitPerceived(new AgencyRegistered(id, provider, shortName, type, RadioChannel: ProviderRadio(provider)), EventSources.Engine);
         return id;
     }
+
+    /// <summary>
+    /// Outside services bring their own radios (Design Document §13: interoperability). Garda divisions share the
+    /// national Garda system, so they are on ours.
+    /// </summary>
+    public static string? ProviderRadio(string provider) => provider switch
+    {
+        _ when provider.StartsWith("Garda") => null,
+        _ when provider.StartsWith("Kildare") => "KILDARE FIRE",
+        _ when provider.Contains("Ambulance") => "NAS MIDLANDS",
+        _ => "NATIONAL TEAMS",
+    };
 
     private static string ControlRoomFor(UnitType? type) => ResourceGroups.AgencyFor(type ?? UnitType.Engine) switch
     {
@@ -214,7 +243,8 @@ public sealed class CommandResponseSystem : ISimulationSystem
             if (context.SimTime - pending.SentAt < delay) continue;
 
             context.World.PendingNotifications.Remove(pending);
-            context.EmitPerceived(new NotificationAnswered(notification.NotificationId, ReplyFrom(notification.Recipient)), EventSources.Comms);
+            var reply = ReplyFrom(notification.Recipient);
+            CommsNet.Chat(context, notification.Recipient, reply, new NotificationAnswered(notification.NotificationId, reply), TimeSpan.Zero);
         }
     }
 
@@ -255,8 +285,8 @@ public sealed class CommandResponseSystem : ISimulationSystem
             var decision = pending.Decision;
             var claim = decision.Approved ? "Understood, approved. Proceeding now." : "Understood, not approved. Holding.";
             if (decision.Note is { } note) claim += $" ({note})";
-            context.EmitPerceived(new ReportReceived(Guid.NewGuid(), null, ReportSource.Agency, pending.Requester, claim,
-                Confidence.High, VerificationStatus.Confirmed, null, null), EventSources.Comms);
+            CommsNet.Chat(context, pending.Requester, claim, new ReportReceived(Guid.NewGuid(), null, ReportSource.Agency, pending.Requester, claim,
+                Confidence.High, VerificationStatus.Confirmed, null, null), TimeSpan.Zero);
         }
     }
 

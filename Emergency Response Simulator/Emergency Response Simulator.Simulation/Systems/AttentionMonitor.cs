@@ -47,6 +47,61 @@ public sealed class AttentionMonitor(ICopService cop, AttentionOptions options, 
         CheckCommand(context);
         CheckPlanning(context);
         CheckHospitals(context);
+        CheckComms(context);
+    }
+
+    /// <summary>
+    /// Communications health (§13), from what command can see: channels too busy to work, 999 callers who hung up
+    /// before being answered, read-backs that were unclear and never sorted out, and crews command can't reach.
+    /// </summary>
+    private void CheckComms(SimulationContext context)
+    {
+        var now = context.SimTime;
+        var heard = cop.HeardChannels();
+        foreach (var channel in cop.Channels.Where(c => c.Info.Kind == ChannelKind.Radio && heard.Contains(c.Info.Id)))
+        {
+            var key = $"congested:{channel.Info.Id}";
+            var busy = channel.Utilisation(now);
+            if (busy >= options.CongestionAlert)
+            {
+                Track(context, key, true, AlertCategory.CommunicationFailure, AlertSeverity.Warning,
+                    $"{channel.Info.Id} congested",
+                    $"Someone has been transmitting {busy:P0} of the last two minutes: messages are queuing and being lost. " +
+                    "Move crews to a tactical channel or cut the traffic.");
+            }
+            else if (busy < options.CongestionAlert * 0.6)
+            {
+                _active.Remove(key); // re-arm only once the channel is properly quiet again
+            }
+        }
+
+        foreach (var missed in cop.MissedCalls)
+        {
+            Track(context, $"missed:{missed.Id}", missed.CalledBackAt is null,
+                AlertCategory.CommunicationFailure, AlertSeverity.Warning,
+                "Missed 999 call",
+                $"A caller hung up after {missed.Waited.TotalSeconds:F0} s without being answered" +
+                (missed.AccuracyMeters is { } m ? $" (phone located within about {m:F0} m)" : "") + ". Call them back.");
+        }
+
+        foreach (var order in cop.Orders.Where(o => o.Status == OrderStatus.Acknowledged && o.ReadBackGarbled))
+        {
+            Track(context, $"readback:{order.Id}",
+                order.ReadBackConfirmedAt is null && now - (order.AcknowledgedAt ?? now) >= options.ReadBackConfirmTimeout,
+                AlertCategory.CommunicationFailure, AlertSeverity.Warning,
+                $"Unclear read-back from {order.TargetName}",
+                $"The read-back of \"{order.Text}\" was garbled. Confirm it or repeat the order.",
+                order.IncidentId, order.TargetKind == OrderTargetKind.Unit ? order.TargetId : null);
+        }
+
+        foreach (var unit in cop.Units.Where(u => u.Agency?.AiControlled != true && u.Channel is not null))
+        {
+            Track(context, $"unreachable:{unit.Id}", UnitStatusRules.IsCommitted(unit.Status) && !heard.Contains(unit.Channel!),
+                AlertCategory.CommunicationFailure, AlertSeverity.Warning,
+                $"{unit.Callsign} is on {unit.Channel}",
+                $"You can't talk to this crew or hear its reports. Patch {unit.Channel} to one of your channels.",
+                unit.AssignedIncidentId, unit.Id);
+        }
     }
 
     /// <summary>Hospitals that say they are nearly full or diverting ambulances (§17), from their own reports.</summary>
@@ -442,6 +497,12 @@ public sealed class AttentionOptions
 
     /// <summary>Alert when traffic pushes expected arrival back by at least this much without a re-route.</summary>
     public TimeSpan TrafficDelayAlert { get; set; } = TimeSpan.FromMinutes(2);
+
+    /// <summary>Share of airtime over two minutes at which a channel counts as congested.</summary>
+    public double CongestionAlert { get; set; } = 0.75;
+
+    /// <summary>How long an unclear read-back may go unresolved before an alert.</summary>
+    public TimeSpan ReadBackConfirmTimeout { get; set; } = TimeSpan.FromMinutes(1);
 
     /// <summary>Suggest an IAP once an incident is this old with at least <see cref="PlanningUnitThreshold"/> units committed.</summary>
     public TimeSpan PlanningExpectedAfter { get; set; } = TimeSpan.FromMinutes(20);

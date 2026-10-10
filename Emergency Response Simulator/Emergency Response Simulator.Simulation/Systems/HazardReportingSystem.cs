@@ -2,6 +2,7 @@ using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.Simulation.Comms;
 using Emergency_Response_Simulator.Simulation.Engine;
 using Emergency_Response_Simulator.Simulation.Hazards;
 using Emergency_Response_Simulator.Simulation.State;
@@ -249,8 +250,10 @@ public sealed class HazardReportingSystem(IRoutingService? routing = null) : ISi
     // ---- Helpers ----
 
     private void Report(SimulationContext context, WorldUnit unit, string claim, Confidence confidence, VerificationStatus verification) =>
-        context.EmitPerceived(new ReportReceived(Guid.NewGuid(), IncidentFor(context.World, unit), ReportSource.FieldUnit, unit.Callsign,
-            claim, confidence, verification, unit.Location, 30, unit.Id), EventSources.Comms);
+        CommsNet.Report(context, unit, new ReportReceived(Guid.NewGuid(), IncidentFor(context.World, unit), ReportSource.FieldUnit, unit.Callsign,
+                claim, confidence, verification, unit.Location, 30, unit.Id),
+            // Crews in trouble use emergency traffic: it goes before routine messages.
+            priority: confidence == Confidence.High && claim.Contains("Withdrawing") ? 9 : 1);
 
     /// <summary>The COP incident the unit is assigned to (not an AI agency's own job).</summary>
     private static Guid? IncidentFor(WorldState world, WorldUnit unit) =>

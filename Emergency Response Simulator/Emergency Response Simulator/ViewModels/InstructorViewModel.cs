@@ -115,6 +115,12 @@ public partial class InstructorViewModel : ObservableObject
         foreach (var outage in snapshot.Outages)
             yield return new WorldFact("Power outage", $"{outage.Cause}; restoring {MainViewModel.Time(outage.RestoreAt)}");
 
+        if (snapshot.Comms.CallsWaiting > 0)
+            yield return new WorldFact("999 line", $"{snapshot.Comms.CallsWaiting} caller(s) waiting for a call-taker");
+        if (snapshot.Comms.RecentLost.Count > 0)
+            yield return new WorldFact("Last unheard transmission", snapshot.Comms.RecentLost[^1] is var last
+                ? $"{MainViewModel.Time(last.At, seconds: true)} {last.From}: \"{last.Text}\" ({last.Reason})" : "");
+
         var traffic = _traffic.Snapshot;
         var jammed = traffic.Factors.Count(f => f.Value < LiveTraffic.GridlockFactor);
         var slow = traffic.Factors.Count(f => f.Value < 0.6);

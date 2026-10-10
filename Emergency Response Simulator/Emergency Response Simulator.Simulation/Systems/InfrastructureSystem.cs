@@ -2,6 +2,7 @@ using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.Simulation.Comms;
 using Emergency_Response_Simulator.Simulation.Engine;
 using Emergency_Response_Simulator.Simulation.Hazards;
 using Emergency_Response_Simulator.Simulation.State;
@@ -61,10 +62,10 @@ public sealed class InfrastructureSystem(IRoutingService? routing = null) : ISim
             {
                 outage.Reported = true;
                 var customers = Math.Round(Math.PI * Math.Pow(outage.RadiusMeters / 1000, 2) * CustomersPerSquareKm / 100) * 100;
-                context.EmitPerceived(new ReportReceived(Guid.NewGuid(), null, ReportSource.Agency, Utility,
-                    $"Fault: {outage.Cause}. Supply lost to about {customers:N0} customers within {outage.RadiusMeters:F0} m. " +
-                    $"Estimated restoration {outage.RestoreAt.ToLocalTime():HH:mm}.",
-                    Confidence.High, VerificationStatus.Confirmed, outage.Centre, outage.RadiusMeters), EventSources.Comms);
+                var fault = $"Fault: {outage.Cause}. Supply lost to about {customers:N0} customers within {outage.RadiusMeters:F0} m. " +
+                            $"Estimated restoration {outage.RestoreAt.ToLocalTime():HH:mm}.";
+                CommsNet.Chat(context, Utility, fault, new ReportReceived(Guid.NewGuid(), null, ReportSource.Agency, Utility, fault,
+                    Confidence.High, VerificationStatus.Confirmed, outage.Centre, outage.RadiusMeters), TimeSpan.Zero);
             }
 
             if (context.SimTime >= outage.RestoreAt)
@@ -73,9 +74,9 @@ public sealed class InfrastructureSystem(IRoutingService? routing = null) : ISim
                 context.EmitTruth(new PowerRestored(outage.Id));
                 if (outage.Reported)
                 {
-                    context.EmitPerceived(new ReportReceived(Guid.NewGuid(), null, ReportSource.Agency, Utility,
-                        $"Supply restored {Near(outage.Centre, "around ", "to the affected area")}.", Confidence.High,
-                        VerificationStatus.Confirmed, outage.Centre, outage.RadiusMeters), EventSources.Comms);
+                    var restored = $"Supply restored {Near(outage.Centre, "around ", "to the affected area")}.";
+                    CommsNet.Chat(context, Utility, restored, new ReportReceived(Guid.NewGuid(), null, ReportSource.Agency, Utility, restored,
+                        Confidence.High, VerificationStatus.Confirmed, outage.Centre, outage.RadiusMeters), TimeSpan.Zero);
                 }
             }
         }
@@ -94,9 +95,11 @@ public sealed class InfrastructureSystem(IRoutingService? routing = null) : ISim
     {
         var random = SimRandom.For(outage.Id, 1);
         var location = GeoMath.Destination(outage.Centre, random.NextDouble() * 360, random.NextDouble() * outage.RadiusMeters * 0.6);
-        context.EmitPerceived(new CallReceived(Guid.NewGuid(), "999 caller (landline)",
-            $"The power's gone off {Near(location, "all along ", "around here")} and the traffic lights are out, it's chaos at the junction",
-            location, 300), EventSources.Comms);
+        CommsNet.EmergencyCall(context, new PendingCall
+        {
+            Caller = "999 caller (landline)", Mobile = false, Location = location, AccuracyMeters = 300,
+            Summary = $"The power's gone off {Near(location, "all along ", "around here")} and the traffic lights are out, it's chaos at the junction",
+        });
     }
 
     /// <summary>"all along Pearse Street", or the fallback when there is no road name to give.</summary>

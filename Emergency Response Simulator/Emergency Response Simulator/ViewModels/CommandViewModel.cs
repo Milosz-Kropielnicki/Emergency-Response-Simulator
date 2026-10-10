@@ -39,6 +39,14 @@ public sealed partial class CommandViewModel(MainViewModel owner, IC2Service c2,
     [RelayCommand]
     private Task CancelOrderAsync(Guid orderId) => owner.RunCommandAsync(() => c2.CloseOrderAsync(orderId, completed: false), "Order cancelled");
 
+    /// <summary>Closed loop: the read-back matched the order.</summary>
+    [RelayCommand]
+    private Task ConfirmReadBackAsync(Guid orderId) => owner.RunCommandAsync(() => c2.ConfirmReadBackAsync(orderId, correct: true), "Read-back confirmed");
+
+    /// <summary>Closed loop: the read-back was wrong or unclear; the order goes out again.</summary>
+    [RelayCommand]
+    private Task RepeatOrderAsync(Guid orderId) => owner.RunCommandAsync(() => c2.ConfirmReadBackAsync(orderId, correct: false), "Order repeated");
+
     // ---- Resource requests ----
 
     public IReadOnlyList<ResourceRequestKind> RequestKinds { get; } = Enum.GetValues<ResourceRequestKind>();
@@ -177,6 +185,12 @@ public sealed class OrderRow(Order order)
     public string? ReadBack { get; } = order.ReadBack;
     public bool IsOpen { get; } = order.Status is OrderStatus.Issued or OrderStatus.Acknowledged;
     public bool AwaitingReadBack { get; } = order.Status == OrderStatus.Issued;
+    public bool ReadBackGarbled { get; } = order.ReadBackGarbled;
+
+    /// <summary>A read-back is in and nobody has closed the loop on it yet.</summary>
+    public bool CanConfirm { get; } = order.Status == OrderStatus.Acknowledged && order.ReadBackConfirmedAt is null;
+
+    public bool Confirmed { get; } = order.ReadBackConfirmedAt is not null;
 }
 
 public sealed class RequestRow(ResourceRequest request)

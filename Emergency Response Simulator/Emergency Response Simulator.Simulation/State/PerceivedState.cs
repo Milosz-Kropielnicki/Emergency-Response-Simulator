@@ -28,6 +28,15 @@ public sealed class PerceivedState : ICopService
     private readonly Dictionary<Guid, IncidentActionPlan> _plans = [];
     private readonly Dictionary<Guid, ObjectiveStatus> _progress = [];
     private readonly Dictionary<Guid, Hospital> _hospitals = [];
+    private readonly List<CommsEntry> _comms = [];
+    private readonly Dictionary<Guid, CommsEntry> _commsById = [];
+    private readonly Dictionary<string, ChannelState> _channels =
+        RadioPlan.Standard.ToDictionary(c => c.Id, c => new ChannelState { Info = c });
+    private readonly Dictionary<Guid, ChannelPatch> _patches = [];
+    private readonly Dictionary<Guid, MissedCall> _missed = [];
+
+    /// <summary>The comms log keeps this many messages; older ones are in the event stream.</summary>
+    private const int MaxCommsEntries = 1000;
 
     public event EventHandler? Changed;
 
@@ -42,6 +51,30 @@ public sealed class PerceivedState : ICopService
     public IReadOnlyList<Zone> Zones => Snapshot(_zones);
     public PerceivedWeather? Weather { get; private set; }
     public IReadOnlyList<Hospital> Hospitals => Snapshot(_hospitals);
+
+    public IReadOnlyList<CommsEntry> CommsLog
+    {
+        get { lock (_lock) return _comms.ToList(); }
+    }
+
+    public IReadOnlyList<ChannelState> Channels
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _channels.Values.Select(c =>
+                {
+                    var copy = new ChannelState { Info = c.Info, BusyUntil = c.BusyUntil, Talker = c.Talker };
+                    copy.RecentAirtime.AddRange(c.RecentAirtime);
+                    return copy;
+                }).ToList();
+            }
+        }
+    }
+
+    public IReadOnlyList<ChannelPatch> Patches => Snapshot(_patches);
+    public IReadOnlyList<MissedCall> MissedCalls => Snapshot(_missed);
     public IReadOnlyList<Order> Orders => Snapshot(_orders);
     public IReadOnlyList<ResourceRequest> ResourceRequests => Snapshot(_requests);
     public IReadOnlyList<ApprovalRequest> Approvals => Snapshot(_approvals);
@@ -100,7 +133,86 @@ public sealed class PerceivedState : ICopService
                 _agencies[e.AgencyId] = new Agency
                 {
                     Id = e.AgencyId, Name = e.Name, ShortName = e.ShortName, Type = e.Type, AiControlled = e.AiControlled,
+                    RadioChannel = e.RadioChannel,
                 };
+                // Another service's radio system: known, but not monitored until patched.
+                if (e.RadioChannel is { } own && !_channels.ContainsKey(own))
+                    _channels[own] = new ChannelState
+                    {
+                        Info = new ChannelInfo(own, $"{e.Name} radio", ChannelKind.Radio, e.Type, false, $"{e.Name}'s own radio system"),
+                    };
+                break;
+
+            case UnitChannelAssigned e when _units.TryGetValue(e.UnitId, out var retuned):
+                retuned.Channel = e.ChannelId;
+                break;
+
+            case CommsLogged e:
+                var entry = new CommsEntry
+                {
+                    Id = e.MessageId, ChannelId = e.ChannelId, From = e.From, To = e.To, Text = e.Text, Quality = e.Quality,
+                    At = at, Duration = TimeSpan.FromSeconds(e.DurationSeconds), UnitId = e.UnitId, FromControl = e.FromControl,
+                    Notes = e.Notes ?? [],
+                };
+                _comms.Add(entry);
+                _commsById[entry.Id] = entry;
+                if (_comms.Count > MaxCommsEntries)
+                {
+                    _commsById.Remove(_comms[0].Id);
+                    _comms.RemoveAt(0);
+                }
+                if (_channels.TryGetValue(e.ChannelId, out var channel) && channel.Info.Kind == ChannelKind.Radio)
+                {
+                    channel.RecentAirtime.Add((at, entry.Duration));
+                    channel.RecentAirtime.RemoveAll(a => at - a.Start > TimeSpan.FromMinutes(5));
+                    if (at + entry.Duration > channel.BusyUntil)
+                    {
+                        channel.BusyUntil = at + entry.Duration;
+                        channel.Talker = e.From;
+                    }
+                }
+                // Hearing a unit on the radio, even badly, is contact.
+                if (e.UnitId is { } speaker && _units.TryGetValue(speaker, out var speaking))
+                    Contact(speaking, at);
+                break;
+
+            case RepeatRequested e when _commsById.TryGetValue(e.MessageId, out var repeated):
+                repeated.RepeatRequested = true;
+                break;
+
+            case ReadBackConfirmed e when _orders.TryGetValue(e.OrderId, out var looped):
+                if (e.Correct)
+                {
+                    looped.ReadBackConfirmedAt = at;
+                }
+                else
+                {
+                    // Wrong read-back: the order goes out again and waits for a new one.
+                    looped.Status = OrderStatus.Issued;
+                    looped.AcknowledgedAt = null;
+                    looped.ReadBack = null;
+                    looped.ReadBackGarbled = false;
+                }
+                break;
+
+            case ChannelPatchRequested e:
+                _patches[e.PatchId] = new ChannelPatch { Id = e.PatchId, ChannelA = e.ChannelA, ChannelB = e.ChannelB, RequestedAt = at };
+                break;
+
+            case ChannelsPatched e when _patches.TryGetValue(e.PatchId, out var patch):
+                patch.ActiveFrom = at;
+                break;
+
+            case ChannelPatchRemoved e:
+                _patches.Remove(e.PatchId);
+                break;
+
+            case CallMissed e:
+                _missed[e.CallId] = new MissedCall { Id = e.CallId, At = at, Waited = e.Waited, Location = e.Location, AccuracyMeters = e.AccuracyMeters };
+                break;
+
+            case CallbackMade e when _missed.TryGetValue(e.CallId, out var missed):
+                missed.CalledBackAt = at;
                 break;
 
             case HospitalRegistered e:
@@ -142,6 +254,7 @@ public sealed class PerceivedState : ICopService
                     HomeStation = e.HomeStation,
                     CrewSize = e.CrewSize,
                     Capabilities = [.. e.Capabilities],
+                    Channel = RadioPlan.DefaultChannel(e.Type, e.AgencyId is { } radioAgency ? _agencies.GetValueOrDefault(radioAgency)?.RadioChannel : null),
                     LastAvlUpdate = at,
                     LastContactAt = at,
                 };
@@ -233,6 +346,7 @@ public sealed class PerceivedState : ICopService
                 acknowledgedOrder.Status = OrderStatus.Acknowledged;
                 acknowledgedOrder.AcknowledgedAt = at;
                 acknowledgedOrder.ReadBack = e.ReadBack;
+                acknowledgedOrder.ReadBackGarbled = e.Garbled;
                 if (acknowledgedOrder.TargetKind == OrderTargetKind.Unit && acknowledgedOrder.TargetId is { } ackUnit
                     && _units.TryGetValue(ackUnit, out var answering))
                 {

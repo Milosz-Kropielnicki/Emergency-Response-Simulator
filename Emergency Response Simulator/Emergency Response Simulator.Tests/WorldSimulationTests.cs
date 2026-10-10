@@ -187,7 +187,7 @@ public class WorldSimulationTests
     [Fact]
     public async Task People_inside_a_declared_evacuation_zone_are_warned_and_most_leave()
     {
-        var options = new CivilianOptions { PopulationPerIncident = 150, CarOwnership = 0 };
+        var options = new CivilianOptions { PopulationPerIncident = 150, CarOwnership = 0, LimitedEnglish = 0 }; // language is tested separately
         var harness = new TestHarness(new CivilianSystem(new UniformTerrain(0.2), options));
         await harness.Truth(new WorldIncidentStarted(Guid.NewGuid(), IncidentType.Other, Dublin, 0.2, 0)); // no hazard: only the order moves people
         await harness.RunAsync(TimeSpan.FromSeconds(5));
@@ -502,7 +502,8 @@ public class WorldSimulationTests
         typeof(RoadObstructed), typeof(RoadObstructionCleared), typeof(UnitBrokeDown), typeof(HazardStarted),
         typeof(HazardFootprintChanged), typeof(HazardRateChanged), typeof(HazardEnded), typeof(HazardSitePlaced),
         typeof(CasualtyInjured), typeof(CasualtyChanged), typeof(HospitalCapacityChanged), typeof(PowerOutageStarted),
-        typeof(PowerRestored), typeof(CascadeOccurred),
+        typeof(PowerRestored), typeof(CascadeOccurred), typeof(TransmissionLost), typeof(RadioDeadZonePlaced), typeof(CellTowerFailed),
+        typeof(CellTowerRestored), typeof(RadioBatteryChanged),
     ];
 
     [Fact]
@@ -513,7 +514,7 @@ public class WorldSimulationTests
         [
             BarrowStreetScenario.Create(), new WeatherSystem(), new HazardSystem(terrain), new InfrastructureSystem(),
             new UnitResponseSystem(), new MedicalSystem(), new CivilianSystem(terrain), new AgencyAiSystem(),
-            new CommandResponseSystem(), new HazardReportingSystem(), new AttentionMonitor(cop, new AttentionOptions()),
+            new CommandResponseSystem(), new HazardReportingSystem(), new CommsSystem(), new AttentionMonitor(cop, new AttentionOptions()),
         ]);
         await new DemoRosterScenario().SeedAsync(harness.Engine);
 

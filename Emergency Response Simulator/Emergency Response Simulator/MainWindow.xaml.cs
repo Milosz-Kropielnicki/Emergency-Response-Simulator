@@ -62,6 +62,24 @@ namespace Emergency_Response_Simulator
                 _viewModel.Timeline.ReplayToEntryCommand.Execute(row);
         }
 
+        // Push-to-talk: transmitting lasts as long as the button is held.
+        private void PttButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _viewModel.CommsHub.PressTalk();
+            ((UIElement)sender).CaptureMouse();
+            e.Handled = true;
+        }
+
+        private async void PttButton_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            ((UIElement)sender).ReleaseMouseCapture();
+            e.Handled = true;
+            await _viewModel.CommsHub.ReleaseTalkAsync();
+        }
+
+        private async void PttButton_LostMouseCapture(object sender, MouseEventArgs e) =>
+            await _viewModel.CommsHub.ReleaseTalkAsync();
+
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Escape && _viewModel.ZoneDrawing.IsActive)

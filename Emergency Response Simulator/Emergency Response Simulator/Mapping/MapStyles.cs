@@ -454,6 +454,19 @@ public static class MapStyles
         },
     };
 
+    public static IStyle BlackSpot { get; } = new StyleCollection
+    {
+        Styles =
+        {
+            new VectorStyle
+            {
+                Fill = new Brush(Color.FromArgb(60, 60, 60, 60)),
+                Outline = new Pen(TruthColor, 2) { PenStyle = PenStyle.Dot },
+            },
+            TruthLabelStyle(),
+        },
+    };
+
     public static IStyle Site(bool triggered) => new StyleCollection
     {
         Styles =

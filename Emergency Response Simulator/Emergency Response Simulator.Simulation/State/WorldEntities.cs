@@ -8,7 +8,8 @@ namespace Emergency_Response_Simulator.Simulation.State;
 // Ground-truth entities added in Phase 6 (Design Document §10.3–10.6). Like the rest of WorldState they are
 // advanced by simulation systems one tick at a time and never shown to the trainee directly.
 
-public sealed record WorldAgency(string Name, AgencyType Type, bool AiControlled = false);
+/// <param name="RadioChannel">The agency's own radio system, when it is not on ours.</param>
+public sealed record WorldAgency(string Name, AgencyType Type, bool AiControlled = false, string? RadioChannel = null);
 
 /// <summary>A physical hazard and the model that advances it.</summary>
 public sealed class WorldHazard
@@ -173,6 +174,9 @@ public sealed class Civilian
 
     /// <summary>When they get round to ringing 999 (people take a minute or two to react and dial).</summary>
     public DateTimeOffset? CallAt { get; set; }
+
+    /// <summary>Their language when they have little English, else null (Design Document §13).</summary>
+    public string? Language { get; init; }
 
     /// <summary>The evacuation order they ignore (non-compliance), so they are not asked again.</summary>
     public Guid? IgnoredOrder { get; set; }

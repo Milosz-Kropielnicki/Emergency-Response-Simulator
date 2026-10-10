@@ -98,6 +98,31 @@ public interface IC2Service
     Task<CommandResult> DecideApprovalAsync(Guid approvalId, bool approve, string? note = null, CancellationToken cancellationToken = default);
 
     Task<CommandResult> NotifyAsync(string recipient, string message, Guid? incidentId = null, CancellationToken cancellationToken = default);
+
+    // ---- Communications (Design Document §13) ----
+
+    /// <summary>
+    /// Push-to-talk on a channel command can hear. <paramref name="heldSeconds"/> is how long the button was held:
+    /// shorter than the message needs and the end is lost. Crews answer only if they hear their call sign.
+    /// </summary>
+    Task<CommandResult> TransmitAsync(string channelId, string? to, string text, double? heldSeconds = null, CancellationToken cancellationToken = default);
+
+    /// <summary>"Say again": ask the sender of a message to repeat it.</summary>
+    Task<CommandResult> RequestRepeatAsync(Guid messageId, CancellationToken cancellationToken = default);
+
+    /// <summary>Close the loop on an order: the read-back was right, or it was wrong and the order goes out again.</summary>
+    Task<CommandResult> ConfirmReadBackAsync(Guid orderId, bool correct, CancellationToken cancellationToken = default);
+
+    /// <summary>Move a crew to another of our channels, e.g. a tactical channel to take load off the main one.</summary>
+    Task<CommandResult> AssignChannelAsync(Guid unitId, string channelId, CancellationToken cancellationToken = default);
+
+    /// <summary>Patch two channels together (a technician takes a few minutes), e.g. a mutual-aid service's radio to ours.</summary>
+    Task<CommandResult> PatchChannelsAsync(string channelA, string channelB, CancellationToken cancellationToken = default);
+
+    Task<CommandResult> RemovePatchAsync(Guid patchId, CancellationToken cancellationToken = default);
+
+    /// <summary>Ring back a 999 caller who hung up before being answered.</summary>
+    Task<CommandResult> CallBackAsync(Guid callId, CancellationToken cancellationToken = default);
 }
 
 /// <param name="EntityId">Id of anything the command created, e.g. a new incident.</param>

@@ -30,9 +30,6 @@ public sealed record ResourceSummary(string Group, int Available, int Total)
     public string Text => $"{Available} / {Total} available";
 }
 
-/// <summary>A line in a feed panel.</summary>
-public sealed record FeedItem(string Time, string Title, string Detail, string Severity);
-
 /// <summary>A zone currently in force, listed so it can be lifted.</summary>
 public sealed record ActiveZoneItem(Guid Id, string Name, string Type);
 

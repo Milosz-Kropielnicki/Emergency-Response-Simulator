@@ -231,6 +231,9 @@ public enum HazardSiteKind
 
     /// <summary>An electricity substation: fire or flood takes out power to the area it feeds.</summary>
     Substation,
+
+    /// <summary>A mobile phone mast: runs a while on batteries in a power cut, then fails (Phase 7).</summary>
+    CellTower,
 }
 
 /// <summary>Casualty priority (triage sieve): P1 immediate, P2 urgent, P3 delayed.</summary>

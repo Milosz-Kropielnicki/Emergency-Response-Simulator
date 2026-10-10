@@ -60,6 +60,10 @@ public sealed class CopView : ICopService
     public IReadOnlyList<Zone> Zones => _current.Zones;
     public PerceivedWeather? Weather => _current.Weather;
     public IReadOnlyList<Hospital> Hospitals => _current.Hospitals;
+    public IReadOnlyList<CommsEntry> CommsLog => _current.CommsLog;
+    public IReadOnlyList<ChannelState> Channels => _current.Channels;
+    public IReadOnlyList<ChannelPatch> Patches => _current.Patches;
+    public IReadOnlyList<MissedCall> MissedCalls => _current.MissedCalls;
     public IReadOnlyList<Order> Orders => _current.Orders;
     public IReadOnlyList<ResourceRequest> ResourceRequests => _current.ResourceRequests;
     public IReadOnlyList<ApprovalRequest> Approvals => _current.Approvals;

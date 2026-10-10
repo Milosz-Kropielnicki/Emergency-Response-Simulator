@@ -3,8 +3,8 @@ using Emergency_Response_Simulator.Core.Model;
 namespace Emergency_Response_Simulator.Core.Contracts;
 
 /// <summary>
-/// Communications hub: radio channels, inter-agency chat, incoming calls and field reports
-/// (Design Document §13). Implemented in Phase 7, where messages can be delayed, garbled or lost.
+/// Communications hub: radio channels, inter-agency chat and the 999 line (Design Document §13). Holds only what
+/// was heard, which may be late, garbled or partial; lost messages never arrive.
 /// </summary>
 public interface ICommsService
 {

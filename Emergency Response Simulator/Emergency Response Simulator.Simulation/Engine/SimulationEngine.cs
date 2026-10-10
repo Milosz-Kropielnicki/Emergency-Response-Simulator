@@ -33,6 +33,8 @@ public sealed class SimulationEngine : ISimulationControl, IEventPublisher
         _store = store;
         World = world;
         _systems = systems.OrderBy(s => s.Order).ToList();
+        foreach (var system in _systems)
+            system.Attach(world);
         _options = options;
         _logger = logger ?? NullLogger<SimulationEngine>.Instance;
 

@@ -2,6 +2,7 @@ using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.Simulation.Comms;
 using NetTopologySuite.Geometries;
 
 namespace Emergency_Response_Simulator.Simulation.State;
@@ -71,6 +72,13 @@ public sealed class WorldState
 
     public bool InOutage(GeoPoint point) => Outages.Values.Any(o => o.Covers(point));
 
+    // ---- Phase 7: communications (Design Document §13) ----
+
+    public RadioWorld Radio { get; } = new();
+
+    /// <summary>Every order issued, by id, so a wrong read-back can send it again.</summary>
+    public Dictionary<Guid, OrderIssued> Orders { get; } = [];
+
     // Things waiting for someone in the world to respond (see CommandResponseSystem).
     public List<PendingOrder> PendingOrders { get; } = [];
     public List<PendingRequest> PendingRequests { get; } = [];
@@ -119,7 +127,66 @@ public sealed class WorldState
                 {
                     Id = e.UnitId, Callsign = e.Callsign, Type = e.Type, Location = e.Location, Home = e.Location,
                     AgencyId = e.AgencyId,
+                    Channel = RadioPlan.DefaultChannel(e.Type, e.AgencyId is { } agency ? Agencies.GetValueOrDefault(agency)?.RadioChannel : null),
                 };
+                break;
+
+            case UnitChannelAssigned e when Units.TryGetValue(e.UnitId, out var retuned):
+                retuned.Channel = e.ChannelId;
+                break;
+
+            case RadioBatteryChanged e when Units.TryGetValue(e.UnitId, out var powered):
+                powered.Battery = Math.Clamp(e.Level, 0, 1);
+                break;
+
+            case RadioCallMade e when Radio.Active:
+                Radio.Outbox.Add(new Transmission
+                {
+                    Id = e.MessageId, Channel = e.ChannelId, From = "Control", To = e.To, Text = e.Text, FromControl = true,
+                    HeldSeconds = e.HeldSeconds, Keyed = true, Priority = 5, QueuedAt = simEvent.SimTime, NotBefore = simEvent.SimTime,
+                });
+                break;
+
+            case RepeatRequested e:
+                Radio.RepeatRequests.Add(e.MessageId);
+                break;
+
+            case ReadBackConfirmed { Correct: false } e when Orders.TryGetValue(e.OrderId, out var repeatOrder):
+                // Wrong read-back: the order goes out again.
+                PendingOrders.Add(new PendingOrder(repeatOrder, simEvent.SimTime));
+                SendOrder(repeatOrder, simEvent.SimTime);
+                break;
+
+            case ChannelPatchRequested e:
+                Radio.Patches[e.PatchId] = new PatchState { Id = e.PatchId, ChannelA = e.ChannelA, ChannelB = e.ChannelB, RequestedAt = simEvent.SimTime };
+                break;
+
+            case ChannelsPatched e when Radio.Patches.TryGetValue(e.PatchId, out var patched):
+                patched.Active = true;
+                break;
+
+            case ChannelPatchRemoved e:
+                Radio.Patches.Remove(e.PatchId);
+                break;
+
+            case CallbackMade e:
+                Radio.Callbacks[e.CallId] = simEvent.SimTime;
+                break;
+
+            case RadioDeadZonePlaced e:
+                Radio.DeadZones.Add(new DeadZone(e.ZoneId, e.Centre, e.RadiusMeters, e.Description));
+                break;
+
+            case CellTowerFailed e:
+                if (!Radio.Masts.TryGetValue(e.SiteId, out var failing))
+                    Radio.Masts[e.SiteId] = failing = new MastState { SiteId = e.SiteId };
+                failing.Down = true;
+                failing.DownCause = e.Cause;
+                break;
+
+            case CellTowerRestored e when Radio.Masts.TryGetValue(e.SiteId, out var restored):
+                restored.Down = false;
+                restored.OnBatterySince = null;
                 break;
 
             case UnitTasked e when Units.TryGetValue(e.UnitId, out var tasked):
@@ -217,7 +284,7 @@ public sealed class WorldState
                 break;
 
             case AgencyRegistered e:
-                Agencies[e.AgencyId] = new WorldAgency(e.Name, e.Type, e.AiControlled);
+                Agencies[e.AgencyId] = new WorldAgency(e.Name, e.Type, e.AiControlled, e.RadioChannel);
                 break;
 
             case IncidentCommanderAssigned e when Commands.TryGetValue(e.IncidentId, out var c1):
@@ -237,7 +304,9 @@ public sealed class WorldState
                 break;
 
             case OrderIssued e:
+                Orders[e.OrderId] = e;
                 PendingOrders.Add(new PendingOrder(e, simEvent.SimTime));
+                SendOrder(e, simEvent.SimTime);
                 break;
             case ResourceRequested e:
                 PendingRequests.Add(new PendingRequest(e, simEvent.SimTime));
@@ -309,6 +378,20 @@ public sealed class WorldState
                 break;
         }
     }
+
+    /// <summary>Puts an order on the air: the unit's channel, or the fire command channel for supervisors and staff.</summary>
+    private void SendOrder(OrderIssued order, DateTimeOffset at)
+    {
+        if (!Radio.Active) return;
+        var channel = order.TargetKind == OrderTargetKind.Unit && order.TargetId is { } unitId && Units.TryGetValue(unitId, out var target)
+            ? target.Channel
+            : RadioPlan.FireCommand;
+        Radio.Outbox.Add(new Transmission
+        {
+            Channel = channel, From = "Control", To = order.TargetName, Text = $"{order.TargetName}, Control: {order.Text}",
+            FromControl = true, OrderId = order.OrderId, Priority = 5, QueuedAt = at, NotBefore = at,
+        });
+    }
 }
 
 public sealed class WorldIncident
@@ -339,6 +422,18 @@ public sealed class WorldUnit
     public Guid? OrderedIncidentId { get; set; }
 
     public Guid? AgencyId { get; init; }
+
+    /// <summary>The radio channel the crew works on.</summary>
+    public string Channel { get; set; } = RadioPlan.FireCommand;
+
+    /// <summary>Handheld radio charge, 0–1. Flat means the crew can't be heard (or hear) until they swap batteries.</summary>
+    public double Battery { get; set; } = 1;
+
+    /// <summary>When the crew reported a low battery; they swap it a few minutes later.</summary>
+    public DateTimeOffset? LowBatteryReportedAt { get; set; }
+
+    /// <summary>Status messages waiting for mobile-data coverage (store and forward).</summary>
+    public List<(DomainEvent Payload, string Source)> PendingData { get; } = [];
 
     /// <summary>
     /// Set by another system that wants this unit driven somewhere (e.g. an ambulance leaving for hospital);
@@ -405,7 +500,18 @@ public sealed record AgencyTask(Guid TaskId, Guid UnitId, string Task, GeoPoint 
     public DateTimeOffset? ClearAt { get; set; }
 }
 
-public sealed record PendingOrder(OrderIssued Order, DateTimeOffset IssuedAt);
+/// <summary>An order on its way to its recipient, and whether it has been heard (Phase 7).</summary>
+public sealed class PendingOrder(OrderIssued order, DateTimeOffset issuedAt)
+{
+    public OrderIssued Order { get; } = order;
+    public DateTimeOffset IssuedAt { get; } = issuedAt;
+
+    /// <summary>When the recipient heard it; read-back follows from then.</summary>
+    public DateTimeOffset? HeardAt { get; set; }
+
+    /// <summary>Heard, but not clearly: the read-back will be wrong.</summary>
+    public bool HeardGarbled { get; set; }
+}
 
 /// <summary>A resource request moving through approval and delivery.</summary>
 public sealed class PendingRequest(ResourceRequested request, DateTimeOffset requestedAt)

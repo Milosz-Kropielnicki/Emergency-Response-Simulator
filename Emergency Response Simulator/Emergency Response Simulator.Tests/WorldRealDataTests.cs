@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Emergency_Response_Simulator.Core.Contracts;
+using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Model;
 using Emergency_Response_Simulator.Data;
 using Emergency_Response_Simulator.Simulation.Hazards;
@@ -38,7 +39,8 @@ public class WorldRealDataTests(ITestOutputHelper output)
             BarrowStreetScenario.Create(demoAutoResponse: true), new WeatherSystem(), new HazardSystem(terrain),
             new InfrastructureSystem(routing), new UnitResponseSystem(routing, live), new MedicalSystem(routing),
             new CivilianSystem(terrain, routing: routing), new AgencyAiSystem(routing), new CommandResponseSystem(),
-            new TrafficSystem(routing, live, feed), new HazardReportingSystem(routing), new AttentionMonitor(cop, new AttentionOptions(), routing),
+            new TrafficSystem(routing, live, feed), new HazardReportingSystem(routing), new CommsSystem(routing: routing),
+            new AttentionMonitor(cop, new AttentionOptions(), routing),
         ]);
         await new DemoRosterScenario().SeedAsync(harness.Engine);
 
@@ -51,7 +53,9 @@ public class WorldRealDataTests(ITestOutputHelper output)
 
         Assert.True(terrain.IsLoaded);
         Assert.Contains(harness.World.Hazards.Values, h => h.Kind == HazardKind.Fire);
-        Assert.Contains(harness.Cop.Reports, r => r.Claim.Contains("size-up"));
+        // The crew sent its size-up (over the radio it may arrive garbled, or not at all).
+        Assert.Contains(await harness.EventsAsync(), e => e.Payload is CommsLogged { Text: var heard } && heard.Contains("size-up")
+                                                          || e.Payload is TransmissionLost { Text: var lost } && lost.Contains("size-up"));
         // The engine ticks every 100 ms of real time; a step must fit comfortably inside that.
         Assert.True(perStep < 50, $"{perStep:F1} ms per step");
     }

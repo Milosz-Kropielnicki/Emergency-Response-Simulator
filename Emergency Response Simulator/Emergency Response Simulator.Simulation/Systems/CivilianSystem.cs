@@ -2,6 +2,7 @@ using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.Simulation.Comms;
 using Emergency_Response_Simulator.Simulation.Engine;
 using Emergency_Response_Simulator.Simulation.Hazards;
 using Emergency_Response_Simulator.Simulation.State;
@@ -37,6 +38,15 @@ public sealed class CivilianOptions
 
     /// <summary>Share of people with a car to leave in.</summary>
     public double CarOwnership { get; set; } = 0.35;
+
+    /// <summary>Share of people with little English (Design Document §13).</summary>
+    public double LimitedEnglish { get; set; } = 0.08;
+
+    /// <summary>
+    /// Compliance of people with little English when the warning reaches them only in English. Command restores it by
+    /// notifying a translation or community liaison service (multilingual warnings).
+    /// </summary>
+    public double LimitedEnglishCompliance { get; set; } = 0.5;
 }
 
 /// <summary>
@@ -98,6 +108,9 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
                     Id = _nextId++,
                     Location = PlacePerson(incident.Location),
                     HasCar = _random.NextDouble() < _options.CarOwnership,
+                    Language = _random.NextDouble() < _options.LimitedEnglish
+                        ? CallerLanguages.Other[_random.Next(CallerLanguages.Other.Count)]
+                        : null,
                 });
         }
     }
@@ -214,7 +227,12 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
         var random = _random!;
         if (order is not null && person.WarnedAt is { } warned && context.SimTime >= warned)
         {
-            if (random.NextDouble() >= _options.EvacuationCompliance)
+            // A warning in English only reaches people with little English poorly, unless command has arranged
+            // multilingual warnings through a translation or community liaison service.
+            var compliance = person.Language is not null && !MultilingualWarnings(context.World)
+                ? _options.LimitedEnglishCompliance
+                : _options.EvacuationCompliance;
+            if (random.NextDouble() >= compliance)
             {
                 person.IgnoredOrder = order.ZoneId; // "it's not that bad", stays put
                 return;
@@ -347,6 +365,11 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
         }
     }
 
+    private static bool MultilingualWarnings(WorldState world) =>
+        world.Notified.Keys.Any(k => k.Contains("translat", StringComparison.OrdinalIgnoreCase)
+                                     || k.Contains("interpret", StringComparison.OrdinalIgnoreCase)
+                                     || k.Contains("community", StringComparison.OrdinalIgnoreCase));
+
     private static ProtectiveAction? ZoneAt(WorldState world, GeoPoint point)
     {
         if (world.ProtectiveActions.Count == 0) return null;
@@ -447,7 +470,12 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
         // A caller's location: a phone fix or a guess, 30–250 m out.
         var error = 30 + random.NextDouble() * 220;
         var reported = GeoMath.Destination(person.Location, random.NextDouble() * 360, error);
-        context.EmitPerceived(new CallReceived(Guid.NewGuid(), "999 caller (mobile)", summary, reported, Math.Round(error * 1.3 / 10) * 10),
-            EventSources.Comms);
+        CommsNet.EmergencyCall(context, new PendingCall
+        {
+            Caller = "999 caller (mobile)", Summary = summary, Location = reported, AccuracyMeters = Math.Round(error * 1.3 / 10) * 10,
+            Language = person.Language, Mobile = true,
+            // In real danger people hold on longer.
+            Patience = TimeSpan.FromSeconds(45 + random.NextDouble() * 105),
+        });
     }
 }

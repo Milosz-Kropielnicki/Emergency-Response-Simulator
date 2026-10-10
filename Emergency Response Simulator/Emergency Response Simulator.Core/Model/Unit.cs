@@ -45,4 +45,7 @@ public class Unit : Resource
     /// (COP state, not stored in the database).
     /// </summary>
     public string? Tasking { get; set; }
+
+    /// <summary>The radio channel the crew works on (COP state, not stored in the database).</summary>
+    public string? Channel { get; set; }
 }

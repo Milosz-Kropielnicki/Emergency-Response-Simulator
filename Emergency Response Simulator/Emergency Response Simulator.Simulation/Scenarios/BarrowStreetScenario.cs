@@ -1,6 +1,7 @@
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.Simulation.Comms;
 using Emergency_Response_Simulator.Simulation.Engine;
 using static Emergency_Response_Simulator.Simulation.Scenarios.Inject;
 
@@ -14,6 +15,8 @@ namespace Emergency_Response_Simulator.Simulation.Scenarios;
 /// With the world models running (Phase 6) the fire really spreads with the wind: left unchecked it reaches the
 /// chlorine store next door (a toxic release that worsens when the drums rupture) and then the substation that
 /// feeds the area (power, traffic signals and hospital capacity follow).
+/// Communications (Phase 7): a radio black spot under the railway bridge, a mobile mast that runs on batteries
+/// once the substation fails, a caller with little English, and a fire crew whose handheld batteries run low.
 /// </summary>
 public static class BarrowStreetScenario
 {
@@ -34,6 +37,12 @@ public static class BarrowStreetScenario
 
     /// <summary>The substation feeding Grand Canal Dock, downwind once the wind backs south-west.</summary>
     public static readonly GeoPoint Substation = GeoMath.Destination(FireLocation, 50, 160);
+
+    /// <summary>Radio black spot under the railway bridge on the approach from the north-west.</summary>
+    public static readonly GeoPoint RailwayBridge = GeoMath.Destination(FireLocation, 315, 130);
+
+    /// <summary>The mobile mast serving Grand Canal Dock; it is fed from the substation.</summary>
+    public static readonly GeoPoint MobileMast = GeoMath.Destination(FireLocation, 30, 350);
 
     /// <param name="demoAutoResponse">
     /// Presentation mode: at minute 2 the scenario itself opens the incident and dispatches a first response,
@@ -74,6 +83,26 @@ public static class BarrowStreetScenario
                         Substation, ServiceRadiusMeters: 600)),
                 ]),
 
+            new(TimeSpan.FromSeconds(5), "Radio black spot and mobile mast (truth)",
+                _ => [
+                    Truth(new RadioDeadZonePlaced(Guid.NewGuid(), RailwayBridge, 45, "under the railway bridge at Barrow Street")),
+                    Truth(new HazardSitePlaced(Guid.NewGuid(), HazardSiteKind.CellTower, "Grand Canal Dock mobile mast",
+                        MobileMast, ServiceRadiusMeters: 900)),
+                ]),
+
+            new(TimeSpan.FromMinutes(3.5), "Third call: a resident with very little English (an interpreter is needed)",
+                context => Call(context, new PendingCall
+                {
+                    Caller = "999 caller (mobile)", Language = "Polish", Mobile = true,
+                    Summary = "Fire next to my building, smoke is coming in, my mother cannot walk, third floor, Barrow Street apartments",
+                    Location = GeoMath.Destination(FireLocation, 40, 120), AccuracyMeters = 60, Patience = TimeSpan.FromMinutes(3),
+                })),
+
+            new(TimeSpan.FromMinutes(9), "A fire crew's handheld batteries run low (truth)",
+                context => WorkingFireCrew(context) is { } crew ? [Truth(new RadioBatteryChanged(crew, 0.12))] : [],
+                Condition: context => WorkingFireCrew(context) is not null,
+                Until: TimeSpan.FromMinutes(30)),
+
             new(TimeSpan.FromMinutes(1), "Drums rupture in the heat: release rate rises (truth, only once a release has run 4 min)",
                 context => ChlorineRelease(context) is { } release
                     ? [Truth(new HazardRateChanged(release.Id, release.Rate * 2.5, "drums rupturing in the heat"))]
@@ -85,14 +114,19 @@ public static class BarrowStreetScenario
                 _ => [Truth(new WorldIncidentStarted(fire, IncidentType.Explosion, FireLocation, Severity: 0.4, ActualCasualties: 6))]),
 
             new(TimeSpan.FromSeconds(60), "First 999 call: vague location",
-                _ => [Perceived(new CallReceived(Guid.NewGuid(), "999 caller (mobile)",
-                    "Loud bang and smoke from a warehouse somewhere near Barrow Street",
-                    GeoMath.Destination(FireLocation, 300, 120), 150))]),
+                context => Call(context, new PendingCall
+                {
+                    Caller = "999 caller (mobile)", Summary = "Loud bang and smoke from a warehouse somewhere near Barrow Street",
+                    Location = GeoMath.Destination(FireLocation, 300, 120), AccuracyMeters = 150, Patience = TimeSpan.FromMinutes(3),
+                })),
 
             new(TimeSpan.FromSeconds(105), "Second call: better location, people affected",
-                _ => [Perceived(new CallReceived(secondCall, "999 caller (landline)",
-                    "Fire in the warehouse unit on Barrow Street, people coming out coughing",
-                    GeoMath.Destination(FireLocation, 90, 25), 40))]),
+                context => Call(context, new PendingCall
+                {
+                    Id = secondCall, Caller = "999 caller (landline)", Mobile = false,
+                    Summary = "Fire in the warehouse unit on Barrow Street, people coming out coughing",
+                    Location = GeoMath.Destination(FireLocation, 90, 25), AccuracyMeters = 40, Patience = TimeSpan.FromMinutes(3),
+                })),
 
             new(TimeSpan.FromSeconds(150), "Social media rumour (wrong)",
                 _ => [Perceived(new ReportReceived(Guid.NewGuid(), null, ReportSource.Media, "Social media post",
@@ -157,6 +191,19 @@ public static class BarrowStreetScenario
                     : []),
         ]);
     }
+
+    /// <summary>Scripted 999 calls ring the line like anyone else's: they can queue for a call-taker.</summary>
+    private static IEnumerable<(EventVisibility, DomainEvent)> Call(SimulationContext context, PendingCall call)
+    {
+        CommsNet.EmergencyCall(context, call);
+        return [];
+    }
+
+    private static Guid? WorkingFireCrew(SimulationContext context) =>
+        context.World.Units.Values
+            .Where(u => u.Type == UnitType.Engine && u.Phase == State.ResponsePhase.Operating && u.Battery > 0.2)
+            .OrderBy(u => u.Callsign, StringComparer.Ordinal)
+            .FirstOrDefault()?.Id;
 
     private static State.WorldHazard? ChlorineRelease(SimulationContext context) =>
         context.World.Hazards.Values.FirstOrDefault(h => h.Kind == HazardKind.Plume && !h.Ended && h.Rate > 0);

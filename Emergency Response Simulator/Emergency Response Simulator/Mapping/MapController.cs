@@ -547,6 +547,23 @@ public sealed class MapController
             yield return feature;
         }
 
+        foreach (var (centre, radius, description) in snapshot.Comms.BlackSpots)
+        {
+            var area = Wgs84.CreatePolygon(Wgs84.Circle(centre, radius));
+            var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(area)), "Radio black spot (truth)", [description], label: "NO RADIO");
+            AddStyles(feature, MapStyles.BlackSpot);
+            yield return feature;
+        }
+
+        foreach (var mast in snapshot.Comms.Masts.Where(m => m.Down || m.OnBattery))
+        {
+            var area = Wgs84.CreatePolygon(Wgs84.Circle(mast.Location, mast.RadiusMeters));
+            var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(area)), $"{mast.Name} (truth)",
+                [mast.Down ? "Down: no mobile calls or data" : "On batteries"], label: mast.Down ? "NO MOBILE" : "MAST ON BATTERY");
+            AddStyles(feature, MapStyles.Outage);
+            yield return feature;
+        }
+
         foreach (var site in snapshot.Sites)
         {
             var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(site.Location.ToPoint())), $"{site.Name} (truth)",

@@ -1,5 +1,6 @@
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.Simulation.Comms;
 using Emergency_Response_Simulator.Simulation.Hazards;
 using NetTopologySuite.Geometries;
 
@@ -22,8 +23,20 @@ public sealed record WorldSnapshot(
     IReadOnlyList<WorldSnapshot.OutageView> Outages,
     IReadOnlyList<WorldSnapshot.UnitView> Units,
     IReadOnlyList<WorldSnapshot.ObstructionView> Obstructions,
-    IReadOnlyList<CascadeRecord> Cascades)
+    IReadOnlyList<CascadeRecord> Cascades,
+    WorldSnapshot.CommsView Comms)
 {
+    /// <summary>Communications as they really are: black spots, masts, crews that can't be heard, what went unheard.</summary>
+    public sealed record CommsView(
+        IReadOnlyList<(GeoPoint Centre, double RadiusMeters, string Description)> BlackSpots,
+        IReadOnlyList<(string Name, GeoPoint Location, double RadiusMeters, bool Down, bool OnBattery)> Masts,
+        IReadOnlyList<(DateTimeOffset At, string From, string Text, string Reason)> RecentLost,
+        IReadOnlyList<(string Callsign, string Problem)> Unreachable,
+        int CallsWaiting)
+    {
+        public static readonly CommsView Empty = new([], [], [], [], 0);
+    }
+
     public sealed record IncidentView(Guid Id, IncidentType Type, GeoPoint Location, double Severity, int Casualties, bool Extinguished, DateTimeOffset StartedAt);
 
     /// <param name="Footprint">The affected area as last recorded (fire, flood) or now (plume).</param>
@@ -55,7 +68,7 @@ public sealed record WorldSnapshot(
 
     public sealed record ObstructionView(Geometry Area, string Description);
 
-    public static readonly WorldSnapshot Empty = new(default, new WorldWeather(0, 0, 0, 0), [], [], [], [], [], [], [], [], [], []);
+    public static readonly WorldSnapshot Empty = new(default, new WorldWeather(0, 0, 0, 0), [], [], [], [], [], [], [], [], [], [], CommsView.Empty);
 
     public static WorldSnapshot Capture(WorldState world, DateTimeOffset at) => new(
         at,
@@ -74,5 +87,39 @@ public sealed record WorldSnapshot(
         world.Outages.Values.Select(o => new OutageView(o.Id, o.Centre, o.RadiusMeters, o.Cause, o.StartedAt, o.RestoreAt)).ToList(),
         world.Units.Values.Select(u => new UnitView(u.Id, u.Callsign, u.Type, u.Location, u.Phase, u.RadioFailed, u.BrokenDown)).ToList(),
         world.Obstructions.Values.Select(o => new ObstructionView(o.Line, o.Description)).ToList(),
-        world.Cascades.ToList());
+        world.Cascades.ToList(),
+        CaptureComms(world));
+
+    private static CommsView CaptureComms(WorldState world)
+    {
+        var radio = world.Radio;
+        if (!radio.Active) return CommsView.Empty;
+
+        var unreachable = new List<(string, string)>();
+        foreach (var unit in world.Units.Values)
+        {
+            var aiRun = unit.AgencyId is { } agency && world.Agencies.GetValueOrDefault(agency)?.AiControlled == true;
+            string? problem = CommsNet.ReachOf(world, unit) switch
+            {
+                Reach.None => unit.RadioFailed ? "radio failed" : "radio battery flat",
+                Reach.BlackSpot => "in a radio black spot",
+                Reach.Weak => $"radio battery at {unit.Battery:P0}",
+                // Another agency's own talkgroup is expected; a crew of ours command can't hear is not.
+                _ when !aiRun && !radio.Linked(unit.Channel).Any(c => RadioPlan.Find(c)?.Monitored == true) => $"on {unit.Channel}, not monitored",
+                _ => null,
+            };
+            if (problem is not null) unreachable.Add((unit.Callsign, problem));
+        }
+
+        return new CommsView(
+            radio.DeadZones.Select(z => (z.Centre, z.RadiusMeters, z.Description)).ToList(),
+            world.Sites.Values.Where(s => s.Kind == HazardSiteKind.CellTower).Select(s =>
+            {
+                var mast = radio.Masts.GetValueOrDefault(s.Id);
+                return (s.Name, s.Location, s.ServiceRadiusMeters, mast?.Down == true, mast?.OnBatterySince is not null);
+            }).ToList(),
+            radio.RecentLost.ToList(),
+            unreachable,
+            radio.CallQueue.Count);
+    }
 }

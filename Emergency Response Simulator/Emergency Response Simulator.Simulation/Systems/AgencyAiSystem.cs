@@ -1,6 +1,7 @@
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.Simulation.Comms;
 using Emergency_Response_Simulator.Simulation.Engine;
 using Emergency_Response_Simulator.Simulation.Hazards;
 using Emergency_Response_Simulator.Simulation.Routing;
@@ -219,8 +220,9 @@ public sealed class AgencyAiSystem(RoutingService? routing = null) : ISimulation
         var taskId = Guid.NewGuid();
         _initiativeOver[taskId] = over;
         context.EmitPerceived(new UnitTasked(unit.Id, taskId, agency.Name, task, where), EventSources.Comms);
-        context.EmitPerceived(new ReportReceived(Guid.NewGuid(), null, ReportSource.Agency, agency.Name, message(unit),
-            Confidence.High, VerificationStatus.Confirmed, where, 50), EventSources.Comms);
+        var text = message(unit);
+        CommsNet.Chat(context, agency.Name, text, new ReportReceived(Guid.NewGuid(), null, ReportSource.Agency, agency.Name, text,
+            Confidence.High, VerificationStatus.Confirmed, where, 50));
         return true;
     }
 

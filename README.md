@@ -66,7 +66,7 @@ The simulator separates **what is happening** from **what command believes is ha
 | `IGisService` | What exists where? | Implemented on PostGIS |
 | `IAvlService` | Where are my resources? | Contract only, Phase 3 |
 | `IPlumeService` | Where is the hazard going? | HTTP client plus Python stub model (the trainee's prediction); a simple truth plume runs in-engine since Phase 6; real model comes in Phase 12 |
-| `ICommsService` | Who said what, on which channel? | Contract only, Phase 7 |
+| `ICommsService` | Who said what, on which channel? | Implemented (`CommsService` over the COP's comms log) |
 | `IAarService` | How did we get here? | Timeline and replay implemented; metrics come in Phase 9 |
 | `ISimulationControl` | Start, pause, speed | Implemented (`SimulationEngine`) |
 
@@ -340,6 +340,72 @@ The world now runs on its own. Each system advances `WorldState` every tick and 
   - Left unchecked, the fire reaches it at about minute 9, after the wind backs south-west, and the substation at about minute 21–24.
   - The demo response's first engine warns about the placards a minute before the store is reached.
   - St. James's loses two resus bays at minute 10.
+
+## Communications realism (Phase 7)
+
+Every message between the world and command now travels over a simulated network (`CommsSystem`, Order 95). What arrives can be late, broken, garbled or nothing at all. Messages that never arrive are truth events (`TransmissionLost`); what was heard is perceived (`CommsLogged`), and the COP keeps it as a comms log. `Simulation:CommsRealism = false` delivers everything at once and intact. Without a comms system, systems' messages go straight to the COP as before.
+
+- **How each kind of message travels** (`CommsNet`):
+
+  | Kind | Carries | Can go wrong |
+  |---|---|---|
+  | Voice radio | Crews' reports, read-backs, sitreps | Queues for airtime, collides, garbles, gets lost |
+  | Mobile data | Status buttons and AVL | Needs coverage. Status messages are stored and sent when it returns; position fixes are dropped |
+  | Agency chat | Other control rooms, utilities, hospitals, notification replies | A short delay |
+  | 999 line | Calls from the public | Limited call-takers |
+
+- **Channels** (`RadioPlan`, matching the IAP's ICS 205 names): FIRE CMD 1, FIRE TAC 2, FIRE TAC 3, AMB OPS 1, GARDA OPS and INTER-AGENCY 1, plus the 999 line and agency chat.
+  - Crews work on their agency's channel. Command can move them to another one (e.g. a tactical channel), using the comms hub or `AssignChannelAsync`.
+  - Other services' own radio systems are known but not monitored:
+    - the AI agencies: FIRE NORTH, AMB SOUTH, GARDA RP;
+    - mutual aid: KILDARE FIRE, NAS MIDLANDS, NATIONAL TEAMS.
+- **Airtime and congestion:**
+  - Each channel carries one transmission at a time. Airtime is 1.5 s to key up plus about 150 words a minute; patched channels share airtime.
+  - Crews wait for a gap, emergency traffic first, and give up after 90 s.
+  - A channel over 75 % busy garbles more, and raises a "congested" alert.
+- **Push-to-talk and radio discipline:**
+  - Command transmits by holding the button. Let go before the message is finished and the end is cut off. Keying up while a crew is talking doubles both ("doubled with Engine 4").
+  - Crews answer only if they hear their call sign: "copy", a status ("send me your status"), or "say again".
+  - Command's own transmissions get discipline notes: no call sign, over 30 words, codes instead of plain language, filler words.
+- **Closed loop:**
+  - Orders go out on the recipient's channel when it is free. Nobody reads back an order they never heard.
+  - Read-backs come over the radio and can be unclear. Command confirms them, or marks them wrong, which repeats the order. An unclear read-back left alone raises an alert after a minute.
+  - "Say again" asks a crew to repeat a broken message.
+  - Orders to a crew on a channel command can't reach are refused.
+- **Degraded communications** (truth):
+
+  | Problem | Effect |
+  |---|---|
+  | Radio black spots (`RadioDeadZonePlaced`) | 70 % of transmissions lost, the rest garbled; crews retry. Mobile data is lost too. |
+  | Handheld batteries | Start part-charged and run down at 25 %/h on scene. Below 15 % they break up, more so the flatter they get. A crew reports low batteries and swaps them 8 minutes later; a flat radio is silent. |
+  | Mobile masts (`HazardSiteKind.CellTower`) | Run 45 minutes on batteries in a power cut, then fail (the Phase 6 cascade continues), or fail straight away if fire or floodwater reaches them. With a mast down, mobile 999 calls under it don't ring (30 % try a landline) and vehicle data there stops. |
+
+- **Interoperability:**
+  - A mutual-aid crew's transmissions are not heard. Its control room phones command to ask for a patch, and command sees an alert that it can't reach the crew.
+  - A patch (`PatchChannelsAsync`) takes a technician 3 minutes to set up. AI agencies' control rooms relay their crews' reports by phone, a minute or two late.
+- **Delays, missed calls, corrupted messages, the 999 line:**
+  - 3 call-takers each take 60–120 s per call.
+  - Callers hold 45–150 s, then hang up. A missed call shows for a callback, with an alert; the callback reaches them unless their phone has no signal.
+  - Broken messages lose words; garbled ones keep only fragments. A garbled report never reaches the COP; a broken one does, with lower confidence.
+- **Language and cultural barriers:**
+  - 8 % of residents have little English. Their calls give fragments and a vaguer location until a language-line interpreter joins 2–4 minutes later with the full account.
+  - Only 50 % of them follow an English-only evacuation order. Notifying a translation, interpreting or community liaison service brings it back to 85 %.
+- **Scenario (Barrow Street):**
+  - a radio black spot under the railway bridge on the north-west approach;
+  - a mobile mast fed by the substation;
+  - a Polish-speaking caller at minute 3½ whose mother can't walk;
+  - the first engine working at the fire running low on batteries at minute 9.
+  - Scripted calls now queue on the 999 line like everyone else's.
+- **UI:**
+  - The **comms hub** (right panel):
+    - filters by service, 999 calls and agency chat;
+    - live channel status: who is transmitting and airtime in the last 2 minutes;
+    - a push-to-talk composer, with channel, call signs and a hold-to-talk button;
+    - missed calls with **Call back**;
+    - the feed of what was heard, with quality badges, discipline notes and **Say again**;
+    - patches and channel assignment.
+  - Orders show **Read-back correct** / **Wrong: repeat order**.
+  - The instructor tab and map add what went unheard and why, crews in black spots or on flat batteries, masts down, and black spots.
 
 ## Local setup
 

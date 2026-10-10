@@ -140,6 +140,25 @@ public static class TruthComparison
                 $"{closures} closure(s) declared", DivergenceSeverity.Lagging));
         }
 
+        // Communications: what never reached command, and crews it can't hear.
+        var comms = truth.Comms;
+        var lost = comms.RecentLost.Where(l => truth.At - l.At <= TimeSpan.FromMinutes(10)).ToList();
+        if (lost.Count > 0)
+        {
+            var reasons = string.Join(", ", lost.GroupBy(l => l.Reason).OrderByDescending(g => g.Count()).Take(3)
+                .Select(g => $"{g.Count()} {g.Key}"));
+            lines.Add(new Divergence("Radio", $"{lost.Count} transmission(s) unheard in the last 10 min ({reasons})",
+                "Never received", DivergenceSeverity.Unknown));
+        }
+        foreach (var (callsign, problem) in comms.Unreachable)
+            lines.Add(new Divergence($"{callsign}: comms", problem, "COP can't tell", DivergenceSeverity.Lagging));
+        foreach (var mast in comms.Masts.Where(m => m.Down || m.OnBattery))
+        {
+            var heard = reports.Any(r => r.Claim.Contains("mobile", StringComparison.OrdinalIgnoreCase));
+            lines.Add(new Divergence(mast.Name, mast.Down ? "Down: no mobile calls or data nearby" : "On batteries (power cut)",
+                heard ? "Reported" : "Not known to command", mast.Down && !heard ? DivergenceSeverity.Unknown : DivergenceSeverity.Lagging));
+        }
+
         // Weather.
         if (cop.Weather is { } observed)
         {

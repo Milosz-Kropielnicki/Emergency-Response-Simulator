@@ -16,6 +16,9 @@ public class Agency
     /// </summary>
     public bool AiControlled { get; set; }
 
+    /// <summary>The agency's own radio system when it is not on ours (COP state, not stored in the database).</summary>
+    public string? RadioChannel { get; set; }
+
     public List<Resource> Resources { get; set; } = [];
     public List<User> Users { get; set; } = [];
 }

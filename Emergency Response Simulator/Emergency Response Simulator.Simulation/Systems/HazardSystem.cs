@@ -61,7 +61,8 @@ public sealed class HazardSystem(IHazardTerrain? terrain = null) : ISimulationSy
                     TrackSeverity(context, hazard, fire);
                     break;
                 case FloodModel flood:
-                    TriggerSites(context, hazard, site => site.Kind == HazardSiteKind.Substation && flood.DepthAt(site.Location) >= 0.4, "Floodwater");
+                    TriggerSites(context, hazard, site => site.Kind is HazardSiteKind.Substation or HazardSiteKind.CellTower
+                                                          && flood.DepthAt(site.Location) >= 0.4, "Floodwater");
                     CloseFloodedRoads(world, hazard, flood);
                     break;
             }
@@ -170,6 +171,12 @@ public sealed class HazardSystem(IHazardTerrain? terrain = null) : ISimulationSy
                     $"{site.Substance ?? "Toxic gas"} release from {site.Name}", rate, site.Substance, site.Quantity));
                 context.EmitTruth(new CascadeOccurred($"{what} reached {site.Name}",
                     $"{Capitalise(site.Substance ?? "toxic gas")} release begins ({rate:0.0} kg/s)", HazardId: release.Id));
+            }
+            else if (site.Kind == HazardSiteKind.CellTower)
+            {
+                context.EmitTruth(new CellTowerFailed(site.Id, $"{site.Name} damaged by {what.ToLowerInvariant()}"));
+                context.EmitTruth(new CascadeOccurred($"{what} reached {site.Name}",
+                    $"Mobile mast down: 999 calls from mobiles and mobile data lost within {site.ServiceRadiusMeters:F0} m", HazardId: cause.Id));
             }
             else
             {

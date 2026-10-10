@@ -34,6 +34,17 @@ public interface ICopService
     /// <summary>Receiving hospitals as they last reported themselves (Design Document §17).</summary>
     IReadOnlyList<Hospital> Hospitals { get; }
 
+    // Communications (Design Document §13)
+
+    /// <summary>Everything heard on the radio, the 999 line and the agency chat, oldest first.</summary>
+    IReadOnlyList<CommsEntry> CommsLog { get; }
+
+    /// <summary>Every channel command knows of, with who is on air and how busy it is (copies).</summary>
+    IReadOnlyList<ChannelState> Channels { get; }
+
+    IReadOnlyList<ChannelPatch> Patches { get; }
+    IReadOnlyList<MissedCall> MissedCalls { get; }
+
     // Command and control (Design Document §9)
     IReadOnlyList<Order> Orders { get; }
     IReadOnlyList<ResourceRequest> ResourceRequests { get; }
@@ -77,6 +88,39 @@ public static class CopPlanning
 
     public static IReadOnlyList<IncidentActionPlan> VersionsOf(this ICopService cop, Guid periodId) =>
         cop.ActionPlans.Where(p => p.OperationalPeriodId == periodId).OrderBy(p => p.Version).ToList();
+}
+
+/// <summary>Communications queries shared by C2, the comms hub and the attention monitor.</summary>
+public static class CopComms
+{
+    /// <summary>Channels joined to this one through working patches, including itself.</summary>
+    public static IReadOnlyCollection<string> Linked(this ICopService cop, string channelId)
+    {
+        var patches = cop.Patches.Where(p => p.ActiveFrom is not null).ToList();
+        var seen = new HashSet<string> { channelId };
+        var frontier = new Queue<string>([channelId]);
+        while (frontier.TryDequeue(out var current))
+        {
+            foreach (var patch in patches)
+            {
+                var other = patch.ChannelA == current ? patch.ChannelB : patch.ChannelB == current ? patch.ChannelA : null;
+                if (other is not null && seen.Add(other)) frontier.Enqueue(other);
+            }
+        }
+        return seen;
+    }
+
+    /// <summary>Command can hear (and talk on) a channel: one of its own, or patched to one.</summary>
+    public static bool ControlHears(this ICopService cop, string channelId) => cop.HeardChannels().Contains(channelId);
+
+    /// <summary>Every channel command can hear: its own, and everything patched to them.</summary>
+    public static IReadOnlySet<string> HeardChannels(this ICopService cop)
+    {
+        var heard = new HashSet<string>();
+        foreach (var own in cop.Channels.Where(c => c.Info.Monitored))
+            heard.UnionWith(cop.Linked(own.Info.Id));
+        return heard;
+    }
 }
 
 /// <param name="WindFromDegrees">Direction the wind blows from, degrees clockwise from north.</param>

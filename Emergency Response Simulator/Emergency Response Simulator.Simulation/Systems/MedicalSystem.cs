@@ -2,6 +2,7 @@ using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.Simulation.Comms;
 using Emergency_Response_Simulator.Simulation.Engine;
 using Emergency_Response_Simulator.Simulation.Hazards;
 using Emergency_Response_Simulator.Simulation.State;
@@ -348,8 +349,9 @@ public sealed class MedicalSystem(IRoutingService? routing = null) : ISimulation
             : $"Can accept {free} more.";
         if (hospital.SurgeActivated) note += " Major emergency plan active.";
         if (hospital.OnGenerator) note += " On generator power.";
-        context.EmitPerceived(new HospitalStatusReported(hospital.Id, hospital.Name, hospital.Occupied, hospital.Capacity,
-            hospital.OnDiversion, note), EventSources.Comms);
+        CommsNet.Chat(context, hospital.Name, $"ED {hospital.Occupied}/{hospital.Capacity}. {note}",
+            new HospitalStatusReported(hospital.Id, hospital.Name, hospital.Occupied, hospital.Capacity, hospital.OnDiversion, note),
+            TimeSpan.FromSeconds(30));
     }
 
     // ---- Crew sitreps ----
@@ -384,14 +386,16 @@ public sealed class MedicalSystem(IRoutingService? routing = null) : ISimulation
             if (previous.Summary == summary || (previous.Summary is not null && context.SimTime - previous.At < SitrepInterval)) continue;
             _sitreps[incident.Id] = (context.SimTime, summary);
 
-            context.EmitPerceived(new ReportReceived(Guid.NewGuid(), crew.OrderedIncidentId, ReportSource.FieldUnit, crew.Callsign,
-                summary + ".", Confidence.Medium, VerificationStatus.Reported, crew.Location, 30, crew.Id), EventSources.Comms);
+            CommsNet.Report(context, crew, new ReportReceived(Guid.NewGuid(), crew.OrderedIncidentId, ReportSource.FieldUnit, crew.Callsign,
+                summary + ".", Confidence.Medium, VerificationStatus.Reported, crew.Location, 30, crew.Id));
         }
     }
 
     private static void Report(SimulationContext context, WorldUnit unit, DomainEvent payload)
     {
-        if (!unit.RadioFailed)
-            context.EmitPerceived(payload, EventSources.Comms);
+        if (payload is ReportReceived report)
+            CommsNet.Report(context, unit, report);
+        else
+            CommsNet.Data(context, unit, payload, EventSources.Comms);
     }
 }

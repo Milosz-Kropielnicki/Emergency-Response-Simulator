@@ -287,7 +287,7 @@ public class CopSituationTests
 
         Assert.Single(harness.World.Incidents); // the fire really exists
         Assert.Empty(harness.Cop.Incidents);    // but only the trainee can open an incident
-        Assert.Equal(2, harness.Cop.Reports.Count(r => r.Source == ReportSource.EmergencyCall));
+        Assert.Equal(3, harness.Cop.Reports.Count(r => r.Source == ReportSource.EmergencyCall));
         Assert.Contains(harness.Cop.Reports, r => r.Source == ReportSource.Media && r.Confidence == Confidence.Low);
         Assert.Equal(210, harness.Cop.Weather!.WindFromDegrees);
         Assert.Contains(harness.Cop.Alerts, a => a.Category == AlertCategory.SituationChange);

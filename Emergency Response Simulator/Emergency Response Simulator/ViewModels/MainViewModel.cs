@@ -38,6 +38,7 @@ public partial class MainViewModel : ObservableObject
         _routing = routing;
         UnitDetail = new UnitDetailViewModel(routing);
         Command = new CommandViewModel(this, c2, cop);
+        CommsHub = new CommsHubViewModel(this, c2, cop);
         Command.InitialiseDefaults();
         Ics = new IcsViewModel(this, c2);
         Iap = new IapBuilderViewModel(this, iap, cop, simulation);
@@ -47,9 +48,6 @@ public partial class MainViewModel : ObservableObject
         LayerGroups = BuildLayerGroups();
         _dispatcher = Application.Current.Dispatcher;
         EventStoreLabel = $"Event store: {dataSource.EventStore}";
-
-        foreach (var channel in CommsChannels)
-            channel.PropertyChanged += (_, _) => RefreshComms();
 
         _cop.Changed += (_, _) => QueueRefresh();
 
@@ -77,6 +75,9 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>Orders, resource requests, approvals and notifications.</summary>
     public CommandViewModel Command { get; }
+
+    /// <summary>Radio, the 999 line and agency chat (right panel).</summary>
+    public CommsHubViewModel CommsHub { get; }
 
     /// <summary>The selected incident's ICS organisation and span of control.</summary>
     public IcsViewModel Ics { get; }
@@ -186,19 +187,6 @@ public partial class MainViewModel : ObservableObject
 
     public ToggleItem AreaCodes { get; } = new("area-codes", "Area codes");
 
-    /// <summary>Right panel: which communication feeds are shown.</summary>
-    public ObservableCollection<ToggleItem> CommsChannels { get; } =
-    [
-        new("fire", "Fire", true),
-        new("ems", "EMS", true),
-        new("police", "Police", true),
-        new("interagency", "Inter-agency", true),
-        new("calls", "Emergency calls", true),
-        new("field", "Field reports", true),
-    ];
-
-    public ObservableCollection<FeedItem> CommsFeed { get; } = [];
-
     // ---- Map tools ----
 
     public ZoneDrawingViewModel ZoneDrawing { get; }
@@ -278,7 +266,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>The moment being displayed: simulation time, or the replay time.</summary>
-    private DateTimeOffset Now => _cop.ReplayTime ?? _simulation.SimTime;
+    internal DateTimeOffset Now => _cop.ReplayTime ?? _simulation.SimTime;
 
     /// <summary>
     /// Ranks available units by road ETA to the selected incident, avoiding declared closures and hot zones
@@ -525,7 +513,7 @@ public partial class MainViewModel : ObservableObject
         RefreshResourceBoard();
         RefreshAlerts();
         RefreshIntelligence();
-        RefreshComms();
+        CommsHub.Refresh();
         RefreshZones();
         RefreshWeather();
         RefreshHospitals();
@@ -673,28 +661,6 @@ public partial class MainViewModel : ObservableObject
         IntelligenceFeed.Clear();
         foreach (var report in _cop.Reports.OrderByDescending(r => r.ReceivedAt).Take(100))
             IntelligenceFeed.Add(new ReportRow(this, report));
-    }
-
-    private void RefreshComms()
-    {
-        var showCalls = CommsChannels.First(c => c.Key == "calls").IsOn;
-        var showField = CommsChannels.First(c => c.Key == "field").IsOn;
-
-        CommsFeed.Clear();
-        var reports = _cop.Reports
-            .Where(r => (showCalls && r.Source == ReportSource.EmergencyCall)
-                     || (showField && r.Source == ReportSource.FieldUnit))
-            .OrderByDescending(r => r.ReceivedAt)
-            .Take(50);
-
-        foreach (var report in reports)
-        {
-            CommsFeed.Add(new FeedItem(
-                Time(report.ReceivedAt),
-                report.SourceName,
-                $"\"{report.Claim}\"  [{report.Confidence} confidence, {report.Verification}]",
-                report.Confidence.ToString()));
-        }
     }
 
     internal static string Time(DateTimeOffset at, bool seconds = false) =>

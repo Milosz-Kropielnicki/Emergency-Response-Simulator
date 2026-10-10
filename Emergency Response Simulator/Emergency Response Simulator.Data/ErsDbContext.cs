@@ -48,6 +48,7 @@ public class ErsDbContext(DbContextOptions<ErsDbContext> options) : DbContext(op
             b.Property(a => a.Name).HasMaxLength(200);
             b.Property(a => a.ShortName).HasMaxLength(40);
             b.Ignore(a => a.AiControlled); // set by AgencyRegistered events
+            b.Ignore(a => a.RadioChannel);
         });
 
         modelBuilder.Entity<User>(b =>
@@ -77,6 +78,7 @@ public class ErsDbContext(DbContextOptions<ErsDbContext> options) : DbContext(op
             b.Ignore(u => u.PlannedRoute);
             b.Ignore(u => u.RouteDistanceMeters);
             b.Ignore(u => u.Tasking);
+            b.Ignore(u => u.Channel);
             b.HasOne(u => u.AssignedIncident).WithMany(i => i.AssignedUnits)
                 .HasForeignKey(u => u.AssignedIncidentId).OnDelete(DeleteBehavior.SetNull);
         });

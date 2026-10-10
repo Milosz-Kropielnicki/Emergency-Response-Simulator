@@ -110,6 +110,11 @@ public sealed class Order
     /// <summary>What the recipient read back. May differ from what was said (§13).</summary>
     public string? ReadBack { get; set; }
 
+    public bool ReadBackGarbled { get; set; }
+
+    /// <summary>Command confirmed the read-back was right, closing the loop (§13).</summary>
+    public DateTimeOffset? ReadBackConfirmedAt { get; set; }
+
     public DateTimeOffset? ClosedAt { get; set; }
 }
 

@@ -58,6 +58,17 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(HospitalRegistered), nameof(HospitalRegistered))]
 [JsonDerivedType(typeof(HospitalStatusReported), nameof(HospitalStatusReported))]
 [JsonDerivedType(typeof(UnitTasked), nameof(UnitTasked))]
+// Communications (Phase 7)
+[JsonDerivedType(typeof(RadioCallMade), nameof(RadioCallMade))]
+[JsonDerivedType(typeof(CommsLogged), nameof(CommsLogged))]
+[JsonDerivedType(typeof(RepeatRequested), nameof(RepeatRequested))]
+[JsonDerivedType(typeof(ReadBackConfirmed), nameof(ReadBackConfirmed))]
+[JsonDerivedType(typeof(UnitChannelAssigned), nameof(UnitChannelAssigned))]
+[JsonDerivedType(typeof(ChannelPatchRequested), nameof(ChannelPatchRequested))]
+[JsonDerivedType(typeof(ChannelsPatched), nameof(ChannelsPatched))]
+[JsonDerivedType(typeof(ChannelPatchRemoved), nameof(ChannelPatchRemoved))]
+[JsonDerivedType(typeof(CallMissed), nameof(CallMissed))]
+[JsonDerivedType(typeof(CallbackMade), nameof(CallbackMade))]
 // Truth: the world as it really is
 [JsonDerivedType(typeof(WorldIncidentStarted), nameof(WorldIncidentStarted))]
 [JsonDerivedType(typeof(WorldIncidentChanged), nameof(WorldIncidentChanged))]
@@ -78,6 +89,12 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(PowerOutageStarted), nameof(PowerOutageStarted))]
 [JsonDerivedType(typeof(PowerRestored), nameof(PowerRestored))]
 [JsonDerivedType(typeof(CascadeOccurred), nameof(CascadeOccurred))]
+// Truth: communications (Phase 7)
+[JsonDerivedType(typeof(TransmissionLost), nameof(TransmissionLost))]
+[JsonDerivedType(typeof(RadioDeadZonePlaced), nameof(RadioDeadZonePlaced))]
+[JsonDerivedType(typeof(CellTowerFailed), nameof(CellTowerFailed))]
+[JsonDerivedType(typeof(CellTowerRestored), nameof(CellTowerRestored))]
+[JsonDerivedType(typeof(RadioBatteryChanged), nameof(RadioBatteryChanged))]
 // Engine control
 [JsonDerivedType(typeof(SimulationStarted), nameof(SimulationStarted))]
 [JsonDerivedType(typeof(SimulationPaused), nameof(SimulationPaused))]
@@ -87,7 +104,9 @@ public abstract record DomainEvent;
 // ---- Scenario setup ----
 
 /// <param name="AiControlled">Run by the simulation (another control room), not by the trainee.</param>
-public sealed record AgencyRegistered(Guid AgencyId, string Name, string ShortName, AgencyType Type, bool AiControlled = false) : DomainEvent;
+/// <param name="RadioChannel">The agency's own radio system, if it is not on ours (command needs a patch to talk to it).</param>
+public sealed record AgencyRegistered(Guid AgencyId, string Name, string ShortName, AgencyType Type, bool AiControlled = false,
+    string? RadioChannel = null) : DomainEvent;
 
 /// <summary>A receiving hospital and its emergency department as known at the start; also its true starting state.</summary>
 public sealed record HospitalRegistered(Guid HospitalId, string Name, GeoPoint Location, int EdCapacity, int Occupied) : DomainEvent;
@@ -313,6 +332,54 @@ public sealed record HospitalStatusReported(Guid HospitalId, string Name, int Oc
 /// </summary>
 public sealed record UnitTasked(Guid UnitId, Guid TaskId, string TaskedBy, string Task, GeoPoint Location) : DomainEvent;
 
+// ---- Communications (Phase 7, Design Document §13) ----
+
+/// <summary>
+/// Command keys up and speaks on a channel (push-to-talk). Letting go of the button before the message is finished
+/// cuts it off.
+/// </summary>
+/// <param name="HeldSeconds">How long the button was held, or null for a message sent without push-to-talk timing.</param>
+public sealed record RadioCallMade(Guid MessageId, string ChannelId, string? To, string Text, double? HeldSeconds = null) : DomainEvent;
+
+/// <summary>
+/// A message as it was heard: on a radio channel (by command, whoever was listening), on the 999 line, or in the
+/// agency chat. Garbled or broken messages carry what could be made out.
+/// </summary>
+public sealed record CommsLogged(
+    Guid MessageId,
+    string ChannelId,
+    string From,
+    string? To,
+    string Text,
+    CommsQuality Quality,
+    double DurationSeconds,
+    Guid? UnitId = null,
+    bool FromControl = false,
+    IReadOnlyList<string>? Notes = null) : DomainEvent;
+
+/// <summary>"Say again": command asks the sender of a broken or garbled message to repeat it.</summary>
+public sealed record RepeatRequested(Guid MessageId) : DomainEvent;
+
+/// <summary>Closing the loop on an order: command confirms the read-back, or says it was wrong and repeats the order.</summary>
+public sealed record ReadBackConfirmed(Guid OrderId, bool Correct) : DomainEvent;
+
+/// <summary>A unit is told to work on another channel, e.g. a tactical channel to take traffic off the main one.</summary>
+public sealed record UnitChannelAssigned(Guid UnitId, string ChannelId) : DomainEvent;
+
+/// <summary>Command asks for two channels to be patched together; a technician sets it up.</summary>
+public sealed record ChannelPatchRequested(Guid PatchId, string ChannelA, string ChannelB) : DomainEvent;
+
+/// <summary>The patch is working: what is said on either channel is heard on both.</summary>
+public sealed record ChannelsPatched(Guid PatchId) : DomainEvent;
+
+public sealed record ChannelPatchRemoved(Guid PatchId) : DomainEvent;
+
+/// <summary>A 999 caller hung up before anyone answered. The number shows for a callback.</summary>
+public sealed record CallMissed(Guid CallId, GeoPoint? Location, double? AccuracyMeters, TimeSpan Waited) : DomainEvent;
+
+/// <summary>Command rings a missed caller back.</summary>
+public sealed record CallbackMade(Guid CallId) : DomainEvent;
+
 /// <summary>
 /// Weather as reported to command by a met service or station. May lag or differ from the true
 /// <see cref="WeatherChanged"/>; the COP's weather view shows only this.
@@ -418,6 +485,20 @@ public sealed record PowerRestored(Guid OutageId) : DomainEvent;
 /// signals dark" → "Ambulance 14 delayed 2.5 min". Recorded for the instructor and the AAR.
 /// </summary>
 public sealed record CascadeOccurred(string Cause, string Effect, Guid? UnitId = null, Guid? HazardId = null) : DomainEvent;
+
+/// <summary>A transmission nobody heard: out of coverage, a dead battery, a channel nobody monitors, a full queue.</summary>
+public sealed record TransmissionLost(Guid MessageId, string ChannelId, string From, string Text, string Reason) : DomainEvent;
+
+/// <summary>A radio black spot: basements, underpasses, between tall buildings.</summary>
+public sealed record RadioDeadZonePlaced(Guid ZoneId, GeoPoint Centre, double RadiusMeters, string Description) : DomainEvent;
+
+/// <summary>A mobile mast goes down: phones (999 calls) and mobile data (AVL, status) stop working around it.</summary>
+public sealed record CellTowerFailed(Guid SiteId, string Cause) : DomainEvent;
+
+public sealed record CellTowerRestored(Guid SiteId) : DomainEvent;
+
+/// <summary>A crew's handheld radio battery level really changes (0–1), e.g. set by a scenario.</summary>
+public sealed record RadioBatteryChanged(Guid UnitId, double Level) : DomainEvent;
 
 // ---- Engine control ----
 
