@@ -107,6 +107,16 @@ public sealed class MedicalSystem(IRoutingService? routing = null) : ISimulation
         _ => (60, 120),
     };
 
+    /// <summary>
+    /// How much longer treatment keeps a casualty stable: three times as long with a paramedic, twice with EMTs only
+    /// (Phase 8: a crew whose paramedic certificate has lapsed works at basic life support).
+    /// </summary>
+    private static double Stability(WorldState world, WorldCasualty casualty) =>
+        casualty.CrewId is { } crewId && world.Units.TryGetValue(crewId, out var crew) && crew.Crew.Rostered
+            && crew.Crew.Holding(Qualifications.Als) == 0
+            ? 2
+            : 3;
+
     private static void Deteriorate(SimulationContext context)
     {
         foreach (var casualty in context.World.Casualties.Values)
@@ -118,7 +128,7 @@ public sealed class MedicalSystem(IRoutingService? routing = null) : ISimulation
                 var (min, max) = Survival(casualty.Triage);
                 var minutes = min + SimRandom.For(casualty.Id, (int)casualty.Triage).NextDouble() * (max - min);
                 // Treated casualties (on scene or in an ambulance) are stable for much longer.
-                if (casualty.State != CasualtyState.AwaitingTreatment) minutes *= 3;
+                if (casualty.State != CasualtyState.AwaitingTreatment) minutes *= Stability(context.World, casualty);
                 casualty.DeteriorateAt = context.SimTime + TimeSpan.FromMinutes(minutes);
             }
             if (context.SimTime < casualty.DeteriorateAt) continue;

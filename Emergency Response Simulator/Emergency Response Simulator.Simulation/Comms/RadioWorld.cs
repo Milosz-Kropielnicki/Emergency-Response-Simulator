@@ -37,6 +37,9 @@ public sealed class Transmission
     /// <summary>The order this transmission carries, so the recipient's hearing it can be recorded.</summary>
     public Guid? OrderId { get; init; }
 
+    /// <summary>The PAR or evacuation signal this transmission calls, so crews hearing it can be recorded.</summary>
+    public Guid? ParId { get; init; }
+
     /// <summary>Higher goes first: emergency traffic over routine.</summary>
     public int Priority { get; init; }
 
@@ -135,6 +138,13 @@ public sealed class RadioWorld
 
     /// <summary>Recent transmissions nobody heard, newest last (for the instructor).</summary>
     public List<(DateTimeOffset At, string From, string Text, string Reason)> RecentLost { get; } = [];
+
+    /// <summary>Channels cleared for emergency traffic: only priority traffic goes out (Phase 8).</summary>
+    public HashSet<string> EmergencyTraffic { get; } = [];
+
+    /// <summary>Whether the channel, or one patched to it, is cleared for emergency traffic.</summary>
+    public bool UnderEmergencyTraffic(string channel) =>
+        EmergencyTraffic.Count > 0 && Linked(channel).Any(EmergencyTraffic.Contains);
 
     /// <summary>Patched-together channels share airtime: this is the group's key (the lowest channel id in it).</summary>
     public string AirtimeGroup(string channel)

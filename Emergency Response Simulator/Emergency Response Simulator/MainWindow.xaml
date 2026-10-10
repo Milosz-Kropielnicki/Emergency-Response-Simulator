@@ -688,6 +688,154 @@
                             </ScrollViewer>
                         </Grid>
                     </TabItem>
+                    <TabItem DataContext="{Binding Crews}">
+                        <TabItem.Header>
+                            <TextBlock x:Name="CrewsHeader" Text="{Binding TabHeader}" />
+                        </TabItem.Header>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="2">
+                                <!-- Safety actions for the selected incident -->
+                                <TextBlock Text="SAFETY (selected incident)" Style="{StaticResource PanelHeader}" />
+                                <UniformGrid Columns="2" Margin="0,0,0,6">
+                                    <Button Content="Call PAR" Command="{Binding RequestParCommand}" Margin="0,0,2,0" Padding="6,3"
+                                            ToolTip="Personnel Accountability Report: every crew at the scene counts its people over the radio" />
+                                    <Button Content="⚠ Evacuation signal" Command="{Binding EvacuateCommand}" Margin="2,0,0,0" Padding="6,3"
+                                            Foreground="{StaticResource CriticalBrush}" FontWeight="SemiBold"
+                                            ToolTip="Air horns and 'evacuate' on the radio: every crew withdraws from the building and reports a PAR. Operations go defensive." />
+                                </UniformGrid>
+                                <DockPanel Margin="0,0,0,2">
+                                    <Button DockPanel.Dock="Right" Content="Declare / lift" Command="{Binding ToggleEmergencyTrafficCommand}" Margin="4,0,0,0" Padding="6,0"
+                                            ToolTip="Emergency traffic: only priority traffic (the Mayday, the rescue) on this channel until lifted" />
+                                    <TextBlock DockPanel.Dock="Left" Text="Emergency traffic" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                    <ComboBox ItemsSource="{Binding RadioChannels}" SelectedItem="{Binding TrafficChannel}" />
+                                </DockPanel>
+                                <TextBlock x:Name="TrafficState" Text="{Binding EmergencyTraffic}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,8" />
+
+                                <!-- Maydays -->
+                                <ItemsControl ItemsSource="{Binding Maydays}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:MaydayRow}">
+                                            <Border x:Name="Card" BorderBrush="{StaticResource CriticalBrush}" BorderThickness="2" CornerRadius="3" Padding="8,6" Margin="0,0,0,8">
+                                                <StackPanel>
+                                                    <TextBlock x:Name="Title" Text="{Binding Title}" FontWeight="Bold" Foreground="{StaticResource CriticalBrush}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding Time}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock Text="{Binding Details}" TextWrapping="Wrap" Margin="0,2,0,4" />
+                                                    <TextBlock Text="{Binding Rescue}" FontSize="11" />
+                                                    <DockPanel Margin="0,4,0,0" Visibility="{Binding NeedsRescue, Converter={StaticResource BoolToVisibility}}">
+                                                        <Button DockPanel.Dock="Right" Content="Send in" Margin="4,0,0,0" Padding="6,0" FontWeight="SemiBold"
+                                                                Command="{Binding DataContext.Crews.DeployRescueCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding Id}" ToolTip="Commit this crew as the rescue team" />
+                                                        <ComboBox ItemsSource="{Binding DataContext.Crews.RescueCandidates, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                  SelectedItem="{Binding DataContext.Crews.RescueTeam, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                  DisplayMemberPath="Label" ToolTip="Fire crews at the scene with two breathing apparatus wearers" />
+                                                    </DockPanel>
+                                                </StackPanel>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Active}" Value="False">
+                                                    <Setter TargetName="Card" Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+                                                    <Setter TargetName="Card" Property="BorderThickness" Value="1" />
+                                                    <Setter TargetName="Title" Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Latest PAR -->
+                                <TextBlock Text="ACCOUNTABILITY" Style="{StaticResource PanelHeader}" />
+                                <TextBlock x:Name="ParSummary" Text="{Binding ParSummary}" TextWrapping="Wrap" Margin="0,0,0,2" />
+                                <ItemsControl ItemsSource="{Binding ParLines}" Margin="0,0,0,8">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:ParLine}">
+                                            <DockPanel Margin="0,1">
+                                                <Button x:Name="Declare" DockPanel.Dock="Right" Content="Declare Mayday" Padding="6,0" FontSize="11" Visibility="Collapsed"
+                                                        Command="{Binding DataContext.Crews.DeclareMaydayCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}" />
+                                                <TextBlock x:Name="Line" TextWrapping="Wrap">
+                                                    <Run Text="{Binding Callsign, Mode=OneWay}" FontWeight="SemiBold" />
+                                                    <Run Text="{Binding Text, Mode=OneWay}" />
+                                                </TextBlock>
+                                            </DockPanel>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Missing}" Value="True">
+                                                    <Setter TargetName="Line" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Declare" Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Outstanding}" Value="True">
+                                                    <Setter TargetName="Line" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Declare" Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Crews -->
+                                <DockPanel>
+                                    <CheckBox DockPanel.Dock="Right" Content="Committed only" IsChecked="{Binding CommittedOnly}" FontSize="11" VerticalAlignment="Center" />
+                                    <TextBlock Text="CREWS" Style="{StaticResource PanelHeader}" />
+                                </DockPanel>
+                                <TextBlock Style="{StaticResource EmptyHint}" Text="No crews committed. Untick 'Committed only' to see every crew on duty.">
+                                    <TextBlock.Visibility>
+                                        <Binding Path="Crews.Count" Converter="{x:Static vm:Converters.ZeroToVisible}" />
+                                    </TextBlock.Visibility>
+                                </TextBlock>
+                                <ItemsControl ItemsSource="{Binding Crews}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:CrewRow}">
+                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="3" Padding="8,6" Margin="0,0,0,6">
+                                                <StackPanel>
+                                                    <DockPanel>
+                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding Status}" FontSize="11" Foreground="{StaticResource MutedTextBrush}"
+                                                                   VerticalAlignment="Center" />
+                                                        <TextBlock Text="{Binding Callsign}" FontWeight="SemiBold" />
+                                                    </DockPanel>
+                                                    <TextBlock x:Name="Shift" Text="{Binding Shift}" FontSize="11" TextWrapping="Wrap" />
+                                                    <TextBlock x:Name="Work" Text="{Binding Work}" FontSize="11" TextWrapping="Wrap" />
+                                                    <TextBlock x:Name="Condition" Text="{Binding Condition}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock Text="{Binding Qualifications}" FontSize="11" FontFamily="Consolas" Foreground="{StaticResource AccentBrush}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding Notes}" FontSize="11" FontStyle="Italic" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}"
+                                                               Visibility="{Binding Notes, Converter={x:Static vm:Converters.TextToVisible}}" />
+                                                    <Expander Header="Crew" FontSize="11" Margin="0,2,0,0">
+                                                        <TextBlock Text="{Binding Roster}" FontSize="11" TextWrapping="Wrap" Margin="12,2,0,0" />
+                                                    </Expander>
+                                                    <WrapPanel Margin="0,4,0,0">
+                                                        <Button Content="Rehab" Padding="6,0" FontSize="11" Margin="0,0,4,2"
+                                                                IsEnabled="{Binding AtScene}"
+                                                                Command="{Binding DataContext.Crews.RehabCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding UnitId}" ToolTip="Rest, fluids, cooling and a medical check (about 20 min)" />
+                                                        <Button Content="Relieve" Padding="6,0" FontSize="11" Margin="0,0,4,2"
+                                                                IsEnabled="{Binding CanRelieve}"
+                                                                Command="{Binding DataContext.Crews.RelieveCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding UnitId}" ToolTip="Fresh crew with a full handover briefing (slower, nothing lost)" />
+                                                        <Button Content="Quick relief" Padding="6,0" FontSize="11" Margin="0,0,4,2"
+                                                                IsEnabled="{Binding CanRelieve}"
+                                                                Command="{Binding DataContext.Crews.QuickRelieveCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding UnitId}" ToolTip="Fresh crew with a quick changeover: faster, but what the old crew knew may be lost" />
+                                                        <Button Content="Peer support" Padding="6,0" FontSize="11" Margin="0,0,4,2"
+                                                                Command="{Binding DataContext.Crews.PeerSupportCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding UnitId}" ToolTip="The peer support team sees the crew once it is off the line" />
+                                                    </WrapPanel>
+                                                </StackPanel>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding ShiftOver}" Value="True">
+                                                    <Setter TargetName="Shift" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding RehabDue}" Value="True">
+                                                    <Setter TargetName="Work" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding ConditionWarning}" Value="True">
+                                                    <Setter TargetName="Condition" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
                 </TabControl>
             </Border>
         </Grid>

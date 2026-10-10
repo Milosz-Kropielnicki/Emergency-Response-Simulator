@@ -427,6 +427,145 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2S
         return await PublishAsync(new CallbackMade(callId), cancellationToken);
     }
 
+    // ---- Crews and safety ----
+
+    /// <summary>Crews at a scene: what a PAR, an evacuation signal or a rescue team can call on.</summary>
+    private IEnumerable<Unit> AtScene(Guid? incidentId) =>
+        cop.Units.Where(u => u.Status is UnitStatus.OnScene or UnitStatus.Operating && u.Agency?.AiControlled != true
+                             && u.AssignedIncidentId is not null && (incidentId is null || u.AssignedIncidentId == incidentId));
+
+    public async Task<CommandResult> RequestParAsync(Guid? incidentId, string reason = "Routine PAR", CancellationToken cancellationToken = default)
+    {
+        if (incidentId is { } id && cop.FindIncident(id) is null)
+            return CommandResult.Fail("Unknown incident.");
+        var crews = AtScene(incidentId).ToList();
+        if (crews.Count == 0)
+            return CommandResult.Fail("No crews at the scene to account for.");
+        if (crews.Select(c => c.Channel).Where(c => c is not null).Distinct().All(c => !cop.ControlHears(c!)))
+            return CommandResult.Fail("You can't reach any of the crews at the scene on the radio.");
+
+        var parId = Guid.NewGuid();
+        var result = await PublishAsync(new ParRequested(parId, incidentId, string.IsNullOrWhiteSpace(reason) ? "Routine PAR" : reason.Trim()),
+            cancellationToken);
+        return result with { EntityId = parId, Detail = $"PAR called: {crews.Count} crew(s) to answer" };
+    }
+
+    public async Task<CommandResult> SignalEvacuationAsync(Guid incidentId, CancellationToken cancellationToken = default)
+    {
+        if (cop.FindIncident(incidentId) is null)
+            return CommandResult.Fail("Unknown incident.");
+        var crews = AtScene(incidentId).ToList();
+        if (crews.Count == 0)
+            return CommandResult.Fail("No crews at the scene to evacuate.");
+
+        var signalId = Guid.NewGuid();
+        var result = await PublishAsync(new EvacuationSignalled(signalId, incidentId), cancellationToken);
+        return result with { EntityId = signalId, Detail = $"Evacuation signal: {crews.Count} crew(s) withdrawing" };
+    }
+
+    public async Task<CommandResult> DeclareEmergencyTrafficAsync(string channelId, bool active, CancellationToken cancellationToken = default)
+    {
+        if (cop.Channels.FirstOrDefault(c => c.Info.Id == channelId) is not { Info.Kind: ChannelKind.Radio } channel)
+            return CommandResult.Fail("Unknown radio channel.");
+        if (!cop.ControlHears(channelId))
+            return CommandResult.Fail($"Control has no radio on {channelId}.");
+        if (channel.EmergencyTraffic == active)
+            return CommandResult.Fail(active ? $"{channelId} is already cleared for emergency traffic." : $"{channelId} is not under emergency traffic.");
+        return await PublishAsync(new EmergencyTrafficDeclared(channelId, active), cancellationToken);
+    }
+
+    public async Task<CommandResult> DeclareMaydayAsync(Guid unitId, string? member, string details, CancellationToken cancellationToken = default)
+    {
+        if (cop.FindUnit(unitId) is not { } unit)
+            return CommandResult.Fail("Unknown unit.");
+        if (NotUnderCommand(unit) is { } refused)
+            return refused;
+        if (cop.Maydays.Any(m => m.Active && m.UnitId == unitId && (member is null || m.Member == member)))
+            return CommandResult.Fail($"There is already an active Mayday for {unit.Callsign}.");
+
+        var maydayId = Guid.NewGuid();
+        var said = string.IsNullOrWhiteSpace(details) ? $"Declared by command: {member ?? "a member"} of {unit.Callsign} unaccounted for" : details.Trim();
+        var result = await PublishAsync(new MaydayDeclared(maydayId, unitId, string.IsNullOrWhiteSpace(member) ? null : member.Trim(), said),
+            cancellationToken);
+        return result with { EntityId = maydayId };
+    }
+
+    public async Task<CommandResult> DeployRescueTeamAsync(Guid maydayId, Guid unitId, CancellationToken cancellationToken = default)
+    {
+        if (cop.Maydays.FirstOrDefault(m => m.Id == maydayId) is not { } mayday)
+            return CommandResult.Fail("Unknown Mayday.");
+        if (!mayday.Active)
+            return CommandResult.Fail("That Mayday is over.");
+        if (mayday.RescueUnitId is not null)
+            return CommandResult.Fail($"{mayday.RescueCallsign} is already the rescue team.");
+        if (cop.FindUnit(unitId) is not { } unit)
+            return CommandResult.Fail("Unknown unit.");
+        if (NotUnderCommand(unit) is { } refused)
+            return refused;
+        if (unitId == mayday.UnitId)
+            return CommandResult.Fail($"{unit.Callsign} is the crew in trouble: send another crew.");
+        if (ResourceGroups.AgencyFor(unit.Type) != AgencyType.Fire)
+            return CommandResult.Fail("Only a fire crew in breathing apparatus can go in.");
+        if (unit.Status is not (UnitStatus.OnScene or UnitStatus.Operating) || unit.AssignedIncidentId != mayday.IncidentId)
+            return CommandResult.Fail($"{unit.Callsign} is not at the scene.");
+        if (unit.Crew is { } crew)
+        {
+            if (crew.RescueFor is not null)
+                return CommandResult.Fail($"{unit.Callsign} is already committed to a rescue.");
+            if (crew.Holding(Qualifications.BreathingApparatus) < 2)
+                return CommandResult.Fail($"{unit.Callsign} hasn't two breathing apparatus wearers to send in.");
+        }
+        if (unit.Channel is { } channel && !cop.ControlHears(channel))
+            return CommandResult.Fail($"You can't reach {unit.Callsign} on {channel}.");
+        return await PublishAsync(new RescueTeamDeployed(maydayId, unitId), cancellationToken);
+    }
+
+    public async Task<CommandResult> SendToRehabAsync(Guid unitId, CancellationToken cancellationToken = default)
+    {
+        if (cop.FindUnit(unitId) is not { } unit)
+            return CommandResult.Fail("Unknown unit.");
+        if (NotUnderCommand(unit) is { } refused)
+            return refused;
+        if (unit.Status is not (UnitStatus.OnScene or UnitStatus.Operating))
+            return CommandResult.Fail($"{unit.Callsign} is not at a scene.");
+        if (unit.Crew is { InRehab: true })
+            return CommandResult.Fail($"{unit.Callsign} is already in rehab.");
+        if (unit.Crew is { RescueFor: not null })
+            return CommandResult.Fail($"{unit.Callsign} is working a rescue.");
+        if (unit.Channel is { } channel && !cop.ControlHears(channel))
+            return CommandResult.Fail($"You can't reach {unit.Callsign} on {channel} to tell it.");
+        return await PublishAsync(new CrewRehabOrdered(unitId), cancellationToken);
+    }
+
+    public async Task<CommandResult> RequestReliefAsync(Guid unitId, bool fullBriefing, CancellationToken cancellationToken = default)
+    {
+        if (cop.FindUnit(unitId) is not { } unit)
+            return CommandResult.Fail("Unknown unit.");
+        if (NotUnderCommand(unit) is { } refused)
+            return refused;
+        if (unit.Crew is null)
+            return CommandResult.Fail($"No crew list for {unit.Callsign}.");
+        if (unit.Crew.ReliefRequestedAt is { } asked && (unit.Crew.RelievedAt is null || unit.Crew.RelievedAt < asked))
+            return CommandResult.Fail($"A relief crew is already on its way to {unit.Callsign}.");
+        if (unit.Status == UnitStatus.OutOfService)
+            return CommandResult.Fail($"{unit.Callsign} is out of service.");
+
+        var reliefId = Guid.NewGuid();
+        var result = await PublishAsync(new CrewReliefRequested(reliefId, unitId, fullBriefing), cancellationToken);
+        return result with { EntityId = reliefId };
+    }
+
+    public async Task<CommandResult> ArrangePeerSupportAsync(Guid unitId, CancellationToken cancellationToken = default)
+    {
+        if (cop.FindUnit(unitId) is not { } unit)
+            return CommandResult.Fail("Unknown unit.");
+        if (unit.Crew is null)
+            return CommandResult.Fail($"No crew list for {unit.Callsign}.");
+        if (unit.Crew.PeerSupportArrangedAt is { } arranged && (unit.Crew.PeerSupportGivenAt is null || unit.Crew.PeerSupportGivenAt < arranged))
+            return CommandResult.Fail($"Peer support is already arranged for {unit.Callsign}.");
+        return await PublishAsync(new PeerSupportArranged(unitId), cancellationToken);
+    }
+
     public async Task<CommandResult> NotifyAsync(string recipient, string message, Guid? incidentId = null,
         CancellationToken cancellationToken = default)
     {

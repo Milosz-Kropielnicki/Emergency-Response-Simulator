@@ -571,6 +571,17 @@ public sealed class MapController
             AddStyles(feature, MapStyles.Site(site.Triggered));
             yield return feature;
         }
+
+        // Firefighters really in trouble (Phase 8), whether or not command has heard the Mayday.
+        foreach (var distress in snapshot.Distress)
+        {
+            var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(distress.Location.ToPoint())), $"{distress.Member} (truth)",
+                [$"{distress.Callsign}: {distress.Cause}", distress.Heard ? "Mayday heard" : "Mayday NOT heard",
+                 distress.RescueCallsign is { } rescuer ? $"{rescuer} {distress.RescueProgress:P0} through the rescue" : "No rescue team"],
+                label: $"MAYDAY {distress.Member}");
+            AddStyles(feature, MapStyles.Distress);
+            yield return feature;
+        }
     }
 
     private static IEnumerable<IFeature> PeopleFeatures(WorldSnapshot snapshot)

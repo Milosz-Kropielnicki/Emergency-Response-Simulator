@@ -66,7 +66,8 @@ public sealed class UnitResponseSystem(RoutingService? routing = null, LiveTraff
 
             switch (unit.Phase)
             {
-                case ResponsePhase.TurningOut when context.SimTime - unit.PhaseStartedAt >= TurnoutTime:
+                // A tired crew is slower to get going and to size up (Phase 8).
+                case ResponsePhase.TurningOut when context.SimTime - unit.PhaseStartedAt >= TurnoutTime * CrewFactors.SlowFactor(unit):
                     StartTravel(context, unit);
                     break;
 
@@ -74,7 +75,7 @@ public sealed class UnitResponseSystem(RoutingService? routing = null, LiveTraff
                     Travel(context, unit);
                     break;
 
-                case ResponsePhase.OnScene when context.SimTime - unit.PhaseStartedAt >= SizeUpTime:
+                case ResponsePhase.OnScene when context.SimTime - unit.PhaseStartedAt >= SizeUpTime * CrewFactors.SlowFactor(unit):
                     unit.Phase = ResponsePhase.Operating;
                     unit.PhaseStartedAt = context.SimTime;
                     Report(context, unit, new UnitStatusChanged(unit.Id, UnitStatus.Operating));

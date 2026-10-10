@@ -39,7 +39,7 @@ public class WorldRealDataTests(ITestOutputHelper output)
             BarrowStreetScenario.Create(demoAutoResponse: true), new WeatherSystem(), new HazardSystem(terrain),
             new InfrastructureSystem(routing), new UnitResponseSystem(routing, live), new MedicalSystem(routing),
             new CivilianSystem(terrain, routing: routing), new AgencyAiSystem(routing), new CommandResponseSystem(),
-            new TrafficSystem(routing, live, feed), new HazardReportingSystem(routing), new CommsSystem(routing: routing),
+            new TrafficSystem(routing, live, feed), new HazardReportingSystem(routing), new CrewSystem(), new CommsSystem(routing: routing),
             new AttentionMonitor(cop, new AttentionOptions(), routing),
         ]);
         await new DemoRosterScenario().SeedAsync(harness.Engine);
@@ -50,12 +50,16 @@ public class WorldRealDataTests(ITestOutputHelper output)
         var perStep = stopwatch.Elapsed.TotalMilliseconds / steps;
         output.WriteLine($"{perStep:F1} ms per 6 s step; terrain loaded: {terrain.IsLoaded}");
         foreach (var c in harness.World.Cascades) output.WriteLine($"{c.At - TestHarness.Start:mm\\:ss} {c.Cause} → {c.Effect}");
+        foreach (var e in (await harness.EventsAsync()).Where(e => e.Payload is CrewConditionReported or MaydayDeclared or MaydayResolved or ParReported
+                                                                   or FirefighterInDistress or StructureCollapsed or CrewWelfareChanged or CrewMemberStoodDown
+                                                                   || e.Payload is ReportReceived report && report.Claim.Contains("Roof")))
+            output.WriteLine($"{e.SimTime - TestHarness.Start:mm\\:ss} {e.Visibility} {e.Payload}");
 
         Assert.True(terrain.IsLoaded);
         Assert.Contains(harness.World.Hazards.Values, h => h.Kind == HazardKind.Fire);
-        // The crew sent its size-up (over the radio it may arrive garbled, or not at all).
-        Assert.Contains(await harness.EventsAsync(), e => e.Payload is CommsLogged { Text: var heard } && heard.Contains("size-up")
-                                                          || e.Payload is TransmissionLost { Text: var lost } && lost.Contains("size-up"));
+        // The crew sent its size-up (over the radio it may arrive garbled, words missing, or not at all).
+        Assert.True(harness.World.Radio.Sent.Values.Any(t => t.Text.Contains("size-up"))
+                    || (await harness.EventsAsync()).Any(e => e.Payload is TransmissionLost { Text: var lost } && lost.Contains("size-up")));
         // The engine ticks every 100 ms of real time; a step must fit comfortably inside that.
         Assert.True(perStep < 50, $"{perStep:F1} ms per step");
     }

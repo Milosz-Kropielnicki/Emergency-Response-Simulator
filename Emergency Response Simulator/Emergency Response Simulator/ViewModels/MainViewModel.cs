@@ -39,6 +39,7 @@ public partial class MainViewModel : ObservableObject
         UnitDetail = new UnitDetailViewModel(routing);
         Command = new CommandViewModel(this, c2, cop);
         CommsHub = new CommsHubViewModel(this, c2, cop);
+        Crews = new CrewsViewModel(this, c2, cop);
         Command.InitialiseDefaults();
         Ics = new IcsViewModel(this, c2);
         Iap = new IapBuilderViewModel(this, iap, cop, simulation);
@@ -78,6 +79,9 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>Radio, the 999 line and agency chat (right panel).</summary>
     public CommsHubViewModel CommsHub { get; }
+
+    /// <summary>Crew welfare and responder safety: Maydays, PARs, rehab, relief (right panel).</summary>
+    public CrewsViewModel Crews { get; }
 
     /// <summary>The selected incident's ICS organisation and span of control.</summary>
     public IcsViewModel Ics { get; }
@@ -514,6 +518,7 @@ public partial class MainViewModel : ObservableObject
         RefreshAlerts();
         RefreshIntelligence();
         CommsHub.Refresh();
+        Crews.Refresh();
         RefreshZones();
         RefreshWeather();
         RefreshHospitals();

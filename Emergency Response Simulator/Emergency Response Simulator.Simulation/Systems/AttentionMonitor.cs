@@ -48,6 +48,132 @@ public sealed class AttentionMonitor(ICopService cop, AttentionOptions options, 
         CheckPlanning(context);
         CheckHospitals(context);
         CheckComms(context);
+        CheckCrews(context);
+    }
+
+    /// <summary>
+    /// Crew welfare and safety (§12), from what command knows: Maydays (with no rescue team, or the channel not
+    /// cleared), PARs that are due, unanswered or show someone missing, crews long on task without rehab, shifts ending,
+    /// crews saying they are exhausted or shaken, orders a crew couldn't carry out, people stood down.
+    /// </summary>
+    private void CheckCrews(SimulationContext context)
+    {
+        var now = context.SimTime;
+        var maydays = cop.Maydays;
+        var channels = cop.Channels;
+        foreach (var mayday in maydays)
+        {
+            var who = mayday.Member is { } member ? $"{member}, {mayday.Callsign}" : mayday.Callsign;
+            Track(context, $"mayday:{mayday.Id}", mayday.Active, AlertCategory.Safety, AlertSeverity.Critical,
+                $"MAYDAY: {who}" + (mayday.Unclear ? " (unclear)" : ""),
+                $"{mayday.Details}. Clear the channel for emergency traffic, send a rescue team and call a PAR.",
+                mayday.IncidentId, mayday.UnitId);
+            Track(context, $"mayday-rescue:{mayday.Id}", mayday.Active && mayday.RescueUnitId is null && now - mayday.DeclaredAt >= options.RescueTeamTimeout,
+                AlertCategory.Safety, AlertSeverity.Critical,
+                $"No rescue team for {who}",
+                $"The Mayday was {(now - mayday.DeclaredAt).TotalSeconds:F0} s ago and nobody has been sent in. Commit a crew at the scene as the rescue team.",
+                mayday.IncidentId, mayday.UnitId);
+            var channel = cop.FindUnit(mayday.UnitId)?.Channel;
+            var cleared = channel is not null && cop.Linked(channel).Any(c => channels.Any(s => s.Info.Id == c && s.EmergencyTraffic));
+            Track(context, $"mayday-traffic:{mayday.Id}", mayday.Active && channel is not null && !cleared && now - mayday.DeclaredAt >= options.EmergencyTrafficTimeout,
+                AlertCategory.Safety, AlertSeverity.Warning,
+                $"{channel} not cleared for the Mayday",
+                $"Routine traffic is still competing with {who} on {channel}. Declare emergency traffic.",
+                mayday.IncidentId, mayday.UnitId);
+            Track(context, $"mayday-par:{mayday.Id}", mayday.Active && !cop.ParChecks.Any(p => p.RequestedAt >= mayday.DeclaredAt)
+                                                            && now - mayday.DeclaredAt >= options.EmergencyTrafficTimeout,
+                AlertCategory.Safety, AlertSeverity.Warning,
+                "PAR needed after the Mayday",
+                "Account for everyone else at the scene: call a PAR.", mayday.IncidentId);
+        }
+
+        var pars = cop.ParChecks;
+        foreach (var par in pars)
+        {
+            Track(context, $"par-late:{par.Id}", !par.Complete && now - par.RequestedAt >= options.ParAnswerTimeout && now - par.RequestedAt < TimeSpan.FromMinutes(15),
+                AlertCategory.Safety, AlertSeverity.Critical,
+                $"PAR incomplete: no answer from {string.Join(", ", par.Outstanding)}",
+                $"{par.Reason} called {(now - par.RequestedAt).TotalMinutes:F0} min ago. Try them on another channel; if they still can't be raised, treat it as a Mayday.",
+                par.IncidentId);
+            foreach (var response in par.Responses.Values.Where(r => r.Missing.Count > 0))
+            {
+                Track(context, $"par-missing:{par.Id}:{response.UnitId}",
+                    !maydays.Any(m => m.UnitId == response.UnitId && m.DeclaredAt >= par.RequestedAt - TimeSpan.FromMinutes(5)),
+                    AlertCategory.Safety, AlertSeverity.Critical,
+                    $"{response.Callsign}: {string.Join(" and ", response.Missing)} missing",
+                    $"PAR {response.Accounted} of {response.Expected}. Declare a Mayday and send a rescue team.",
+                    par.IncidentId, response.UnitId);
+            }
+        }
+
+        foreach (var incident in cop.Incidents.Where(i => i.Status != IncidentStatus.Closed))
+        {
+            var working = incident.AssignedUnits
+                .Where(u => u.Status == UnitStatus.Operating && u.Agency?.AiControlled != true && ResourceGroups.AgencyFor(u.Type) == AgencyType.Fire)
+                .ToList();
+            var since = working.Select(u => u.Crew?.WorkingSince).OfType<DateTimeOffset>().DefaultIfEmpty(now).Min();
+            var lastPar = pars.Where(p => p.IncidentId == incident.Id || p.IncidentId is null).Select(p => (DateTimeOffset?)p.RequestedAt).Max();
+            var due = (lastPar ?? since) + options.ParInterval;
+            Track(context, $"par-due:{incident.Id}:{due.Ticks}", working.Count >= 2 && now >= due,
+                AlertCategory.Safety, AlertSeverity.Warning,
+                $"{incident.Number}: PAR due",
+                lastPar is { } last
+                    ? $"The last PAR was {(now - last).TotalMinutes:F0} min ago. Account for every crew at the scene."
+                    : $"Crews have been working for {(now - since).TotalMinutes:F0} min with no PAR. Account for every crew at the scene.",
+                incident.Id);
+        }
+
+        foreach (var unit in cop.Units.Where(u => u.Crew is not null && u.Agency?.AiControlled != true))
+        {
+            var crew = unit.Crew!;
+            var onTask = crew.OnTask(now);
+            var key = crew.LastRehabEnded?.Ticks ?? crew.RelievedAt?.Ticks ?? 0;
+            Track(context, $"rehab:{unit.Id}:{key}", unit.Status == UnitStatus.Operating && onTask >= options.WorkCycle && crew.RescueFor is null,
+                AlertCategory.Safety, AlertSeverity.Warning,
+                $"{unit.Callsign} due for rehab",
+                $"Working for {onTask.TotalMinutes:F0} min without a break. Rotate the crew through rehab, or relieve it.",
+                unit.AssignedIncidentId, unit.Id);
+
+            var shift = $"{unit.Id}:{crew.ShiftEnd.Ticks}";
+            var relieving = crew.ReliefRequestedAt is { } asked && (crew.RelievedAt is null || crew.RelievedAt < asked);
+            var committed = UnitStatusRules.IsCommitted(unit.Status);
+            Track(context, $"shift-ending:{shift}", committed && !relieving && now >= crew.ShiftEnd - options.ShiftEndWarning && now < crew.ShiftEnd,
+                AlertCategory.Planning, AlertSeverity.Info,
+                $"{unit.Callsign}: shift ends at {crew.ShiftEnd.ToLocalTime():HH:mm}",
+                $"On duty {crew.OnShift(now).TotalHours:F1} h. Arrange a relief crew or plan for overtime.",
+                unit.AssignedIncidentId, unit.Id);
+            Track(context, $"shift-over:{shift}", committed && !relieving && now >= crew.ShiftEnd,
+                AlertCategory.Safety, AlertSeverity.Warning,
+                $"{unit.Callsign} past the end of its shift",
+                $"On duty {crew.OnShift(now).TotalHours:F1} h; tired crews make mistakes. Request a relief crew.",
+                unit.AssignedIncidentId, unit.Id);
+
+            if (crew.ConditionReportedAt is { } reportedAt)
+            {
+                Track(context, $"condition:{unit.Id}:{reportedAt.Ticks}", crew.Condition is CrewCondition.Exhausted or CrewCondition.Shaken,
+                    AlertCategory.Safety, AlertSeverity.Warning,
+                    $"{unit.Callsign}: crew {crew.Condition.ToString().ToLowerInvariant()}",
+                    crew.Condition == CrewCondition.Exhausted
+                        ? $"\"{crew.ConditionNote}\" Send it to rehab or relieve it."
+                        : $"\"{crew.ConditionNote}\" Consider rehab and peer support.",
+                    unit.AssignedIncidentId, unit.Id);
+            }
+            foreach (var member in crew.Members.Where(m => m.Status == MemberStatus.StoodDown))
+            {
+                Track(context, $"stood-down:{member.Id}", true, AlertCategory.ResourceShortage, AlertSeverity.Info,
+                    $"{unit.Callsign}: {member.Name} stood down",
+                    $"Crew now {crew.OnDuty}. {(crew.OnDuty < 3 && ResourceGroups.AgencyFor(unit.Type) == AgencyType.Fire ? "Too few to work in breathing apparatus safely." : "")}".Trim(),
+                    unit.AssignedIncidentId, unit.Id);
+            }
+        }
+
+        foreach (var order in cop.Orders.Where(o => o.Status == OrderStatus.Declined))
+        {
+            Track(context, $"declined:{order.Id}", true, AlertCategory.ResourceShortage, AlertSeverity.Warning,
+                $"{order.TargetName} can't do it",
+                $"\"{order.Text}\": {order.DeclineReason}. Give the task to a qualified crew.",
+                order.IncidentId, order.TargetKind == OrderTargetKind.Unit ? order.TargetId : null);
+        }
     }
 
     /// <summary>
@@ -512,4 +638,17 @@ public sealed class AttentionOptions
     /// <summary>How long a period may run before missing an approved plan is flagged.</summary>
     public TimeSpan PlanApprovalGrace { get; set; } = TimeSpan.FromMinutes(15);
     public TimeSpan BriefingReminder { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>A crew working this long without rehab is due a break (two breathing apparatus cylinders' worth).</summary>
+    public TimeSpan WorkCycle { get; set; } = TimeSpan.FromMinutes(40);
+
+    /// <summary>PARs are expected this often while crews are working at an incident.</summary>
+    public TimeSpan ParInterval { get; set; } = TimeSpan.FromMinutes(20);
+
+    /// <summary>Crews that haven't answered a PAR in this time are a safety alert.</summary>
+    public TimeSpan ParAnswerTimeout { get; set; } = TimeSpan.FromMinutes(2);
+
+    public TimeSpan ShiftEndWarning { get; set; } = TimeSpan.FromMinutes(15);
+    public TimeSpan RescueTeamTimeout { get; set; } = TimeSpan.FromMinutes(1);
+    public TimeSpan EmergencyTrafficTimeout { get; set; } = TimeSpan.FromSeconds(45);
 }

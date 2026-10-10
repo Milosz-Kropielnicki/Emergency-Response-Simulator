@@ -52,7 +52,7 @@ public sealed class HazardSystem(IHazardTerrain? terrain = null) : ISimulationSy
                 DrawDownInventory(context, hazard);
 
             model.Step(new HazardStepInput(context.SimTime, world.Weather, hazard.Rate,
-                hazard.Kind == HazardKind.Fire ? Suppression(world) : null), context.Delta);
+                hazard.Kind == HazardKind.Fire ? Suppression(world, context.SimTime) : null), context.Delta);
 
             switch (model)
             {
@@ -137,11 +137,14 @@ public sealed class HazardSystem(IHazardTerrain? terrain = null) : ISimulationSy
         context.EmitTruth(new HazardRateChanged(hazard.Id, 0, "Store empty: the release has stopped"));
     }
 
-    /// <summary>Fire crews working at a scene, with how much fire each can knock down.</summary>
-    private static List<Suppression> Suppression(WorldState world) =>
+    /// <summary>
+    /// Fire crews working at a scene, with how much fire each can knock down: less for a tired or short-handed crew, one
+    /// working from outside after an evacuation, or one handing over (Phase 8).
+    /// </summary>
+    private static List<Suppression> Suppression(WorldState world, DateTimeOffset now) =>
         world.Units.Values
             .Where(u => u.Phase == ResponsePhase.Operating && !u.BrokenDown)
-            .Select(u => (Unit: u, Rate: SuppressionRate(u.Type)))
+            .Select(u => (Unit: u, Rate: SuppressionRate(u.Type) * CrewFactors.Effectiveness(u, now)))
             .Where(x => x.Rate > 0)
             .Select(x => new Suppression(x.Unit.Location, HoseReachMeters, x.Rate))
             .ToList();

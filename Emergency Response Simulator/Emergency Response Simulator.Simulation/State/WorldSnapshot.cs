@@ -24,8 +24,30 @@ public sealed record WorldSnapshot(
     IReadOnlyList<WorldSnapshot.UnitView> Units,
     IReadOnlyList<WorldSnapshot.ObstructionView> Obstructions,
     IReadOnlyList<CascadeRecord> Cascades,
-    WorldSnapshot.CommsView Comms)
+    WorldSnapshot.CommsView Comms,
+    IReadOnlyList<WorldSnapshot.CrewView> Crews,
+    IReadOnlyList<WorldSnapshot.DistressView> Distress)
 {
+    /// <summary>A crew as it really is (Phase 8): how tired and stressed, who is missing, what it was never told.</summary>
+    /// <param name="Activity">"working inside", "working outside", "in rehab", "rescue team", "handing over" or the phase.</param>
+    public sealed record CrewView(
+        Guid UnitId,
+        string Callsign,
+        double Fatigue,
+        double Stress,
+        int OnDuty,
+        int Rostered,
+        string Activity,
+        DateTimeOffset ShiftEnd,
+        IReadOnlyList<string> Missing,
+        IReadOnlyList<string> ForgottenTasks,
+        bool UnawareOfEvacuation,
+        string Channel);
+
+    /// <summary>A firefighter really in trouble.</summary>
+    public sealed record DistressView(Guid Id, string Callsign, string Member, string Cause, GeoPoint Location, bool Heard,
+        DateTimeOffset AirRunsOutAt, string? RescueCallsign, double RescueProgress);
+
     /// <summary>Communications as they really are: black spots, masts, crews that can't be heard, what went unheard.</summary>
     public sealed record CommsView(
         IReadOnlyList<(GeoPoint Centre, double RadiusMeters, string Description)> BlackSpots,
@@ -68,7 +90,7 @@ public sealed record WorldSnapshot(
 
     public sealed record ObstructionView(Geometry Area, string Description);
 
-    public static readonly WorldSnapshot Empty = new(default, new WorldWeather(0, 0, 0, 0), [], [], [], [], [], [], [], [], [], [], CommsView.Empty);
+    public static readonly WorldSnapshot Empty = new(default, new WorldWeather(0, 0, 0, 0), [], [], [], [], [], [], [], [], [], [], CommsView.Empty, [], []);
 
     public static WorldSnapshot Capture(WorldState world, DateTimeOffset at) => new(
         at,
@@ -88,7 +110,26 @@ public sealed record WorldSnapshot(
         world.Units.Values.Select(u => new UnitView(u.Id, u.Callsign, u.Type, u.Location, u.Phase, u.RadioFailed, u.BrokenDown)).ToList(),
         world.Obstructions.Values.Select(o => new ObstructionView(o.Line, o.Description)).ToList(),
         world.Cascades.ToList(),
-        CaptureComms(world));
+        CaptureComms(world),
+        world.Units.Values.Where(u => u.Crew.Rostered).Select(u => new CrewView(
+            u.Id, u.Callsign, u.Crew.Fatigue, u.Crew.Stress, u.Crew.OnDuty, u.Crew.Members.Count, Activity(u, at), u.Crew.ShiftEnd,
+            u.Crew.Members.Where(m => m.State is ResponderState.Trapped or ResponderState.Lost).Select(m => m.Title).ToList(),
+            u.Crew.ForgottenTasks.ToList(), u.Crew.UnawareOfEvacuation, u.Channel)).ToList(),
+        world.Distress.Values.Where(d => !d.Ended).Select(d => new DistressView(
+            d.Id, world.Units.GetValueOrDefault(d.UnitId)?.Callsign ?? "?",
+            world.Units.GetValueOrDefault(d.UnitId)?.Crew.Members.FirstOrDefault(m => m.Id == d.MemberId)?.Title ?? "?",
+            d.Cause, d.Location, d.Heard, d.AirRunsOutAt,
+            d.RescueUnitId is { } rescuer ? world.Units.GetValueOrDefault(rescuer)?.Callsign : null, d.RescueProgress)).ToList());
+
+    private static string Activity(WorldUnit unit, DateTimeOffset at) => unit switch
+    {
+        { Crew.Rescuing: not null } => "rescue team",
+        { Crew.HandoverUntil: { } until } when at < until => "handing over",
+        { Phase: ResponsePhase.Rehab } => "in rehab",
+        { Phase: ResponsePhase.Operating } when CrewFactors.IsFireCrew(unit.Type) => unit.Crew.Withdrawn ? "working outside" : "working inside",
+        { Phase: ResponsePhase.Operating } => "working",
+        _ => unit.Phase.ToString().ToLowerInvariant(),
+    };
 
     private static CommsView CaptureComms(WorldState world)
     {

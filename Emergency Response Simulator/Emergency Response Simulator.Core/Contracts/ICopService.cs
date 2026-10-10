@@ -45,6 +45,16 @@ public interface ICopService
     IReadOnlyList<ChannelPatch> Patches { get; }
     IReadOnlyList<MissedCall> MissedCalls { get; }
 
+    // Crews and safety (Design Document §12)
+
+    /// <summary>The crews on every unit, as rostered and as they have reported themselves.</summary>
+    IReadOnlyList<Crew> Crews { get; }
+
+    /// <summary>Personnel Accountability Reports called, oldest first.</summary>
+    IReadOnlyList<ParCheck> ParChecks { get; }
+
+    IReadOnlyList<Mayday> Maydays { get; }
+
     // Command and control (Design Document §9)
     IReadOnlyList<Order> Orders { get; }
     IReadOnlyList<ResourceRequest> ResourceRequests { get; }

@@ -69,7 +69,9 @@ public sealed class CommandResponseSystem : ISimulationSystem
 
             var span = SupervisingSpan(world, order);
             var baseDelay = order.TargetKind == OrderTargetKind.Unit ? UnitReadBackDelay : SupervisorReadBackDelay;
-            var due = (pending.HeardAt ?? pending.IssuedAt) + baseDelay * (span?.DelayFactor ?? 1);
+            var target = order.TargetKind == OrderTargetKind.Unit && order.TargetId is { } targetId ? world.Units.GetValueOrDefault(targetId) : null;
+            // A tired crew takes longer to answer (Phase 8).
+            var due = (pending.HeardAt ?? pending.IssuedAt) + baseDelay * (span?.DelayFactor ?? 1) * (target is null ? 1 : CrewFactors.SlowFactor(target));
             if (context.SimTime < due) continue;
 
             // A unit with a dead radio can't answer; keep trying until we give up.
@@ -87,8 +89,21 @@ public sealed class CommandResponseSystem : ISimulationSystem
             if (roll < loss)
                 continue; // lost in the noise of an overloaded supervisor: nobody reads it back
 
-            // The next band of bad luck: heard, but not properly. Or it was heard badly over the radio.
-            var garbled = roll < loss * 2 || pending.HeardGarbled;
+            // Not every crew can do every task (Phase 8): one without the people qualified for it says so.
+            if (target is { Crew.Rostered: true } && Qualifications.RequiredFor(order.Text) is { } needed
+                && target.Crew.Holding(needed.Qualification) < needed.Members)
+            {
+                var have = target.Crew.Holding(needed.Qualification);
+                var reason = $"unable, {(have == 0 ? "we've nobody" : $"we've only {have}")} {Qualifications.Name(needed.Qualification).ToLowerInvariant()} " +
+                             $"qualified on board; \"{needed.Task}\" needs {needed.Members}";
+                CommsNet.Voice(context, target, $"Control, {target.Callsign}: {reason}.", new OrderDeclined(order.OrderId, reason), priority: 4);
+                continue;
+            }
+
+            // The next band of bad luck: heard, but not properly. Or it was heard badly over the radio, or by a tired crew.
+            var garbled = roll < loss * 2 || pending.HeardGarbled || (target is not null && Roll(order.OrderId, 2) < CrewFactors.ErrorRate(target));
+            if (target is not null && !garbled)
+                target.Crew.Tasks.Add(order.Text);
             var speaker = order.TargetName;
             var readBack = garbled
                 ? $"{speaker}: copy… {string.Join(' ', order.Text.Split(' ').Take(3))}… say again, you're breaking up"
@@ -292,4 +307,6 @@ public sealed class CommandResponseSystem : ISimulationSystem
 
     /// <summary>A stable pseudo-random number in [0, 1) for an id.</summary>
     public static double Roll(Guid id) => (uint)id.GetHashCode() / (double)uint.MaxValue;
+
+    private static double Roll(Guid id, int salt) => Hazards.SimRandom.For(id, salt).NextDouble();
 }

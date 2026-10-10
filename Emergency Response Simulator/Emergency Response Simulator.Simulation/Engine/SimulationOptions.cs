@@ -41,4 +41,10 @@ public sealed class SimulationOptions
     /// queue. Off, every message reaches command at once and intact.
     /// </summary>
     public bool CommsRealism { get; set; } = true;
+
+    /// <summary>
+    /// Simulate crews as people (Phase 8): fatigue, stress, shifts, rehab and relief, PARs, Maydays and collapses,
+    /// qualifications. Off, crews never tire and nothing happens to them.
+    /// </summary>
+    public bool HumanFactors { get; set; } = true;
 }

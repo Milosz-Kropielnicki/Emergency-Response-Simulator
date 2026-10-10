@@ -48,7 +48,7 @@ public sealed partial class TimelineViewModel : ObservableObject
 
     public IReadOnlyList<string> Filters { get; } =
         ["All", "Calls & reports", "Incidents & command", "Orders, requests & approvals", "Action plans", "Units", "Alerts", "Zones & weather",
-         "World & cascades"];
+         "Crews & safety", "World & cascades"];
 
     [ObservableProperty] private string _selectedFilter = "All";
     [ObservableProperty] private bool _importantOnly;
@@ -158,6 +158,7 @@ public sealed partial class TimelineViewModel : ObservableObject
             "Orders, requests & approvals" => row.Category is "ORDER" or "RESOURCE REQUEST" or "APPROVAL" or "NOTIFICATION",
             "Action plans" => row.Category is "IAP" or "⚠ PLANNING",
             "Units" => row.Category.StartsWith("UNIT"),
+            "Crews & safety" => row.Category is "CREW" or "SAFETY" or "MAYDAY" or "⚠ SAFETY",
             "Alerts" => row.Category.StartsWith('⚠') || row.Category == "ALERT",
             "Zones & weather" => row.Category is "ZONE" or "WEATHER",
             "World & cascades" => row.Category is "TRUTH" or "CASCADE" or "HOSPITAL" or "AGENCY",

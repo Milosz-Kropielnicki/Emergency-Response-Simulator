@@ -503,7 +503,8 @@ public class WorldSimulationTests
         typeof(HazardFootprintChanged), typeof(HazardRateChanged), typeof(HazardEnded), typeof(HazardSitePlaced),
         typeof(CasualtyInjured), typeof(CasualtyChanged), typeof(HospitalCapacityChanged), typeof(PowerOutageStarted),
         typeof(PowerRestored), typeof(CascadeOccurred), typeof(TransmissionLost), typeof(RadioDeadZonePlaced), typeof(CellTowerFailed),
-        typeof(CellTowerRestored), typeof(RadioBatteryChanged),
+        typeof(CellTowerRestored), typeof(RadioBatteryChanged), typeof(CrewWelfareChanged), typeof(FirefighterInDistress), typeof(DistressEnded),
+        typeof(StructureCollapsed), typeof(HandoverInformationLost),
     ];
 
     [Fact]
@@ -514,7 +515,7 @@ public class WorldSimulationTests
         [
             BarrowStreetScenario.Create(), new WeatherSystem(), new HazardSystem(terrain), new InfrastructureSystem(),
             new UnitResponseSystem(), new MedicalSystem(), new CivilianSystem(terrain), new AgencyAiSystem(),
-            new CommandResponseSystem(), new HazardReportingSystem(), new CommsSystem(), new AttentionMonitor(cop, new AttentionOptions()),
+            new CommandResponseSystem(), new HazardReportingSystem(), new CrewSystem(), new CommsSystem(), new AttentionMonitor(cop, new AttentionOptions()),
         ]);
         await new DemoRosterScenario().SeedAsync(harness.Engine);
 

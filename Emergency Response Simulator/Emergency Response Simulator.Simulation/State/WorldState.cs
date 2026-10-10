@@ -79,6 +79,20 @@ public sealed class WorldState
     /// <summary>Every order issued, by id, so a wrong read-back can send it again.</summary>
     public Dictionary<Guid, OrderIssued> Orders { get; } = [];
 
+    // ---- Phase 8: crews and safety (Design Document §12) ----
+
+    /// <summary>Firefighters really in trouble, by id (the id of the first Mayday about them, if one is heard).</summary>
+    public Dictionary<Guid, WorldDistress> Distress { get; } = [];
+
+    /// <summary>Which unit each Mayday command knows of is about.</summary>
+    public Dictionary<Guid, Guid> MaydayUnits { get; } = [];
+
+    public Dictionary<Guid, WorldPar> Pars { get; } = [];
+    public Dictionary<Guid, ReliefState> Reliefs { get; } = [];
+
+    /// <summary>Incidents where an evacuation signal has sent operations defensive: crews arriving work from outside.</summary>
+    public HashSet<Guid> DefensiveIncidents { get; } = [];
+
     // Things waiting for someone in the world to respond (see CommandResponseSystem).
     public List<PendingOrder> PendingOrders { get; } = [];
     public List<PendingRequest> PendingRequests { get; } = [];
@@ -126,7 +140,7 @@ public sealed class WorldState
                 Units[e.UnitId] = new WorldUnit
                 {
                     Id = e.UnitId, Callsign = e.Callsign, Type = e.Type, Location = e.Location, Home = e.Location,
-                    AgencyId = e.AgencyId,
+                    AgencyId = e.AgencyId, CrewSize = e.CrewSize, Capabilities = e.Capabilities,
                     Channel = RadioPlan.DefaultChannel(e.Type, e.AgencyId is { } agency ? Agencies.GetValueOrDefault(agency)?.RadioChannel : null),
                 };
                 break;
@@ -187,6 +201,99 @@ public sealed class WorldState
             case CellTowerRestored e when Radio.Masts.TryGetValue(e.SiteId, out var restored):
                 restored.Down = false;
                 restored.OnBatterySince = null;
+                break;
+
+            // ---- Crews (Phase 8) ----
+
+            case CrewRostered e when Units.TryGetValue(e.UnitId, out var rostered):
+                rostered.Crew.Roster(e.Members, simEvent.SimTime - e.OnShiftFor, e.ShiftLength, simEvent.SimTime);
+                break;
+
+            case CrewRelieved e when Units.TryGetValue(e.UnitId, out var relieved):
+                // CrewSystem puts the new crew on the unit as it hands over; a scripted change arrives here first.
+                if (relieved.Crew.Members.FirstOrDefault()?.Id != e.Members.FirstOrDefault()?.MemberId)
+                    relieved.Crew.Roster(e.Members, simEvent.SimTime, e.ShiftLength, simEvent.SimTime);
+                relieved.Crew.RehabSince = null;
+                relieved.Crew.WorkingSince = relieved.Phase == ResponsePhase.Operating ? simEvent.SimTime : null;
+                Reliefs.Remove(e.ReliefId);
+                break;
+
+            case CrewRehabOrdered e when Units.TryGetValue(e.UnitId, out var resting):
+                resting.Crew.RehabSince = simEvent.SimTime;
+                if (resting.Phase is ResponsePhase.OnScene or ResponsePhase.Operating)
+                {
+                    resting.Phase = ResponsePhase.Rehab;
+                    resting.PhaseStartedAt = simEvent.SimTime;
+                }
+                break;
+
+            case CrewReliefRequested e:
+                Reliefs[e.ReliefId] = new ReliefState { Id = e.ReliefId, UnitId = e.UnitId, Briefing = e.FullBriefing, RequestedAt = simEvent.SimTime };
+                break;
+
+            case PeerSupportArranged e when Units.TryGetValue(e.UnitId, out var supported):
+                supported.Crew.PeerSupportArrangedAt ??= simEvent.SimTime;
+                break;
+
+            case ParRequested e:
+                StartPar(e.ParId, e.IncidentId, evacuation: false, simEvent.SimTime,
+                    $"Control: PAR, PAR, PAR. All crews{At(e.IncidentId)}, report personnel accountability.");
+                break;
+
+            case EvacuationSignalled e:
+                DefensiveIncidents.Add(e.IncidentId);
+                StartPar(e.SignalId, e.IncidentId, evacuation: true, simEvent.SimTime,
+                    $"Control: EVACUATE, EVACUATE, EVACUATE. All crews{At(e.IncidentId)}, withdraw from the building now. PAR when you are out.");
+                break;
+
+            case EmergencyTrafficDeclared e:
+                if (e.Active) Radio.EmergencyTraffic.Add(e.ChannelId);
+                else Radio.EmergencyTraffic.Remove(e.ChannelId);
+                if (Radio.Active)
+                {
+                    Radio.Outbox.Add(new Transmission
+                    {
+                        Channel = e.ChannelId, From = "Control", Text = e.Active
+                            ? $"All units on {e.ChannelId}, Control: emergency traffic, emergency traffic. Priority traffic only until further notice."
+                            : $"All units on {e.ChannelId}, Control: emergency traffic over. Resume normal traffic.",
+                        FromControl = true, Priority = 9, QueuedAt = simEvent.SimTime, NotBefore = simEvent.SimTime,
+                    });
+                }
+                break;
+
+            case MaydayDeclared e:
+                MaydayUnits[e.MaydayId] = e.UnitId;
+                var distress = Distress.GetValueOrDefault(e.MaydayId)
+                               ?? Distress.Values.Where(d => d.UnitId == e.UnitId && !d.Ended).OrderBy(d => d.StartedAt).FirstOrDefault();
+                if (distress is not null)
+                {
+                    distress.Heard = true;
+                    distress.MaydayIds.Add(e.MaydayId);
+                }
+                break;
+
+            case RescueTeamDeployed e when MaydayUnits.TryGetValue(e.MaydayId, out var inTrouble):
+                // The rescue team goes for everyone from that crew who is in trouble and has nobody coming yet.
+                foreach (var rescue in Distress.Values.Where(d => d.UnitId == inTrouble && !d.Ended && d.RescueUnitId is null))
+                {
+                    rescue.RescueUnitId = e.UnitId;
+                    if (Units.TryGetValue(e.UnitId, out var rescuers))
+                        rescuers.Crew.Rescuing = rescue.Id;
+                }
+                break;
+
+            case FirefighterInDistress e when Units.TryGetValue(e.UnitId, out var caught):
+                // Usually CrewSystem has already set this up; a scripted inject arrives here first.
+                if (!Distress.ContainsKey(e.DistressId) && caught.Crew.Members.FirstOrDefault(m => m.Id == e.MemberId) is { } member)
+                {
+                    var trapped = !e.Cause.Contains("lost", StringComparison.OrdinalIgnoreCase);
+                    member.State = trapped ? ResponderState.Trapped : ResponderState.Lost;
+                    Distress[e.DistressId] = new WorldDistress
+                    {
+                        Id = e.DistressId, UnitId = e.UnitId, MemberId = e.MemberId, Cause = e.Cause, Location = e.Location,
+                        Trapped = trapped, StartedAt = simEvent.SimTime, AirRunsOutAt = simEvent.SimTime + TimeSpan.FromMinutes(e.AirMinutes),
+                    };
+                }
                 break;
 
             case UnitTasked e when Units.TryGetValue(e.UnitId, out var tasked):
@@ -379,6 +486,37 @@ public sealed class WorldState
         }
     }
 
+    private string At(Guid? incidentId) =>
+        incidentId is { } id && Commands.ContainsKey(id) ? " at the incident" : "";
+
+    /// <summary>
+    /// A PAR or evacuation signal: every crew at the scene should answer. It goes out on each channel they work on;
+    /// without simulated comms everyone hears it at once.
+    /// </summary>
+    private void StartPar(Guid parId, Guid? incidentId, bool evacuation, DateTimeOffset at, string text)
+    {
+        var par = new WorldPar { Id = parId, IncidentId = incidentId, RequestedAt = at, Evacuation = evacuation };
+        foreach (var unit in Units.Values.Where(u => u.Phase is ResponsePhase.OnScene or ResponsePhase.Operating or ResponsePhase.Rehab
+                                                     && u.OrderedIncidentId is { } ordered && !AgencyTasks.ContainsKey(ordered)
+                                                     && (incidentId is null || ordered == incidentId)
+                                                     && !(u.AgencyId is { } agency && Agencies.GetValueOrDefault(agency)?.AiControlled == true)))
+        {
+            par.Involved.Add(unit.Id);
+            if (!Radio.Active) par.HeardBy[unit.Id] = at;
+        }
+        Pars[parId] = par;
+        if (!Radio.Active) return;
+
+        foreach (var channel in par.Involved.Select(id => Units[id].Channel).Distinct())
+        {
+            Radio.Outbox.Add(new Transmission
+            {
+                Channel = channel, From = "Control", Text = text, FromControl = true, ParId = parId,
+                Priority = evacuation ? 10 : 7, QueuedAt = at, NotBefore = at,
+            });
+        }
+    }
+
     /// <summary>Puts an order on the air: the unit's channel, or the fire command channel for supervisors and staff.</summary>
     private void SendOrder(OrderIssued order, DateTimeOffset at)
     {
@@ -423,6 +561,10 @@ public sealed class WorldUnit
 
     public Guid? AgencyId { get; init; }
 
+    /// <summary>Seats on the appliance and its equipment, from the roster (for making up its crew).</summary>
+    public int CrewSize { get; init; }
+    public IReadOnlyList<string> Capabilities { get; init; } = [];
+
     /// <summary>The radio channel the crew works on.</summary>
     public string Channel { get; set; } = RadioPlan.FireCommand;
 
@@ -451,6 +593,9 @@ public sealed class WorldUnit
 
     /// <summary>The unit keeps working, but nothing it says reaches command.</summary>
     public bool RadioFailed { get; set; }
+
+    /// <summary>The people riding it, as they really are (Phase 8). Empty when no crew model is running.</summary>
+    public WorldCrew Crew { get; } = new();
 
     public ResponsePhase Phase { get; set; }
     public DateTimeOffset PhaseStartedAt { get; set; }
@@ -492,6 +637,9 @@ public enum ResponsePhase
 
     /// <summary>Ambulance handing patients over at the hospital.</summary>
     AtHospital,
+
+    /// <summary>At the scene but resting in the rehab area (CrewSystem): not working.</summary>
+    Rehab,
 }
 
 /// <summary>A job an AI-run agency gave one of its units (AgencyAiSystem).</summary>

@@ -32,6 +32,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(civilians);
         var comms = configuration.GetSection(CommsOptions.SectionName).Get<CommsOptions>() ?? new CommsOptions();
         services.AddSingleton(comms);
+        var crews = configuration.GetSection(CrewOptions.SectionName).Get<CrewOptions>() ?? new CrewOptions();
+        services.AddSingleton(crews);
 
         services.AddSingleton(new SimulationSession(Guid.NewGuid()));
         services.AddSingleton<WorldState>();
@@ -82,6 +84,8 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<LiveTraffic>(), sp.GetRequiredService<TrafficFeed>()));
             services.AddSingleton<ISimulationSystem>(sp => new HazardReportingSystem(sp.GetRequiredService<IRoutingService>()));
         }
+        if (configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.HumanFactors)}", true))
+            services.AddSingleton<ISimulationSystem>(sp => new CrewSystem(sp.GetRequiredService<CrewOptions>()));
         if (configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.CommsRealism)}", true))
             services.AddSingleton<ISimulationSystem>(sp => new CommsSystem(sp.GetRequiredService<CommsOptions>(), sp.GetRequiredService<IRoutingService>()));
         services.AddSingleton<ISimulationSystem>(sp => new AttentionMonitor(

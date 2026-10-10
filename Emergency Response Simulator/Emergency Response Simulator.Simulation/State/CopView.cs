@@ -64,6 +64,9 @@ public sealed class CopView : ICopService
     public IReadOnlyList<ChannelState> Channels => _current.Channels;
     public IReadOnlyList<ChannelPatch> Patches => _current.Patches;
     public IReadOnlyList<MissedCall> MissedCalls => _current.MissedCalls;
+    public IReadOnlyList<Crew> Crews => _current.Crews;
+    public IReadOnlyList<ParCheck> ParChecks => _current.ParChecks;
+    public IReadOnlyList<Mayday> Maydays => _current.Maydays;
     public IReadOnlyList<Order> Orders => _current.Orders;
     public IReadOnlyList<ResourceRequest> ResourceRequests => _current.ResourceRequests;
     public IReadOnlyList<ApprovalRequest> Approvals => _current.Approvals;

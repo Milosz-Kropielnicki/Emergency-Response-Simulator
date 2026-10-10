@@ -1,14 +1,15 @@
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.Simulation.Crews;
 using Emergency_Response_Simulator.Simulation.Engine;
 
 namespace Emergency_Response_Simulator.Simulation.Scenarios;
 
 /// <summary>
 /// A small fictional roster around Dublin so the shell has resources to show, the receiving hospitals
-/// (real names, illustrative capacities), and neighbouring agencies run by the simulation, whose units
-/// command can see but not dispatch. No incidents: those come from scenarios.
+/// (real names, illustrative capacities), neighbouring agencies run by the simulation, whose units
+/// command can see but not dispatch, and the crew riding every unit. No incidents: those come from scenarios.
 /// </summary>
 public sealed class DemoRosterScenario : IScenario
 {
@@ -30,7 +31,7 @@ public sealed class DemoRosterScenario : IScenario
 
         await AddUnit("Engine 4", UnitType.Engine, fire, station3, "Station 3", 5, "Structural", "BreathingApparatus");
         await AddUnit("Engine 7", UnitType.Engine, fire, station8, "Station 8", 5, "Structural", "BreathingApparatus");
-        await AddUnit("Engine 12", UnitType.Engine, fire, station3, "Station 3", 5, "Structural", "BreathingApparatus");
+        await AddUnit("Engine 12", UnitType.Engine, fire, station3, "Station 3", 5, "Structural", "BreathingApparatus", Qualifications.Swiftwater);
         await AddUnit("Engine 14", UnitType.Engine, fire, station8, "Station 8", 4, "Structural", "BreathingApparatus");
         await AddUnit("Ladder 3", UnitType.Ladder, fire, station8, "Station 8", 4, "AerialLadder", "Rescue");
         await AddUnit("Hazmat 2", UnitType.Hazmat, fire, station3, "Station 3", 6, "Hazmat", "Decontamination");
@@ -76,7 +77,31 @@ public sealed class DemoRosterScenario : IScenario
         Task Register(DomainEvent payload) =>
             publisher.PublishAsync(payload, EventVisibility.Perceived, EventSources.Scenario, cancellationToken);
 
-        Task AddUnit(string callsign, UnitType type, Guid agency, GeoPoint at, string station, int crew, params string[] capabilities) =>
-            Register(new UnitRegistered(Guid.NewGuid(), callsign, type, agency, at, station, crew, capabilities));
+        // Every unit gets its crew (Phase 8): named people, their qualifications and how far into their shift they are.
+        async Task AddUnit(string callsign, UnitType type, Guid agency, GeoPoint at, string station, int crew, params string[] capabilities)
+        {
+            var id = Guid.NewGuid();
+            await Register(new UnitRegistered(id, callsign, type, agency, at, station, crew, capabilities));
+            var (onShift, lapsed) = Shifts.TryGetValue(callsign, out var set)
+                ? (TimeSpan.FromHours(set.OnShiftHours), set.Lapsed)
+                : (CrewRoster.DefaultOnShift(callsign, type), []);
+            await Register(new CrewRostered(id, CrewRoster.Generate(callsign, type, crew, capabilities, lapsed), onShift, CrewRoster.ShiftLength(type)));
+        }
     }
+
+    /// <summary>
+    /// Crews whose place in their shift matters to the exercise, and certificates that have lapsed: Engine 4's day watch
+    /// is nearly over, Engine 7 is close to the end of a long shift, Ambulance 14 is in the last hour of its twelve,
+    /// Ambulance 21's paramedic registration has lapsed (so it works at basic life support), and one of Hazmat 2's
+    /// technicians is out of date. Everyone else is somewhere in the middle of their shift.
+    /// </summary>
+    private static readonly Dictionary<string, (double OnShiftHours, string[] Lapsed)> Shifts = new()
+    {
+        ["Engine 4"] = (9.4, []),
+        ["Engine 7"] = (9.75, []),
+        ["Engine 12"] = (2, []),
+        ["Ambulance 14"] = (11.25, []),
+        ["Ambulance 21"] = (4, [Qualifications.Als]),
+        ["Hazmat 2"] = (5, [Qualifications.Hazmat]),
+    };
 }

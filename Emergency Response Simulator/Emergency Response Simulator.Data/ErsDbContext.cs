@@ -79,6 +79,7 @@ public class ErsDbContext(DbContextOptions<ErsDbContext> options) : DbContext(op
             b.Ignore(u => u.RouteDistanceMeters);
             b.Ignore(u => u.Tasking);
             b.Ignore(u => u.Channel);
+            b.Ignore(u => u.Crew);
             b.HasOne(u => u.AssignedIncident).WithMany(i => i.AssignedUnits)
                 .HasForeignKey(u => u.AssignedIncidentId).OnDelete(DeleteBehavior.SetNull);
         });

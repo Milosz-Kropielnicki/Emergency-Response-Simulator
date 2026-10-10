@@ -96,6 +96,9 @@ public sealed class CommsSystem(CommsOptions? options = null, IRoutingService? r
             used.RemoveAll(a => context.SimTime - a.Start > TimeSpan.FromMinutes(5));
     }
 
+    /// <summary>Traffic at or above this priority (Maydays, evacuation PARs, rescue reports) goes out under emergency traffic.</summary>
+    public const int EmergencyPriority = 8;
+
     private static double Roll(Guid id, int salt = 0) => SimRandom.For(id, salt).NextDouble();
 
     private static bool Monitored(WorldState world, string channel) =>
@@ -112,6 +115,15 @@ public sealed class CommsSystem(CommsOptions? options = null, IRoutingService? r
         {
             var freeAt = radio.FreeAt.GetValueOrDefault(group.Key, DateTimeOffset.MinValue);
             var waiting = group.ToList();
+
+            // Emergency traffic: routine traffic holds (and doesn't give up) until the channel is released.
+            if (radio.UnderEmergencyTraffic(group.Key))
+            {
+                foreach (var held in waiting.Where(t => !t.FromControl && t.Priority < EmergencyPriority))
+                    held.QueuedAt = now;
+                waiting.RemoveAll(t => !t.FromControl && t.Priority < EmergencyPriority);
+            }
+
             while (true)
             {
                 var next = waiting.Where(t => t.NotBefore <= now).OrderByDescending(t => t.Priority).ThenBy(t => t.QueuedAt).FirstOrDefault();
@@ -208,7 +220,12 @@ public sealed class CommsSystem(CommsOptions? options = null, IRoutingService? r
         }
 
         var garble = _options.BackgroundGarble + (world.Radio.Utilisation(transmission.Channel, context.SimTime) > 0.75 ? 0.12 : 0)
-                     + (reach == Reach.Weak ? CommsNet.WeakBatteryGarble(unit!) : 0) + (RadioPlan.Words(transmission.Text) > RadioDiscipline.MaxWords ? 0.05 : 0);
+                     + (reach == Reach.Weak ? CommsNet.WeakBatteryGarble(unit!) : 0) + (RadioPlan.Words(transmission.Text) > RadioDiscipline.MaxWords ? 0.05 : 0)
+                     // Tired, stressed crews make worse transmissions (Phase 8).
+                     + (unit is null ? 0 : CrewFactors.ErrorRate(unit))
+                     // A Mayday on a busy channel nobody has cleared gets stepped on.
+                     + (transmission.Priority >= EmergencyPriority && !world.Radio.UnderEmergencyTraffic(transmission.Channel)
+                        && world.Radio.Utilisation(transmission.Channel, context.SimTime) > 0.3 ? 0.25 : 0);
         var quality = reach == Reach.BlackSpot ? CommsQuality.Garbled
             : roll < garble ? CommsQuality.Garbled
             : Roll(transmission.Id, transmission.Attempts + 100) < _options.BackgroundBroken ? CommsQuality.Broken
@@ -228,8 +245,13 @@ public sealed class CommsSystem(CommsOptions? options = null, IRoutingService? r
                 OrderAcknowledged ack => ack with { ReadBack = heard, Garbled = true },
                 var other => other,
             },
-            // Garbled: command knows the crew answered, but not what they said.
-            _ => transmission.Payload is OrderAcknowledged ack ? ack with { ReadBack = heard, Garbled = true } : null,
+            // Garbled: command knows the crew answered, but not what they said. Nobody mistakes a garbled Mayday for anything else.
+            _ => transmission.Payload switch
+            {
+                OrderAcknowledged ack => ack with { ReadBack = heard, Garbled = true },
+                MaydayDeclared mayday => mayday with { Details = heard, Member = null, Unclear = true },
+                _ => null,
+            },
         };
         if (payload is not null)
             context.EmitPerceived(payload, EventSources.Comms);
@@ -294,9 +316,26 @@ public sealed class CommsSystem(CommsOptions? options = null, IRoutingService? r
 
         if (transmission.OrderId is { } orderId)
             OrderHeard(context, transmission, orderId, quality);
+        else if (transmission.ParId is { } parId)
+            ParHeard(context, transmission, parId);
         else
             AnswerCall(context, transmission, said, quality, clipped);
         return duration;
+    }
+
+    /// <summary>Crews at the scene on this channel who can hear it answer the PAR (or withdraw on an evacuation signal).</summary>
+    private static void ParHeard(SimulationContext context, Transmission transmission, Guid parId)
+    {
+        var world = context.World;
+        if (!world.Pars.TryGetValue(parId, out var par)) return;
+        var linked = world.Radio.Linked(transmission.Channel);
+        foreach (var unitId in par.Involved.Where(id => !par.HeardBy.ContainsKey(id)))
+        {
+            if (!world.Units.TryGetValue(unitId, out var unit) || !linked.Contains(unit.Channel)) continue;
+            var reach = CommsNet.ReachOf(world, unit);
+            if (reach == Reach.None || (reach == Reach.BlackSpot && Roll(transmission.Id, unitId.GetHashCode()) < 0.7)) continue;
+            par.HeardBy[unitId] = context.SimTime;
+        }
     }
 
     /// <summary>Whether, and how well, the recipient heard an order (the read-back follows from then).</summary>
@@ -382,8 +421,13 @@ public sealed class CommsSystem(CommsOptions? options = null, IRoutingService? r
             ResponsePhase.OnScene => $"on scene{where}, sizing up",
             ResponsePhase.Operating => $"working at the scene{where}",
             ResponsePhase.Transporting => $"transporting to hospital{where}",
+            ResponsePhase.Rehab => $"in rehab{where}",
             _ => $"at the hospital, handing over",
-        } + (unit.BrokenDown ? ", vehicle broken down" : "");
+        } + (unit.BrokenDown ? ", vehicle broken down" : "")
+          + (unit.Crew.Rescuing is not null ? ", committed as the rescue team" : "")
+          + (unit.Crew.Withdrawn && unit.Phase == ResponsePhase.Operating ? ", working from outside" : "")
+          // A relief crew that was never told what it is meant to be doing says so when asked (Phase 8).
+          + (unit.Crew.ForgottenTasks.Count > 0 ? ". Relief crew here: no tasking was handed over to us, say again our assignment" : "");
     }
 
     /// <summary>What a broken or garbled message sounds like: words dropped, the rest fragments.</summary>

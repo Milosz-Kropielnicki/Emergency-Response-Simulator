@@ -17,6 +17,9 @@ namespace Emergency_Response_Simulator.Simulation.Scenarios;
 /// feeds the area (power, traffic signals and hospital capacity follow).
 /// Communications (Phase 7): a radio black spot under the railway bridge, a mobile mast that runs on batteries
 /// once the substation fails, a caller with little English, and a fire crew whose handheld batteries run low.
+/// Crews (Phase 8, from the crew model rather than scripted): the warehouse comes down some 20–28 minutes in unless the
+/// fire is out. The crew nearest it warns twice first, the test being whether the trainee sounds the evacuation signal.
+/// Anyone still inside is caught and calls a Mayday. Engine 4's watch ends about 35 minutes in.
 /// </summary>
 public static class BarrowStreetScenario
 {

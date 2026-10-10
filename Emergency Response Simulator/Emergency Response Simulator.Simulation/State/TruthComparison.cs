@@ -159,6 +159,43 @@ public static class TruthComparison
                 heard ? "Reported" : "Not known to command", mast.Down && !heard ? DivergenceSeverity.Unknown : DivergenceSeverity.Lagging));
         }
 
+        // Crews: people in trouble command hasn't heard about, real tiredness against what crews admit, what handovers lost.
+        foreach (var distress in truth.Distress)
+        {
+            var known = cop.Maydays.Any(m => m.Active && m.Callsign == distress.Callsign);
+            var air = (distress.AirRunsOutAt - truth.At).TotalMinutes;
+            lines.Add(new Divergence($"{distress.Member} ({distress.Callsign})",
+                $"{Capitalise(distress.Cause)}; {(air > 0 ? $"{air:F0} min of air left" : "out of air")}" +
+                (distress.RescueCallsign is { } rescuer ? $"; {rescuer} {distress.RescueProgress:P0} of the way to them" : "; nobody coming"),
+                known ? "Mayday known" : "No Mayday heard", known ? DivergenceSeverity.Lagging : DivergenceSeverity.Unknown));
+        }
+        foreach (var crew in truth.Crews)
+        {
+            if (cop.FindUnit(crew.UnitId) is not { Crew: { } seen } unit || unit.Agency?.AiControlled == true) continue;
+            var band = CrewFactors.Band(crew.Fatigue);
+            var told = seen.Condition switch
+            {
+                CrewCondition.Exhausted => "exhausted",
+                CrewCondition.Tired => "tired",
+                _ => "fresh",
+            };
+            if (band != "fresh" && band != told)
+            {
+                lines.Add(new Divergence($"{crew.Callsign} crew", $"Really {band} (fatigue {crew.Fatigue:P0}, stress {crew.Stress:P0}), {crew.Activity}",
+                    seen.ConditionReportedAt is null ? "Hasn't said" : $"Last said: \"{seen.ConditionNote}\"",
+                    band == "exhausted" ? DivergenceSeverity.Unknown : DivergenceSeverity.Lagging));
+            }
+            if (crew.ForgottenTasks.Count > 0 || crew.UnawareOfEvacuation)
+            {
+                var gaps = crew.ForgottenTasks.Select(t => $"\"{t}\"").ToList();
+                if (crew.UnawareOfEvacuation) gaps.Add("the evacuation (may go back inside)");
+                lines.Add(new Divergence($"{crew.Callsign} relief crew", $"Never told: {string.Join(", ", gaps)}", "COP assumes it was handed over",
+                    crew.UnawareOfEvacuation ? DivergenceSeverity.Unknown : DivergenceSeverity.Lagging));
+            }
+            if (unit.Channel is { } believed && believed != crew.Channel)
+                lines.Add(new Divergence($"{crew.Callsign}: channel", $"Working on {crew.Channel}", $"COP thinks {believed}", DivergenceSeverity.Unknown));
+        }
+
         // Weather.
         if (cop.Weather is { } observed)
         {

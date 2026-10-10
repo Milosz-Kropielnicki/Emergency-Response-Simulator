@@ -53,7 +53,23 @@ public sealed partial class UnitDetailViewModel(IRoutingService routing) : Obser
         }
 
         Add("ETA", unit.Eta is { } eta && unit.Status == UnitStatus.EnRoute ? $"{(int)eta.TotalMinutes}:{eta.Seconds:D2}" : "—");
-        Add("Crew", unit.CrewSize.ToString());
+        if (unit.Crew is { } crew)
+        {
+            Add("Crew", $"{crew.OnDuty} on duty: " + string.Join(", ", crew.Members.Where(m => m.Available).Select(m => m.Name)) +
+                        (crew.OnDuty < crew.Members.Count ? $" ({crew.Members.Count - crew.OnDuty} off: " +
+                            string.Join(", ", crew.Members.Where(m => !m.Available).Select(m => $"{m.Name}, {EventDescriber.Humanize(m.Status).ToLowerInvariant()}")) + ")" : ""));
+            Add("Qualifications", string.Join(", ", Qualifications.All.Select(q => (q.Code, Count: crew.Holding(q.Code))).Where(q => q.Count > 0)
+                .Select(q => $"{q.Code} ×{q.Count}")) is { Length: > 0 } held ? held : "None");
+            Add("Shift", crew.PastShiftEnd(now)
+                ? $"Ended {MainViewModel.Time(crew.ShiftEnd)}: on overtime ({(now - crew.ShiftEnd).TotalMinutes:F0} min)"
+                : $"{MainViewModel.Time(crew.ShiftStart)}–{MainViewModel.Time(crew.ShiftEnd)} ({crew.OnShift(now).TotalHours:F1} h on duty)");
+            Add("Crew condition", crew.InRehab ? $"In rehab since {MainViewModel.Time(crew.RehabSince!.Value)}"
+                : crew.ConditionReportedAt is { } said ? $"{crew.Condition} at {MainViewModel.Time(said)}: \"{crew.ConditionNote}\"" : "Nothing reported");
+        }
+        else
+        {
+            Add("Crew", unit.CrewSize.ToString());
+        }
         Add("Equipment", unit.Capabilities.Count == 0 ? "—" : string.Join(", ", unit.Capabilities));
         Add("Last AVL update", unit.LastAvlUpdate is { } avl ? $"{MainViewModel.Time(avl, seconds: true)} ({Age(now - avl)} ago)" : "—");
         Add("Comms", unit.CommsConnected

@@ -92,6 +92,9 @@ public enum OrderStatus
     Acknowledged,
     Completed,
     Cancelled,
+
+    /// <summary>The recipient said it can't do it (e.g. nobody qualified for the task).</summary>
+    Declined,
 }
 
 /// <summary>A directive to a unit, group or position, closed by a read-back (§9, §13).</summary>
@@ -114,6 +117,9 @@ public sealed class Order
 
     /// <summary>Command confirmed the read-back was right, closing the loop (§13).</summary>
     public DateTimeOffset? ReadBackConfirmedAt { get; set; }
+
+    /// <summary>Why the recipient declined the order (§12: not qualified for the task).</summary>
+    public string? DeclineReason { get; set; }
 
     public DateTimeOffset? ClosedAt { get; set; }
 }

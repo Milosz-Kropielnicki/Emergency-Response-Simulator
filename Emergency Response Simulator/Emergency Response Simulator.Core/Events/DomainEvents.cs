@@ -69,6 +69,24 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(ChannelPatchRemoved), nameof(ChannelPatchRemoved))]
 [JsonDerivedType(typeof(CallMissed), nameof(CallMissed))]
 [JsonDerivedType(typeof(CallbackMade), nameof(CallbackMade))]
+// Crews and safety (Phase 8)
+[JsonDerivedType(typeof(CrewRostered), nameof(CrewRostered))]
+[JsonDerivedType(typeof(CrewConditionReported), nameof(CrewConditionReported))]
+[JsonDerivedType(typeof(CrewRehabOrdered), nameof(CrewRehabOrdered))]
+[JsonDerivedType(typeof(CrewRehabEnded), nameof(CrewRehabEnded))]
+[JsonDerivedType(typeof(CrewReliefRequested), nameof(CrewReliefRequested))]
+[JsonDerivedType(typeof(CrewRelieved), nameof(CrewRelieved))]
+[JsonDerivedType(typeof(CrewMemberStoodDown), nameof(CrewMemberStoodDown))]
+[JsonDerivedType(typeof(PeerSupportArranged), nameof(PeerSupportArranged))]
+[JsonDerivedType(typeof(PeerSupportGiven), nameof(PeerSupportGiven))]
+[JsonDerivedType(typeof(ParRequested), nameof(ParRequested))]
+[JsonDerivedType(typeof(ParReported), nameof(ParReported))]
+[JsonDerivedType(typeof(EvacuationSignalled), nameof(EvacuationSignalled))]
+[JsonDerivedType(typeof(EmergencyTrafficDeclared), nameof(EmergencyTrafficDeclared))]
+[JsonDerivedType(typeof(MaydayDeclared), nameof(MaydayDeclared))]
+[JsonDerivedType(typeof(RescueTeamDeployed), nameof(RescueTeamDeployed))]
+[JsonDerivedType(typeof(MaydayResolved), nameof(MaydayResolved))]
+[JsonDerivedType(typeof(OrderDeclined), nameof(OrderDeclined))]
 // Truth: the world as it really is
 [JsonDerivedType(typeof(WorldIncidentStarted), nameof(WorldIncidentStarted))]
 [JsonDerivedType(typeof(WorldIncidentChanged), nameof(WorldIncidentChanged))]
@@ -95,6 +113,12 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(CellTowerFailed), nameof(CellTowerFailed))]
 [JsonDerivedType(typeof(CellTowerRestored), nameof(CellTowerRestored))]
 [JsonDerivedType(typeof(RadioBatteryChanged), nameof(RadioBatteryChanged))]
+// Truth: crews (Phase 8)
+[JsonDerivedType(typeof(CrewWelfareChanged), nameof(CrewWelfareChanged))]
+[JsonDerivedType(typeof(FirefighterInDistress), nameof(FirefighterInDistress))]
+[JsonDerivedType(typeof(DistressEnded), nameof(DistressEnded))]
+[JsonDerivedType(typeof(StructureCollapsed), nameof(StructureCollapsed))]
+[JsonDerivedType(typeof(HandoverInformationLost), nameof(HandoverInformationLost))]
 // Engine control
 [JsonDerivedType(typeof(SimulationStarted), nameof(SimulationStarted))]
 [JsonDerivedType(typeof(SimulationPaused), nameof(SimulationPaused))]
@@ -380,6 +404,68 @@ public sealed record CallMissed(Guid CallId, GeoPoint? Location, double? Accurac
 /// <summary>Command rings a missed caller back.</summary>
 public sealed record CallbackMade(Guid CallId) : DomainEvent;
 
+// ---- Crews and safety (Phase 8, Design Document §12) ----
+
+/// <summary>One responder as the duty roster lists them.</summary>
+/// <param name="Lapsed">Qualifications they trained for but whose certificate has expired.</param>
+public sealed record CrewMemberInfo(Guid MemberId, string Name, CrewRole Role, IReadOnlyList<string> Qualifications,
+    IReadOnlyList<string>? Lapsed = null);
+
+/// <summary>Who is riding a unit, and how far into their shift they are.</summary>
+public sealed record CrewRostered(Guid UnitId, IReadOnlyList<CrewMemberInfo> Members, TimeSpan OnShiftFor, TimeSpan ShiftLength) : DomainEvent;
+
+/// <summary>A crew's officer tells command how the crew is doing (crews tend to understate it).</summary>
+public sealed record CrewConditionReported(Guid UnitId, CrewCondition Condition, string Note) : DomainEvent;
+
+/// <summary>Command sends a crew to the rehab area to rest, drink, cool down and be checked over.</summary>
+public sealed record CrewRehabOrdered(Guid UnitId) : DomainEvent;
+
+/// <summary>The crew reports it has finished rehab and is fit to go back to work.</summary>
+public sealed record CrewRehabEnded(Guid UnitId, string Note) : DomainEvent;
+
+/// <summary>Command asks for a fresh crew to take over a unit.</summary>
+/// <param name="FullBriefing">The outgoing crew hands over properly (slower); otherwise a quick changeover that loses information.</param>
+public sealed record CrewReliefRequested(Guid ReliefId, Guid UnitId, bool FullBriefing) : DomainEvent;
+
+/// <summary>A new crew has taken over the unit.</summary>
+public sealed record CrewRelieved(Guid ReliefId, Guid UnitId, IReadOnlyList<CrewMemberInfo> Members, TimeSpan ShiftLength, bool Briefed) : DomainEvent;
+
+/// <summary>A responder is taken off the crew: exhaustion, an acute stress reaction, an injury.</summary>
+public sealed record CrewMemberStoodDown(Guid UnitId, Guid MemberId, string Reason) : DomainEvent;
+
+/// <summary>Command asks the peer support (critical incident stress) team to see a crew.</summary>
+public sealed record PeerSupportArranged(Guid UnitId) : DomainEvent;
+
+public sealed record PeerSupportGiven(Guid UnitId, string Note) : DomainEvent;
+
+/// <summary>Command calls for a Personnel Accountability Report: every crew at the incident counts its people.</summary>
+public sealed record ParRequested(Guid ParId, Guid? IncidentId, string Reason) : DomainEvent;
+
+/// <summary>A crew's answer to a PAR.</summary>
+/// <param name="Missing">Names of members the crew can't account for.</param>
+public sealed record ParReported(Guid ParId, Guid UnitId, int Accounted, int Expected, IReadOnlyList<string> Missing) : DomainEvent;
+
+/// <summary>
+/// Evacuation signal (air horns and "evacuate, evacuate, evacuate" on the radio): every crew at the incident withdraws
+/// from the building and reports a PAR once out. Operations there go defensive.
+/// </summary>
+public sealed record EvacuationSignalled(Guid SignalId, Guid IncidentId) : DomainEvent;
+
+/// <summary>Command clears a channel for emergency traffic only (or lifts it): routine traffic must wait.</summary>
+public sealed record EmergencyTrafficDeclared(string ChannelId, bool Active) : DomainEvent;
+
+/// <summary>A Mayday as heard (or declared by command for a missing member). Unclear when the call was garbled.</summary>
+public sealed record MaydayDeclared(Guid MaydayId, Guid UnitId, string? Member, string Details, bool Unclear = false) : DomainEvent;
+
+/// <summary>Command sends a crew to rescue the firefighter in trouble (rapid intervention).</summary>
+public sealed record RescueTeamDeployed(Guid MaydayId, Guid UnitId) : DomainEvent;
+
+/// <summary>The rescue crew (or the firefighter) reports how the Mayday ended.</summary>
+public sealed record MaydayResolved(Guid MaydayId, string Outcome) : DomainEvent;
+
+/// <summary>A crew can't carry out an order, e.g. it has nobody qualified for the task.</summary>
+public sealed record OrderDeclined(Guid OrderId, string Reason) : DomainEvent;
+
 /// <summary>
 /// Weather as reported to command by a met service or station. May lag or differ from the true
 /// <see cref="WeatherChanged"/>; the COP's weather view shows only this.
@@ -499,6 +585,23 @@ public sealed record CellTowerRestored(Guid SiteId) : DomainEvent;
 
 /// <summary>A crew's handheld radio battery level really changes (0–1), e.g. set by a scenario.</summary>
 public sealed record RadioBatteryChanged(Guid UnitId, double Level) : DomainEvent;
+
+// ---- Truth: crews (Phase 8) ----
+
+/// <summary>A crew's real fatigue and stress (0–1, crew average) moved into a new band: fresh, tired, exhausted.</summary>
+public sealed record CrewWelfareChanged(Guid UnitId, double Fatigue, double Stress, string Band) : DomainEvent;
+
+/// <summary>A firefighter is really in trouble: trapped, lost, out of air. Command only knows if a Mayday gets through.</summary>
+/// <param name="AirMinutes">Breathing air left when it happened.</param>
+public sealed record FirefighterInDistress(Guid DistressId, Guid UnitId, Guid MemberId, string Cause, GeoPoint Location, double AirMinutes) : DomainEvent;
+
+public sealed record DistressEnded(Guid DistressId, string Outcome) : DomainEvent;
+
+/// <summary>Part of a burning building really comes down; anyone working inside nearby is caught.</summary>
+public sealed record StructureCollapsed(Guid HazardId, GeoPoint Location, string Description) : DomainEvent;
+
+/// <summary>What a relief crew was never told at a rushed handover.</summary>
+public sealed record HandoverInformationLost(Guid UnitId, IReadOnlyList<string> Items) : DomainEvent;
 
 // ---- Engine control ----
 

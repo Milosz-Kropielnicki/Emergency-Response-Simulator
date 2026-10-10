@@ -34,6 +34,9 @@ public sealed class PerceivedState : ICopService
         RadioPlan.Standard.ToDictionary(c => c.Id, c => new ChannelState { Info = c });
     private readonly Dictionary<Guid, ChannelPatch> _patches = [];
     private readonly Dictionary<Guid, MissedCall> _missed = [];
+    private readonly Dictionary<Guid, Crew> _crews = [];
+    private readonly Dictionary<Guid, ParCheck> _pars = [];
+    private readonly Dictionary<Guid, Mayday> _maydays = [];
 
     /// <summary>The comms log keeps this many messages; older ones are in the event stream.</summary>
     private const int MaxCommsEntries = 1000;
@@ -65,7 +68,7 @@ public sealed class PerceivedState : ICopService
             {
                 return _channels.Values.Select(c =>
                 {
-                    var copy = new ChannelState { Info = c.Info, BusyUntil = c.BusyUntil, Talker = c.Talker };
+                    var copy = new ChannelState { Info = c.Info, BusyUntil = c.BusyUntil, Talker = c.Talker, EmergencyTraffic = c.EmergencyTraffic };
                     copy.RecentAirtime.AddRange(c.RecentAirtime);
                     return copy;
                 }).ToList();
@@ -75,6 +78,17 @@ public sealed class PerceivedState : ICopService
 
     public IReadOnlyList<ChannelPatch> Patches => Snapshot(_patches);
     public IReadOnlyList<MissedCall> MissedCalls => Snapshot(_missed);
+    public IReadOnlyList<Crew> Crews => Snapshot(_crews);
+
+    public IReadOnlyList<ParCheck> ParChecks
+    {
+        get { lock (_lock) return _pars.Values.OrderBy(p => p.RequestedAt).ToList(); }
+    }
+
+    public IReadOnlyList<Mayday> Maydays
+    {
+        get { lock (_lock) return _maydays.Values.OrderBy(m => m.DeclaredAt).ToList(); }
+    }
     public IReadOnlyList<Order> Orders => Snapshot(_orders);
     public IReadOnlyList<ResourceRequest> ResourceRequests => Snapshot(_requests);
     public IReadOnlyList<ApprovalRequest> Approvals => Snapshot(_approvals);
@@ -205,6 +219,116 @@ public sealed class PerceivedState : ICopService
 
             case ChannelPatchRemoved e:
                 _patches.Remove(e.PatchId);
+                break;
+
+            // ---- Crews and safety (Phase 8) ----
+
+            case CrewRostered e when _units.TryGetValue(e.UnitId, out var crewed):
+                Roster(crewed, e.Members, at - e.OnShiftFor, e.ShiftLength);
+                break;
+
+            case CrewRelieved e when _units.TryGetValue(e.UnitId, out var relievedUnit):
+                var fresh = Roster(relievedUnit, e.Members, at, e.ShiftLength);
+                fresh.RelievedAt = at;
+                fresh.WorkingSince = relievedUnit.Status == UnitStatus.Operating ? at : null;
+                break;
+
+            case CrewConditionReported e when _crews.TryGetValue(e.UnitId, out var reporting):
+                reporting.Condition = e.Condition;
+                reporting.ConditionNote = e.Note;
+                reporting.ConditionReportedAt = at;
+                break;
+
+            case CrewRehabOrdered e when _crews.TryGetValue(e.UnitId, out var resting):
+                resting.RehabSince = at;
+                break;
+
+            case CrewRehabEnded e when _crews.TryGetValue(e.UnitId, out var rested):
+                rested.RehabSince = null;
+                rested.LastRehabEnded = at;
+                rested.WorkingSince = at;
+                rested.Condition = CrewCondition.Fine;
+                rested.ConditionNote = e.Note;
+                rested.ConditionReportedAt = at;
+                break;
+
+            case CrewReliefRequested e when _crews.TryGetValue(e.UnitId, out var awaitingRelief):
+                awaitingRelief.ReliefRequestedAt = at;
+                awaitingRelief.ReliefBriefing = e.FullBriefing;
+                break;
+
+            case CrewMemberStoodDown e when _crews.TryGetValue(e.UnitId, out var shortHanded)
+                                            && shortHanded.Members.FirstOrDefault(m => m.Id == e.MemberId) is { } stoodDown:
+                stoodDown.Status = MemberStatus.StoodDown;
+                break;
+
+            case PeerSupportArranged e when _crews.TryGetValue(e.UnitId, out var toSupport):
+                toSupport.PeerSupportArrangedAt = at;
+                toSupport.PeerSupportGivenAt = null;
+                break;
+
+            case PeerSupportGiven e when _crews.TryGetValue(e.UnitId, out var supported):
+                supported.PeerSupportGivenAt = at;
+                break;
+
+            case ParRequested e:
+                StartPar(e.ParId, e.IncidentId, e.Reason, at);
+                break;
+
+            case EvacuationSignalled e:
+                StartPar(e.SignalId, e.IncidentId, "Evacuation signal", at);
+                break;
+
+            case ParReported e when _pars.TryGetValue(e.ParId, out var par):
+                par.Responses[e.UnitId] = new ParResponse(e.UnitId, _units.GetValueOrDefault(e.UnitId)?.Callsign ?? "Unknown unit",
+                    e.Accounted, e.Expected, e.Missing, at);
+                par.Expected.TryAdd(e.UnitId, _units.GetValueOrDefault(e.UnitId)?.Callsign ?? "Unknown unit");
+                if (_crews.TryGetValue(e.UnitId, out var counted))
+                {
+                    foreach (var member in counted.Members.Where(m => m.Status is MemberStatus.OnDuty or MemberStatus.Missing))
+                        member.Status = e.Missing.Any(name => Names(member, name)) ? MemberStatus.Missing : MemberStatus.OnDuty;
+                }
+                break;
+
+            case EmergencyTrafficDeclared e when _channels.TryGetValue(e.ChannelId, out var cleared):
+                cleared.EmergencyTraffic = e.Active;
+                break;
+
+            case MaydayDeclared e:
+                _maydays[e.MaydayId] = new Mayday
+                {
+                    Id = e.MaydayId, UnitId = e.UnitId, Callsign = _units.GetValueOrDefault(e.UnitId)?.Callsign ?? "Unknown unit",
+                    Member = e.Member, IncidentId = _units.GetValueOrDefault(e.UnitId)?.AssignedIncidentId, Details = e.Details,
+                    Unclear = e.Unclear, DeclaredAt = at,
+                };
+                if (e.Member is { } who && _crews.TryGetValue(e.UnitId, out var distressed))
+                {
+                    foreach (var member in distressed.Members.Where(m => Names(m, who)))
+                        member.Status = MemberStatus.InDistress;
+                }
+                break;
+
+            case RescueTeamDeployed e when _maydays.TryGetValue(e.MaydayId, out var rescue):
+                rescue.RescueUnitId = e.UnitId;
+                rescue.RescueCallsign = _units.GetValueOrDefault(e.UnitId)?.Callsign;
+                rescue.RescueDeployedAt = at;
+                if (_crews.TryGetValue(e.UnitId, out var rescuers))
+                    rescuers.RescueFor = e.MaydayId;
+                break;
+
+            case MaydayResolved e when _maydays.TryGetValue(e.MaydayId, out var resolved):
+                resolved.ResolvedAt = at;
+                resolved.Outcome = e.Outcome;
+                if (resolved.RescueUnitId is { } rescuerId && _crews.TryGetValue(rescuerId, out var rescuerCrew))
+                    rescuerCrew.RescueFor = null;
+                if (_crews.TryGetValue(resolved.UnitId, out var ownCrew))
+                {
+                    var hurt = e.Outcome.Contains("paramedic", StringComparison.OrdinalIgnoreCase);
+                    var standing = e.Outcome.Contains("stood down", StringComparison.OrdinalIgnoreCase);
+                    foreach (var member in ownCrew.Members.Where(m => m.Status is MemberStatus.InDistress or MemberStatus.Missing
+                                                                      && (resolved.Member is null || Names(m, resolved.Member))))
+                        member.Status = hurt ? MemberStatus.Injured : standing ? MemberStatus.StoodDown : MemberStatus.OnDuty;
+                }
                 break;
 
             case CallMissed e:
@@ -352,6 +476,14 @@ public sealed class PerceivedState : ICopService
                 {
                     Contact(answering, at);
                 }
+                break;
+
+            case OrderDeclined e when _orders.TryGetValue(e.OrderId, out var declined):
+                declined.Status = OrderStatus.Declined;
+                declined.DeclineReason = e.Reason;
+                declined.AcknowledgedAt = at;
+                if (declined.TargetKind == OrderTargetKind.Unit && declined.TargetId is { } decliningUnit && _units.TryGetValue(decliningUnit, out var decliner))
+                    Contact(decliner, at);
                 break;
 
             case OrderClosed e when _orders.TryGetValue(e.OrderId, out var closedOrder):
@@ -513,11 +645,26 @@ public sealed class PerceivedState : ICopService
                 Unassign(unit);
                 unit.Status = UnitStatus.Available;
                 unit.Eta = null;
+                if (unit.Crew is { } stoodDownCrew)
+                {
+                    stoodDownCrew.WorkingSince = null;
+                    stoodDownCrew.RehabSince = null;
+                }
                 break;
 
             case UnitStatusChanged e when _units.TryGetValue(e.UnitId, out var unit):
                 Contact(unit, at);
                 unit.Status = e.Status;
+                if (unit.Crew is { } working)
+                {
+                    if (e.Status == UnitStatus.Operating && working.RehabSince is null)
+                        working.WorkingSince ??= at;
+                    else if (e.Status is not (UnitStatus.Operating or UnitStatus.OnScene))
+                    {
+                        working.WorkingSince = null;
+                        working.RehabSince = null;
+                    }
+                }
                 if (e.Status is UnitStatus.Available or UnitStatus.OutOfService)
                 {
                     Unassign(unit);
@@ -607,6 +754,33 @@ public sealed class PerceivedState : ICopService
                 break;
         }
     }
+
+    private Crew Roster(Unit unit, IReadOnlyList<CrewMemberInfo> members, DateTimeOffset shiftStart, TimeSpan length)
+    {
+        var crew = new Crew { UnitId = unit.Id, ShiftStart = shiftStart, ShiftEnd = shiftStart + length };
+        crew.Members.AddRange(members.Select(m => new CrewMember
+        {
+            Id = m.MemberId, Name = m.Name, Role = m.Role, Qualifications = m.Qualifications, Lapsed = m.Lapsed ?? [],
+        }));
+        if (unit.Status == UnitStatus.Operating) crew.WorkingSince = shiftStart > AsOf ? shiftStart : AsOf;
+        _crews[unit.Id] = crew;
+        unit.Crew = crew;
+        return crew;
+    }
+
+    /// <summary>Who should answer: our crews command believes are at the incident's scene.</summary>
+    private void StartPar(Guid parId, Guid? incidentId, string reason, DateTimeOffset at)
+    {
+        var par = new ParCheck { Id = parId, IncidentId = incidentId, Reason = reason, RequestedAt = at };
+        foreach (var unit in _units.Values.Where(u => u.Status is UnitStatus.OnScene or UnitStatus.Operating && u.Agency?.AiControlled != true
+                                                      && u.AssignedIncidentId is not null && (incidentId is null || u.AssignedIncidentId == incidentId)))
+            par.Expected[unit.Id] = unit.Callsign;
+        _pars[parId] = par;
+    }
+
+    /// <summary>Whether a name on the radio ("Firefighter Byrne") is this member.</summary>
+    private static bool Names(CrewMember member, string said) =>
+        said.EndsWith(member.Name.Split(' ')[^1], StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Anything heard from a unit restores its comms status.</summary>
     private static void Contact(Unit unit, DateTimeOffset at)

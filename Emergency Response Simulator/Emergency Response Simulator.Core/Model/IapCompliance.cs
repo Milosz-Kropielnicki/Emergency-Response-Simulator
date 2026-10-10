@@ -170,6 +170,10 @@ public static class IapCompliance
             return "is not on the roster";
         if (unit.Status == UnitStatus.OutOfService)
             return "is out of service";
+        // Not every crew can do every task (§12): the assignment's wording says what it needs.
+        if (unit.Crew is { } crew && Qualifications.RequiredFor(assignment.Assignment) is { } needed && !crew.Meets(needed))
+            return $"has {(crew.Holding(needed.Qualification) == 0 ? "no" : $"only {crew.Holding(needed.Qualification)}")} " +
+                   $"{Qualifications.Name(needed.Qualification).ToLowerInvariant()} qualified (needs {needed.Members})";
         if (unit.AssignedIncidentId == incident.Id)
             return unit.Status == UnitStatus.Cancelled ? "has been stood down" : null;
         if (unit.AssignedIncident is { } other)

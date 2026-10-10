@@ -38,7 +38,10 @@ public sealed partial class UnitRow(MainViewModel owner, Unit unit, DateTimeOffs
     public string PlanTask { get; } = planTask ?? (unit.AssignedIncidentId is null ? "—" : "Not in plan");
     public string Location { get; } = unit.Status == UnitStatus.Available ? unit.HomeStation ?? "Station" :
         unit.Location is { } p ? $"{p.Y:F4}, {p.X:F4}" : "Unknown";
-    public int Crew { get; } = unit.CrewSize;
+    /// <summary>People on duty, and how the crew last said it was doing (Phase 8).</summary>
+    public string Crew { get; } = unit.Crew is { } crew
+        ? $"{crew.OnDuty}" + (crew.InRehab ? " · rehab" : crew.Condition != CrewCondition.Fine ? $" · {crew.Condition.ToString().ToLowerInvariant()}" : "")
+        : unit.CrewSize.ToString();
     public string Equipment { get; } = unit.Capabilities.Count == 0 ? "—" : string.Join(", ", unit.Capabilities);
     public string Eta { get; } = unit.Eta is { } eta && unit.Status == UnitStatus.EnRoute ? $"{(int)eta.TotalMinutes:D2}:{eta.Seconds:D2}" : "—";
     public bool CommsOk { get; } = unit.CommsConnected;

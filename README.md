@@ -407,6 +407,84 @@ Every message between the world and command now travels over a simulated network
   - Orders show **Read-back correct** / **Wrong: repeat order**.
   - The instructor tab and map add what went unheard and why, crews in black spots or on flat batteries, masts down, and black spots.
 
+## Human factors & crew management (Phase 8)
+
+Every unit now carries a crew of named people (`CrewSystem`, Order 16), each with a role, qualifications and a place in their shift. How tired and stressed they really are is truth (`WorldCrew`). Command sees only the roster, the clock and what crews say (`Crew` on the COP), and crews tend to say it late. `Simulation:HumanFactors = false` turns all of this off; without a crew model, units behave as before.
+
+- **Rosters** (`CrewRoster`, seeded from the call sign, so Engine 4 always has the same crew):
+  - fire crews have an officer, a driver and firefighters; ambulance crews a paramedic and/or EMTs; Garda units Gardaí;
+  - qualifications come from the unit's equipment: BA, Hazmat, USAR, Swiftwater, ALS (paramedic), BLS (EMT). A certificate can be **lapsed**, which means trained but not allowed to do it;
+  - shifts: fire and Garda 10 h, ambulance 12 h. The demo roster puts Engine 4 and Engine 7 near the end of their day, and Ambulance 14 in the last hour of its twelve. Ambulance 21's paramedic registration has lapsed, and one of Hazmat 2's technicians is out of date.
+- **Fatigue and stress** (truth, per person):
+
+  | Fatigue per hour | |
+  |---|---|
+  | Working inside a burning building (BA) | 0.45 (the driver stays at the pump: 0.12) |
+  | Fighting the fire from outside | 0.20 |
+  | Other work at a scene (casualties, cordons) | 0.12 |
+  | On duty otherwise | 0.02 |
+  | In rehab | −0.80 |
+  | Past the end of the shift | × 1.5 |
+
+  - Stress comes from deaths nearby, a collapse, a Mayday (worse for the crew it happens to) and working in heat or fumes. Each new shock adds less to someone already shaken. It eases slowly, faster in rehab, and with peer support.
+  - **Effects** ("decision speed, radio discipline, error rates"):
+    - a tired crew turns out, sizes up and reads back up to about twice as slowly;
+    - from fatigue 0.5 it garbles more transmissions and gets more read-backs wrong;
+    - it puts out less fire, and less still when short-handed or working from outside.
+  - Officers report "getting tired" at 0.6 (the truth turned tired at 0.5), "exhausted" at 0.85, "shaken" once after a traumatic event, and when they are 30 minutes past the end of their shift.
+  - People are stood down when they are spent (fatigue 0.97), after an acute stress reaction (stress 0.85 for 5–15 minutes), or by the rehab medic.
+- **Shifts, relief and handover:**
+  - crews at their station change watch at the end of their shift;
+  - committed crews carry on until command relieves them (`RequestReliefAsync`). A relief crew takes about 10–14 minutes to arrive, then the unit works at half pace while they hand over;
+  - **Full briefing**: a 5-minute handover, nothing lost.
+  - **Quick changeover**: 1.5 minutes, and the new crew may not know:
+    - the channel it had been moved to (it comes up on its normal one, and command's orders on the old one aren't heard);
+    - its orders (60 % each; it says "no tasking was handed over" when asked for its status);
+    - a blocked road;
+    - that the building was evacuated (it may go back inside).
+- **Accountability and safety:**
+  - **PAR** (`RequestParAsync`) goes out on the radio to every crew at the scene. Each crew that hears it counts heads and answers "5 of 5", or "4 of 5, missing Firefighter Byrne!". Crews that don't answer within 2 minutes raise a critical alert.
+  - The **evacuation signal** (`SignalEvacuationAsync`) goes out on the radio, and air horns reach 65 % of the crews that miss it. Crews withdraw, report a PAR once out, and the incident goes defensive: later crews are told to work from outside.
+  - **Emergency traffic** (`DeclareEmergencyTrafficAsync`): routine traffic on the channel holds, without giving up, until it is lifted. Only Maydays, evacuation PARs and rescue reports go out.
+- **Mayday:**
+  - A burning structure **collapses** 20–28 minutes after the fire starts, unless it is out first. The crew nearest the fire warns 4 minutes before ("roof's sagging…"), and again urgently at 1½ minutes.
+  - Crews still inside within 60 m are caught: someone on the nearest crew for certain, others by chance. Firefighters working inside also get lost or fall now and then, more often when tired.
+  - The firefighter calls "MAYDAY MAYDAY MAYDAY…" with where they are and how much air they have (8–18 minutes). The call goes over the radio at top priority and can be stepped on on a busy channel nobody has cleared; they call again until heard. If it never gets through, a PAR shows them missing, and command can declare the Mayday itself (`DeclareMaydayAsync`).
+  - **Rescue team** (`DeployRescueTeamAsync`): a fire crew at the scene with two BA wearers goes in for everyone in trouble from that crew. It takes about 9 minutes for someone trapped and 5 for someone lost. It is faster with two USAR technicians for a collapse, and slower for a short or tired crew, or without emergency traffic.
+  - Outcomes:
+    - rescued in time: unhurt (stood down for a check) or burned (a P2 casualty);
+    - too late: unconscious and out of air (P1);
+    - not rescued: lost firefighters may find their own way out; otherwise another crew finds them long after their air has gone.
+- **Skills and certification:**
+  - Orders say what they need from their wording: "decontaminate" or "chlorine" needs two Hazmat technicians; "water rescue" two Swiftwater; "collapse" or "shoring" two USAR; "interior attack" or "search the building" a BA pair; "paramedic" or "ALS" one paramedic.
+  - A crew without the people declines ("unable, we've nobody… qualified on board"), and the order shows as **Declined**.
+  - The IAP flags assignments a crew isn't qualified for.
+  - An ambulance whose paramedic has lapsed treats at BLS: casualties stay stable twice as long instead of three times.
+- **Rehab and peer support:**
+  - **Rehab** (`SendToRehabAsync`) lasts 20 minutes. The crew reports status On scene, recovers, sees the medic, and goes back to work.
+  - **Peer support** (`ArrangePeerSupportAsync`): the team arrives in 15 minutes and waits until the crew is off the line. It brings stress down and heads off stress reactions.
+  - Other services rotate their own crews.
+- **Alerts** (from the COP):
+  - Mayday;
+  - no rescue team after a minute;
+  - channel not cleared for emergency traffic;
+  - PAR needed after a Mayday;
+  - PAR due every 20 minutes while crews work;
+  - PAR unanswered, or someone missing;
+  - rehab due after 40 minutes on task;
+  - shift ending, or past its end;
+  - crew exhausted or shaken;
+  - order declined;
+  - someone stood down.
+- **UI:**
+  - The new **CREWS** tab in the right panel. Its header counts active Maydays.
+  - **Safety:** Call PAR, Evacuation signal, and emergency traffic per channel.
+  - **Mayday cards:** what was heard and a rescue-team picker.
+  - **Accountability:** the latest PAR, with **Declare Mayday** for missing or silent crews.
+  - **Crews:** for each crew, its shift (overtime in amber), time on task, its last condition report, qualifications, relief and peer-support status, and an expandable crew list. Buttons: Rehab, Relieve, Quick relief and Peer support.
+  - The unit tab lists the crew, qualifications, shift and condition, and the resource board's Crew column shows people on duty and condition.
+  - For the instructor: real fatigue and stress per crew, firefighters in distress (also marked on the map), and what handovers lost. The comparison shows crews more tired than they've admitted, and relief crews on a channel command doesn't know about.
+
 ## Local setup
 
 ```powershell

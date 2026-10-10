@@ -115,6 +115,16 @@ public partial class InstructorViewModel : ObservableObject
         foreach (var outage in snapshot.Outages)
             yield return new WorldFact("Power outage", $"{outage.Cause}; restoring {MainViewModel.Time(outage.RestoreAt)}");
 
+        foreach (var distress in snapshot.Distress)
+            yield return new WorldFact($"IN DISTRESS: {distress.Member}", $"{distress.Callsign}, {distress.Cause}. Air until " +
+                $"{MainViewModel.Time(distress.AirRunsOutAt, seconds: true)}. " +
+                (distress.Heard ? "Mayday heard. " : "Mayday NOT heard. ") +
+                (distress.RescueCallsign is { } rescuer ? $"{rescuer} {distress.RescueProgress:P0} through the rescue." : "No rescue team."));
+        var crews = snapshot.Crews.Where(c => c.Activity is not ("idle" or "travelling" or "turningout")).ToList();
+        if (crews.Count > 0)
+            yield return new WorldFact("Crews at work (true)", string.Join(", ", crews.OrderByDescending(c => c.Fatigue).Take(6)
+                .Select(c => $"{c.Callsign} {CrewFactors.Band(c.Fatigue)} {c.Fatigue:P0}/{c.Stress:P0} ({c.Activity}{(c.OnDuty < c.Rostered ? $", {c.OnDuty}/{c.Rostered}" : "")})")));
+
         if (snapshot.Comms.CallsWaiting > 0)
             yield return new WorldFact("999 line", $"{snapshot.Comms.CallsWaiting} caller(s) waiting for a call-taker");
         if (snapshot.Comms.RecentLost.Count > 0)

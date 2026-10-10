@@ -151,6 +151,9 @@ public sealed class ChannelState
     public DateTimeOffset BusyUntil { get; set; }
     public string? Talker { get; set; }
 
+    /// <summary>Cleared for emergency traffic: routine traffic must wait (Phase 8: Mayday).</summary>
+    public bool EmergencyTraffic { get; set; }
+
     /// <summary>Share of the last two minutes someone was transmitting.</summary>
     public double Utilisation(DateTimeOffset now)
     {

@@ -123,6 +123,32 @@ public interface IC2Service
 
     /// <summary>Ring back a 999 caller who hung up before being answered.</summary>
     Task<CommandResult> CallBackAsync(Guid callId, CancellationToken cancellationToken = default);
+
+    // ---- Crews and safety (Design Document §12) ----
+
+    /// <summary>Personnel Accountability Report: every crew at the incident (or everywhere) counts its people over the radio.</summary>
+    Task<CommandResult> RequestParAsync(Guid? incidentId, string reason = "Routine PAR", CancellationToken cancellationToken = default);
+
+    /// <summary>Evacuation signal: every crew at the incident withdraws, reports a PAR, and operations go defensive.</summary>
+    Task<CommandResult> SignalEvacuationAsync(Guid incidentId, CancellationToken cancellationToken = default);
+
+    /// <summary>Clear a channel for emergency traffic only (a Mayday), or lift it.</summary>
+    Task<CommandResult> DeclareEmergencyTrafficAsync(string channelId, bool active, CancellationToken cancellationToken = default);
+
+    /// <summary>Declare a Mayday for a crew member nobody can account for (e.g. missing at a PAR).</summary>
+    Task<CommandResult> DeclareMaydayAsync(Guid unitId, string? member, string details, CancellationToken cancellationToken = default);
+
+    /// <summary>Send a crew at the scene in to rescue a firefighter in trouble (rapid intervention team).</summary>
+    Task<CommandResult> DeployRescueTeamAsync(Guid maydayId, Guid unitId, CancellationToken cancellationToken = default);
+
+    /// <summary>Send a crew to rehab: rest, fluids, cooling and a medical check before it goes back to work.</summary>
+    Task<CommandResult> SendToRehabAsync(Guid unitId, CancellationToken cancellationToken = default);
+
+    /// <summary>Ask for a fresh crew to take over a unit; a full briefing takes longer, a quick changeover loses information.</summary>
+    Task<CommandResult> RequestReliefAsync(Guid unitId, bool fullBriefing, CancellationToken cancellationToken = default);
+
+    /// <summary>Ask the peer support team to see a crew after a traumatic incident (psychological first aid).</summary>
+    Task<CommandResult> ArrangePeerSupportAsync(Guid unitId, CancellationToken cancellationToken = default);
 }
 
 /// <param name="EntityId">Id of anything the command created, e.g. a new incident.</param>

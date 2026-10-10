@@ -467,6 +467,20 @@ public static class MapStyles
         },
     };
 
+    /// <summary>A firefighter in distress (truth): a red diamond.</summary>
+    public static IStyle Distress { get; } = new StyleCollection
+    {
+        Styles =
+        {
+            new SymbolStyle
+            {
+                SymbolType = SymbolType.Rectangle, SymbolScale = 0.5, SymbolRotation = 45,
+                Fill = new Brush(new Color(255, 30, 30)), Outline = new Pen(TruthColor, 3),
+            },
+            TruthLabelStyle(),
+        },
+    };
+
     public static IStyle Site(bool triggered) => new StyleCollection
     {
         Styles =
