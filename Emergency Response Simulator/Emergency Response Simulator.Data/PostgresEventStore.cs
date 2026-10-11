@@ -27,6 +27,8 @@ public sealed class PostgresEventStore(IDbContextFactory<ErsDbContext> contextFa
                 Source = draft.Source,
                 Type = draft.Payload.GetType().Name,
                 Payload = EventJson.Serialize(draft.Payload),
+                ActorId = draft.ActorId,
+                ActorRole = draft.ActorRole,
             };
 
             await using (var db = await contextFactory.CreateDbContextAsync(cancellationToken))
@@ -44,6 +46,8 @@ public sealed class PostgresEventStore(IDbContextFactory<ErsDbContext> contextFa
                 Visibility = record.Visibility,
                 Source = record.Source,
                 Payload = draft.Payload,
+                ActorId = record.ActorId,
+                ActorRole = record.ActorRole,
             };
             Appended?.Invoke(this, appended);
             return appended;

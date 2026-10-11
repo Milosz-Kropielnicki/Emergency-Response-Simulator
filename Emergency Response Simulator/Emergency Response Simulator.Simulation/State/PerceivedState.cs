@@ -45,6 +45,7 @@ public sealed class PerceivedState : ICopService
     private readonly EocStatus _eoc = new();
     private readonly List<PublicStatement> _statements = [];
     private readonly Dictionary<Guid, MediaEnquiry> _enquiries = [];
+    private readonly Dictionary<Guid, Participant> _participants = [];
 
     /// <summary>The comms log keeps this many messages; older ones are in the event stream.</summary>
     private const int MaxCommsEntries = 1000;
@@ -131,6 +132,11 @@ public sealed class PerceivedState : ICopService
     public IReadOnlyList<PublicStatement> PublicStatements
     {
         get { lock (_lock) return _statements.ToList(); }
+    }
+
+    public IReadOnlyList<Participant> Participants
+    {
+        get { lock (_lock) return _participants.Values.OrderBy(p => p.JoinedAt).ToList(); }
     }
 
     public IReadOnlyList<MediaEnquiry> MediaEnquiries
@@ -386,6 +392,33 @@ public sealed class PerceivedState : ICopService
                                                                       && (resolved.Member is null || Names(m, resolved.Member))))
                         member.Status = hurt ? MemberStatus.Injured : standing ? MemberStatus.StoodDown : MemberStatus.OnDuty;
                 }
+                break;
+
+            // ---- Sessions and participants (Phase 11) ----
+
+            case ParticipantJoined e:
+                if (_participants.TryGetValue(e.ParticipantId, out var rejoining))
+                {
+                    rejoining.DisplayName = e.DisplayName;
+                    rejoining.Role = e.Role;
+                    rejoining.LeftAt = null;
+                }
+                else
+                    _participants[e.ParticipantId] = new Participant { Id = e.ParticipantId, DisplayName = e.DisplayName, Role = e.Role, JoinedAt = at };
+                break;
+
+            case ParticipantLeft e when _participants.TryGetValue(e.ParticipantId, out var leaving):
+                leaving.LeftAt = at;
+                break;
+
+            case RoleAssigned e when _participants.TryGetValue(e.ParticipantId, out var assigned):
+                assigned.Role = e.Role;
+                break;
+
+            case RoleHandedOver e when _participants.TryGetValue(e.ToParticipantId, out var taking):
+                taking.Role = e.Role;
+                if (_participants.TryGetValue(e.FromParticipantId, out var giving))
+                    giving.Role = e.FromNewRole;
                 break;
 
             // ---- Multi-agency (Phase 10) ----

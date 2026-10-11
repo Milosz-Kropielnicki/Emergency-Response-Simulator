@@ -16,13 +16,22 @@ namespace Emergency_Response_Simulator.ViewModels;
 public sealed record AarMetricRow(string Category, string Name, string Display, string Standard, Rating Rating, string RatingText, string Explanation);
 
 public sealed record AarDecisionRow(DateTimeOffset At, string Time, string Category, string Decision, string Trigger, string Took,
-    string Known, string Truth, Rating Rating, string RatingText, string Note);
+    string Known, string Truth, Rating Rating, string RatingText, string Note, string Actor);
 
 public sealed record AarBranchRow(string Topic, string Time, string Yours, string Recommended, string Alternative, string Effect, Rating Rating, string RatingText);
 
 public sealed record AarOutcomeRow(string Label, string Hurt, string Dead, string Firefighters, string Fire, string FirstOnScene, string Notes, string Actions);
 
-public sealed record AarTimelineRow(DateTimeOffset At, string Time, string Category, string Text, bool IsDecision, bool IsTruth);
+public sealed record AarTimelineRow(DateTimeOffset At, string Time, string Category, string Text, bool IsDecision, bool IsTruth, string Actor);
+
+/// <summary>One participant's line in the review (networked sessions).</summary>
+public sealed record AarParticipantRow(string Name, string Roles, string Time, int Commands, string Ratings, string Response, string Score, string Focus);
+
+/// <summary>A choice in the participant filter: everyone (null) or one person.</summary>
+public sealed record ParticipantChoice(Guid? Id, string Label)
+{
+    public override string ToString() => Label;
+}
 
 /// <summary>A coloured stretch of a unit's commitment strip, in pixels.</summary>
 public sealed record GanttBar(double Left, double Width, Brush Fill, string Tip);
@@ -85,9 +94,21 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
     public ObservableCollection<HeatmapView> Heatmaps { get; } = [];
     public ObservableCollection<AarDelayRow> Delays { get; } = [];
     public ObservableCollection<AarTimelineRow> Timeline { get; } = [];
+    public ObservableCollection<AarParticipantRow> Participants { get; } = [];
+    public ObservableCollection<ParticipantChoice> ParticipantChoices { get; } = [];
+
+    /// <summary>Shows only this participant's decisions and commands (networked sessions, Phase 11).</summary>
+    [ObservableProperty] private ParticipantChoice? _participantFilter;
+    [ObservableProperty] private bool _hasParticipants;
 
     partial void OnDecisionsOnlyChanged(bool value) => FillTimeline();
     partial void OnIncludeTruthChanged(bool value) => FillTimeline();
+
+    partial void OnParticipantFilterChanged(ParticipantChoice? value)
+    {
+        FillDecisions();
+        FillTimeline();
+    }
 
     private static string Clock(DateTimeOffset at) => MainViewModel.Time(at, seconds: true);
 
@@ -202,8 +223,8 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
 
         Replace(Findings, report.Findings);
         Replace(Metrics, report.Metrics.Select(m => new AarMetricRow(m.Category, m.Name, m.Display, m.Standard, m.Rating, AarExport.Label(m.Rating), m.Explanation)));
-        Replace(Decisions, report.Decisions.Select(d => new AarDecisionRow(d.At, Clock(d.At), d.Category, d.Decision, d.Trigger ?? "—",
-            d.ResponseTime is { } t ? AarAnalyzer.Duration(t) : "—", d.Known, d.Truth, d.Rating, AarExport.Label(d.Rating), d.Note ?? "")));
+        FillParticipants(report);
+        FillDecisions();
         Replace(Branches, report.Branches.Select(b => new AarBranchRow(b.Topic, b.At is { } at ? Clock(at) : "", b.Yours, b.Recommended, b.Alternative,
             b.Effect, b.Rating, AarExport.Label(b.Rating))));
         FillOutcomes(report);
@@ -258,8 +279,29 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
     private void FillTimeline()
     {
         if (Report is null) return;
-        Replace(Timeline, Report.Timeline.Where(t => (!DecisionsOnly || t.IsDecision || t.Important) && (IncludeTruth || !t.IsTruth))
-            .Select(t => new AarTimelineRow(t.At, Clock(t.At), t.Category, t.Text, t.IsDecision, t.IsTruth)));
+        // With a participant chosen, only what their commands produced.
+        var person = ParticipantFilter?.Id is not null;
+        Replace(Timeline, Report.TimelineOf(ParticipantFilter?.Id).Where(t => (!DecisionsOnly || t.IsDecision || t.Important || person) && (IncludeTruth || !t.IsTruth))
+            .Select(t => new AarTimelineRow(t.At, Clock(t.At), t.Category, t.Text, t.IsDecision, t.IsTruth, t.Actor ?? "")));
+    }
+
+    private void FillDecisions()
+    {
+        if (Report is null) return;
+        Replace(Decisions, Report.DecisionsOf(ParticipantFilter?.Id).Select(d => new AarDecisionRow(d.At, Clock(d.At), d.Category, d.Decision,
+            d.Trigger ?? "—", d.ResponseTime is { } t ? AarAnalyzer.Duration(t) : "—", d.Known, d.Truth, d.Rating, AarExport.Label(d.Rating), d.Note ?? "",
+            d.Actor ?? "")));
+    }
+
+    private void FillParticipants(AarReport report)
+    {
+        HasParticipants = report.Participants.Count > 0;
+        Replace(Participants, report.Participants.Select(p => new AarParticipantRow(p.Name, p.Roles, AarAnalyzer.Duration(p.Present), p.Commands,
+            $"{p.Good} good · {p.Fair} fair · {p.Poor} poor", p.MeanResponse is { } mean ? AarAnalyzer.Duration(mean) : "—",
+            p.Score is { } score ? $"{score} / 100" : "—", p.Focus)));
+        var chosen = ParticipantFilter?.Id;
+        Replace(ParticipantChoices, [new ParticipantChoice(null, "Everyone"), .. report.Participants.Select(p => new ParticipantChoice(p.Id, $"{p.Name} ({p.Roles})"))]);
+        ParticipantFilter = ParticipantChoices.FirstOrDefault(c => c.Id == chosen) ?? ParticipantChoices[0];
     }
 
     private static void Replace<T>(ObservableCollection<T> target, IEnumerable<T> items)

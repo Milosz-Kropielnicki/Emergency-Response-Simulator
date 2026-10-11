@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Emergency_Response_Simulator.Core.Events;
+using Emergency_Response_Simulator.Core.Model;
 using Emergency_Response_Simulator.Simulation.Remote;
 using Emergency_Response_Simulator.Simulation.Routing;
 using Emergency_Response_Simulator.Simulation.State;
@@ -9,17 +10,15 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Emergency_Response_Simulator.Client;
 
-/// <summary>Where and as whom a client connects (bound from configuration: --Server, --Role, --Pin).</summary>
-public sealed record ClientOptions(Uri Server, string? Role = null, string? Pin = null)
-{
-    public bool WantsTruth => string.Equals(Role, SimulationHubProtocol.InstructorRole, StringComparison.OrdinalIgnoreCase);
-}
+/// <summary>Which simulation server a client talks to (--Server).</summary>
+public sealed record ClientOptions(Uri Server);
 
 /// <summary>
-/// One client's link to the simulation server (Phase 11 M1). It keeps the mirror of the event stream, the clock, the
-/// traffic pictures and (for an instructor) the world snapshot up to date from the server's pushes, and carries
-/// commands to the server. When the link drops it reconnects and asks for the stream from the last sequence it
-/// applied, so the COP resumes with no gaps and no duplicates.
+/// One client's link to the simulation server. After opening or joining a session (Phase 11 M2) it keeps the mirror of
+/// the event stream, the clock, the traffic pictures and (for an instructor) the world snapshot up to date from the
+/// server's pushes, and carries commands to it. When the link drops it reconnects, takes its place back with its
+/// reconnect token, and asks for the stream from the last sequence it applied, so the COP resumes with no gaps and no
+/// duplicates (M1).
 /// </summary>
 public sealed class SimulationConnection : IAsyncDisposable, IWorldSnapshotSource
 {
@@ -33,10 +32,8 @@ public sealed class SimulationConnection : IAsyncDisposable, IWorldSnapshotSourc
     public SimulationConnection(ClientOptions options, Action<HttpConnectionOptions>? configure = null)
     {
         Options = options;
-        var query = $"?{SimulationHubProtocol.RoleQuery}={Uri.EscapeDataString(options.Role ?? "")}" +
-                    (options.Pin is { Length: > 0 } pin ? $"&{SimulationHubProtocol.PinQuery}={Uri.EscapeDataString(pin)}" : "");
         _hub = new HubConnectionBuilder()
-            .WithUrl(new Uri(options.Server, SimulationHubProtocol.Path + query), http => configure?.Invoke(http))
+            .WithUrl(new Uri(options.Server, SimulationHubProtocol.Path), http => configure?.Invoke(http))
             .WithAutomaticReconnect(new KeepTrying())
             .AddJsonProtocol(json => WireJson.Configure(json.PayloadSerializerOptions))
             .Build();
@@ -51,6 +48,11 @@ public sealed class SimulationConnection : IAsyncDisposable, IWorldSnapshotSourc
         _hub.On<TrafficState>(nameof(ISimulationClient.TrafficFeed), traffic => TrafficFeed.Publish(traffic.ToSnapshot()));
         _hub.On<TrafficState>(nameof(ISimulationClient.LiveTraffic), traffic => LiveTraffic.Publish(traffic.ToSnapshot()));
         _hub.On<WorldSnapshot>(nameof(ISimulationClient.WorldSnapshot), snapshot => Snapshot = snapshot);
+        _hub.On<SessionInfo>(nameof(ISimulationClient.SessionChanged), session =>
+        {
+            Session = session;
+            StateChanged?.Invoke(this, EventArgs.Empty);
+        });
 
         _hub.Reconnecting += _ =>
         {
@@ -60,8 +62,7 @@ public sealed class SimulationConnection : IAsyncDisposable, IWorldSnapshotSourc
         _hub.Reconnected += async _ =>
         {
             Reconnects++;
-            await HelloAsync(_disposing.Token);
-            if (_feedWanted) await _hub.InvokeAsync("Subscribe", Mirror.LastSequence, _disposing.Token);
+            await RejoinAsync();
             StateChanged?.Invoke(this, EventArgs.Empty);
         };
         _hub.Closed += async _ =>
@@ -84,13 +85,16 @@ public sealed class SimulationConnection : IAsyncDisposable, IWorldSnapshotSourc
     /// <summary>Ground truth: filled only for an instructor connection.</summary>
     public WorldSnapshot Snapshot { get; private set; } = WorldSnapshot.Empty;
 
+    /// <summary>Who this client is in the session it joined.</summary>
+    public JoinTicket? Ticket { get; private set; }
+
     public SessionInfo? Session { get; private set; }
 
     public bool Connected => _hub.State == HubConnectionState.Connected;
 
     public int Reconnects { get; private set; }
 
-    /// <summary>Raised when the link drops or comes back (on a background thread).</summary>
+    /// <summary>Raised when the link drops or comes back, or the session starts or ends (on a background thread).</summary>
     public event EventHandler? StateChanged;
 
     /// <summary>The engine clock, moved on locally between the server's pushes while it runs.</summary>
@@ -105,11 +109,26 @@ public sealed class SimulationConnection : IAsyncDisposable, IWorldSnapshotSourc
         }
     }
 
-    /// <summary>Connects and learns which session the server runs and what this connection may see.</summary>
-    public async Task<SessionInfo> ConnectAsync(CancellationToken cancellationToken = default)
+    /// <summary>Opens the link to the server (no session yet).</summary>
+    public Task ConnectAsync(CancellationToken cancellationToken = default) => _hub.StartAsync(cancellationToken);
+
+    public Task<IReadOnlyList<ScenarioInfo>> ListScenariosAsync(CancellationToken cancellationToken = default) =>
+        _hub.InvokeAsync<IReadOnlyList<ScenarioInfo>>("ListScenarios", cancellationToken);
+
+    /// <summary>Opens a session as its instructor; the ticket carries the join code to give the others.</summary>
+    public async Task<JoinTicket> CreateSessionAsync(CreateSessionRequest request, CancellationToken cancellationToken = default)
     {
-        await _hub.StartAsync(cancellationToken);
-        return await HelloAsync(cancellationToken);
+        Ticket = await _hub.InvokeAsync<JoinTicket>("CreateSession", request, cancellationToken);
+        await HelloAsync(cancellationToken);
+        return Ticket;
+    }
+
+    /// <summary>Joins a session by its code, under a name, in a role.</summary>
+    public async Task<JoinTicket> JoinSessionAsync(JoinSessionRequest request, CancellationToken cancellationToken = default)
+    {
+        Ticket = await _hub.InvokeAsync<JoinTicket>("JoinSession", request, cancellationToken);
+        await HelloAsync(cancellationToken);
+        return Ticket;
     }
 
     /// <summary>Starts the event stream after the last sequence applied. Call once the COP is following the mirror.</summary>
@@ -123,10 +142,22 @@ public sealed class SimulationConnection : IAsyncDisposable, IWorldSnapshotSourc
     public async Task<JsonElement?> CallAsync(string service, string method, JsonElement[] args, CancellationToken cancellationToken = default) =>
         await _hub.InvokeAsync<JsonElement?>("Call", service, method, args, cancellationToken);
 
+    // The instructor's lifecycle controls, and roles.
+
+    public Task StartSessionAsync() => _hub.InvokeAsync("StartSession");
+
+    public Task EndSessionAsync(string reason) => _hub.InvokeAsync("EndSession", reason);
+
+    public Task AssignRoleAsync(Guid participantId, UserRole role) => _hub.InvokeAsync("AssignRole", participantId, role);
+
+    public Task HandOverRoleAsync(Guid toParticipantId, UserRole newRole) => _hub.InvokeAsync("HandOverRole", toParticipantId, newRole);
+
+    public Task LeaveAsync() => _hub.InvokeAsync("Leave");
+
     /// <summary>Drops the link without disposing (tests: a client crash or network loss).</summary>
     public Task DropAsync() => _hub.StopAsync();
 
-    private async Task<SessionInfo> HelloAsync(CancellationToken cancellationToken)
+    private async Task HelloAsync(CancellationToken cancellationToken)
     {
         var info = await _hub.InvokeAsync<SessionInfo>("Hello", cancellationToken);
         if (Session is { } known && known.SessionId != info.SessionId)
@@ -134,7 +165,15 @@ public sealed class SimulationConnection : IAsyncDisposable, IWorldSnapshotSourc
         Session = info;
         _clock = info.Clock;
         _clockReceivedAt = DateTimeOffset.UtcNow;
-        return info;
+    }
+
+    /// <summary>After a reconnect: take our place back with the token, then resume the stream where we left off.</summary>
+    private async Task RejoinAsync()
+    {
+        if (Ticket is not { } ticket) return;
+        Ticket = await _hub.InvokeAsync<JoinTicket>("Resume", ticket.ReconnectToken, _disposing.Token);
+        await HelloAsync(_disposing.Token);
+        if (_feedWanted) await _hub.InvokeAsync("Subscribe", Mirror.LastSequence, _disposing.Token);
     }
 
     /// <summary>After the automatic reconnects give up (or a manual stop), keep trying until disposed.</summary>
@@ -148,8 +187,7 @@ public sealed class SimulationConnection : IAsyncDisposable, IWorldSnapshotSourc
                 if (_hub.State != HubConnectionState.Disconnected) return;
                 await _hub.StartAsync(_disposing.Token);
                 Reconnects++;
-                await HelloAsync(_disposing.Token);
-                if (_feedWanted) await _hub.InvokeAsync("Subscribe", Mirror.LastSequence, _disposing.Token);
+                await RejoinAsync();
                 StateChanged?.Invoke(this, EventArgs.Empty);
                 return;
             }

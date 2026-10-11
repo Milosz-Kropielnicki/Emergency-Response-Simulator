@@ -1,10 +1,13 @@
 using System.Windows;
 using Emergency_Response_Simulator.Client;
 using Emergency_Response_Simulator.Core.Events;
+using Emergency_Response_Simulator.Core.Model;
 using Emergency_Response_Simulator.Data;
 using Emergency_Response_Simulator.Simulation;
 using Emergency_Response_Simulator.Simulation.EventStore;
+using Emergency_Response_Simulator.Simulation.Remote;
 using Emergency_Response_Simulator.Simulation.Scenarios;
+using Emergency_Response_Simulator.Simulation.State;
 using Emergency_Response_Simulator.ViewModels;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -48,7 +51,8 @@ namespace Emergency_Response_Simulator
                 // The map's static layers and the road network still come from a GIS database, if this machine has one.
                 if (usingDatabase) builder.Services.AddErsGis(connectionString!);
                 var session = _connection!.Session!;
-                builder.Services.AddSingleton(new DataSourceInfo($"Server {_connection.Options.Server.Authority}" + (session.Truth ? " (instructor)" : "")));
+                var ticket = _connection.Ticket!;
+                builder.Services.AddSingleton(new DataSourceInfo($"Server {_connection.Options.Server.Authority} · code {session.Code} · {ticket.DisplayName}, {Roles.Name(ticket.Role)}"));
             }
             else
             {
@@ -63,6 +67,7 @@ namespace Emergency_Response_Simulator
                 builder.Services.AddSingleton(new DataSourceInfo(usingDatabase ? "PostgreSQL" : "In-memory"));
             }
 
+            builder.Services.AddSingleton(sp => new SessionViewModel(sp.GetRequiredService<CopView>(), sp.GetService<SimulationConnection>()));
             builder.Services.AddSingleton<TimelineViewModel>();
             builder.Services.AddSingleton<InstructorViewModel>();
             builder.Services.AddSingleton<AarViewModel>();
@@ -86,31 +91,53 @@ namespace Emergency_Response_Simulator
             }
         }
 
-        /// <summary>Connects to the simulation server; on failure says why and shuts down.</summary>
+        /// <summary>
+        /// Gets into a session on the simulation server (Phase 11 M2). With everything on the command line it joins
+        /// (<c>--Code --Name --Role</c>, and <c>--Pin</c> for an instructor) or opens one (<c>--Create=scenario --Name --Pin
+        /// [--Title]</c>) straight away; otherwise, or if the server says no, the join dialog asks. Cancelling quits.
+        /// </summary>
         private async Task<bool> ConnectAsync(IConfiguration configuration)
         {
             var address = configuration["Server"];
-            if (!Uri.TryCreate(address, UriKind.Absolute, out var server))
+            var name = configuration["Name"];
+            var code = configuration["Code"];
+            var create = configuration["Create"];
+            UserRole? role = Enum.TryParse<UserRole>(configuration["Role"], ignoreCase: true, out var parsed) ? parsed : null;
+            string? error = null;
+
+            if (Uri.TryCreate(address, UriKind.Absolute, out var server) && !string.IsNullOrWhiteSpace(name)
+                && (!string.IsNullOrWhiteSpace(code) && role is not null || !string.IsNullOrWhiteSpace(create)))
             {
-                MessageBox.Show("Client mode needs the server's address, e.g. --Server=http://training-pc:5180",
-                    "Emergency Response Simulator", MessageBoxButton.OK, MessageBoxImage.Error);
-                Shutdown(1);
-                return false;
+                var connection = new SimulationConnection(new ClientOptions(server));
+                try
+                {
+                    await connection.ConnectAsync();
+                    if (!string.IsNullOrWhiteSpace(create))
+                        await connection.CreateSessionAsync(new CreateSessionRequest(create, configuration["Title"] ?? "", name, configuration["Pin"] ?? ""));
+                    else
+                        await connection.JoinSessionAsync(new JoinSessionRequest(code!, name, role!.Value, configuration["Pin"]));
+                    _connection = connection;
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    await connection.DisposeAsync();
+                    error = RemoteErrors.Message(ex);
+                }
             }
 
-            _connection = new SimulationConnection(new ClientOptions(server, configuration["Role"], configuration["Pin"]));
-            try
+            // The dialog is the only window for now: don't let closing it end the app before the main window opens.
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            var dialog = new JoinWindow(address, name, code, role, error);
+            var joined = dialog.ShowDialog() == true;
+            ShutdownMode = ShutdownMode.OnMainWindowClose;
+            if (!joined || dialog.Connection is null)
             {
-                await _connection.ConnectAsync();
-                return true;
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Could not join the simulation at {server}:\n\n{ex.Message}",
-                    "Emergency Response Simulator", MessageBoxButton.OK, MessageBoxImage.Error);
-                Shutdown(1);
+                Shutdown(0);
                 return false;
             }
+            _connection = dialog.Connection;
+            return true;
         }
 
         protected override async void OnExit(ExitEventArgs e)

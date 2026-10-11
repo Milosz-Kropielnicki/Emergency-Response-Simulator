@@ -82,6 +82,7 @@ public sealed class CopView : ICopService
     public EocStatus Eoc => _current.Eoc;
     public IReadOnlyList<PublicStatement> PublicStatements => _current.PublicStatements;
     public IReadOnlyList<MediaEnquiry> MediaEnquiries => _current.MediaEnquiries;
+    public IReadOnlyList<Participant> Participants => _current.Participants;
     public Incident? FindIncident(Guid incidentId) => _current.FindIncident(incidentId);
     public Unit? FindUnit(Guid unitId) => _current.FindUnit(unitId);
 }

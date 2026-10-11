@@ -90,6 +90,11 @@ public interface ICopService
 
     IReadOnlyList<MediaEnquiry> MediaEnquiries { get; }
 
+    // Networked sessions (Phase 11)
+
+    /// <summary>Everyone who has joined the session, present or not, in the order they joined.</summary>
+    IReadOnlyList<Participant> Participants { get; }
+
     Incident? FindIncident(Guid incidentId);
     Unit? FindUnit(Guid unitId);
 }

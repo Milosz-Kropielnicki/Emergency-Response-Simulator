@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
+using Emergency_Response_Simulator.Core.Model;
 using Emergency_Response_Simulator.Simulation.Routing;
 using Emergency_Response_Simulator.Simulation.State;
 using NetTopologySuite.Geometries;
@@ -9,23 +10,18 @@ using NetTopologySuite.IO;
 
 namespace Emergency_Response_Simulator.Simulation.Remote;
 
-// The contract between the simulation server and its clients (Phase 11 M1). Shared by both sides so the shapes can't drift.
+// The contract between the simulation server and its clients (Phase 11). Shared by both sides so the shapes can't drift.
 
 /// <summary>Where the hub lives and the groups connections are put in.</summary>
 public static class SimulationHubProtocol
 {
     public const string Path = "/hubs/simulation";
 
-    /// <summary>Every connection: perceived events, the clock, the reported traffic feed.</summary>
-    public const string PerceivedGroup = "perceived";
+    /// <summary>Every participant of a session: perceived events, the clock, the reported traffic feed.</summary>
+    public static string PerceivedGroup(Guid sessionId) => $"{sessionId}:perceived";
 
-    /// <summary>Instructor connections only: truth events, world snapshots and live traffic.</summary>
-    public const string TruthGroup = "truth";
-
-    /// <summary>Query-string keys a client connects with (until Phase 11 M2 brings sessions and join codes).</summary>
-    public const string RoleQuery = "role";
-    public const string PinQuery = "pin";
-    public const string InstructorRole = "Instructor";
+    /// <summary>A session's instructors only: truth events, world snapshots and live traffic.</summary>
+    public static string TruthGroup(Guid sessionId) => $"{sessionId}:truth";
 
     /// <summary>The services a client can call through <c>Call</c>, by name. Each mirrors its interface 1:1.</summary>
     public static class Services
@@ -53,10 +49,40 @@ public interface ISimulationClient
 
     /// <summary>The traffic as it really is: instructors only.</summary>
     Task LiveTraffic(TrafficState traffic);
+
+    /// <summary>The session moved on: started, or ended.</summary>
+    Task SessionChanged(SessionInfo session);
 }
 
-/// <summary>Who the server decided this connection is, and which session it is in.</summary>
-public sealed record SessionInfo(Guid SessionId, bool Truth, ClockState Clock, bool CanCompareBranches);
+/// <summary>Where a networked session is in its life (Phase 11 M2).</summary>
+public enum SessionState
+{
+    /// <summary>Open for joining; the clock hasn't started and commands wait for the instructor.</summary>
+    Lobby,
+
+    Running,
+
+    /// <summary>Over: no commands or joins; the record stays for the review.</summary>
+    Ended,
+}
+
+/// <summary>A scenario a session can be opened on.</summary>
+public sealed record ScenarioInfo(string Key, string Name, string Description);
+
+/// <summary>An instructor opens a session. The PIN is the server's, never kept in a client's configuration.</summary>
+public sealed record CreateSessionRequest(string Scenario, string Title, string DisplayName, string Pin);
+
+/// <summary>Someone joins a session by its code, under a name, in a role. Instructors also give the PIN.</summary>
+public sealed record JoinSessionRequest(string Code, string DisplayName, UserRole Role, string? Pin = null);
+
+/// <summary>
+/// What a participant gets on joining: who they are in the session, and a token to come back as the same person after
+/// the link drops (kept in memory by the client only).
+/// </summary>
+public sealed record JoinTicket(Guid SessionId, string Code, Guid ParticipantId, string ReconnectToken, string DisplayName, UserRole Role, bool Truth);
+
+/// <summary>The session this connection is in, what it may see, and the clock.</summary>
+public sealed record SessionInfo(Guid SessionId, string Title, string Code, SessionState State, bool Truth, ClockState Clock, bool CanCompareBranches);
 
 /// <summary>The engine clock at a moment of real time; clients extrapolate from it while it runs.</summary>
 public sealed record ClockState(DateTimeOffset SimTime, bool IsRunning, double TimeScale, DateTimeOffset SentAt);

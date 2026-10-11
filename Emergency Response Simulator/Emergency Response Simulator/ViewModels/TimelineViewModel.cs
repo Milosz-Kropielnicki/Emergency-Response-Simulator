@@ -147,7 +147,8 @@ public sealed partial class TimelineViewModel : ObservableObject
         var entry = EventDescriber.Describe(simEvent,
             id => _live.FindUnit(id)?.Callsign,
             id => _live.FindIncident(id)?.Number,
-            id => _live.Agencies.FirstOrDefault(a => a.Id == id)?.Name);
+            id => _live.Agencies.FirstOrDefault(a => a.Id == id)?.Name,
+            id => _live.Participants.FirstOrDefault(p => p.Id == id)?.DisplayName);
         if (entry is null) return;
 
         var row = new TimelineRow(entry.Sequence, entry.SimTime, MainViewModel.Time(entry.SimTime, seconds: true),

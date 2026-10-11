@@ -29,9 +29,11 @@ public partial class MainViewModel : ObservableObject
     private DateTimeOffset _messageExpires;
 
     public MainViewModel(CopView cop, ISimulationControl simulation, IC2Service c2, IIapService iap, TimelineViewModel timeline,
-        IRoutingService routing, DataSourceInfo dataSource, InstructorViewModel instructor)
+        IRoutingService routing, DataSourceInfo dataSource, InstructorViewModel instructor, SessionViewModel session)
     {
         Instructor = instructor;
+        Session = session;
+        session.ReportTo((result, done) => ShowCommandResult(result, done));
         _cop = cop;
         _simulation = simulation;
         _c2 = c2;
@@ -65,6 +67,9 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>Ground truth for the instructor (its own tab and map layers); never mixed into the COP views.</summary>
     public InstructorViewModel Instructor { get; }
+
+    /// <summary>The networked session: participants, code, lifecycle and roles (Phase 11). Hidden standalone.</summary>
+    public SessionViewModel Session { get; }
 
     /// <summary>Receiving hospitals as they last reported themselves.</summary>
     public ObservableCollection<HospitalRow> Hospitals { get; } = [];
@@ -466,18 +471,28 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task TogglePlayAsync()
     {
-        if (_simulation.IsRunning)
-            await _simulation.PauseAsync();
-        else
-            await _simulation.StartAsync();
+        // In a networked session the clock is the instructor's; the server says no to anyone else (Phase 11).
+        await ClockAsync(() => _simulation.IsRunning ? _simulation.PauseAsync() : _simulation.StartAsync());
         IsRunning = _simulation.IsRunning;
     }
 
     [RelayCommand]
     private async Task SetTimeScaleAsync(double scale)
     {
-        await _simulation.SetTimeScaleAsync(scale);
+        await ClockAsync(() => _simulation.SetTimeScaleAsync(scale));
         TimeScale = _simulation.TimeScale;
+    }
+
+    private async Task ClockAsync(Func<Task> change)
+    {
+        try
+        {
+            await change();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ShowCommandResult(CommandResult.Fail(Client.RemoteErrors.Message(ex)));
+        }
     }
 
     [RelayCommand]
@@ -532,6 +547,7 @@ public partial class MainViewModel : ObservableObject
         CommsHub.Refresh();
         Crews.Refresh();
         Agencies.Refresh();
+        Session.Refresh();
         RefreshZones();
         RefreshWeather();
         RefreshHospitals();

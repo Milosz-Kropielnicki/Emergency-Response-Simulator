@@ -42,6 +42,15 @@ public sealed record SimEvent
 
     public required DomainEvent Payload { get; init; }
 
+    /// <summary>
+    /// The participant whose command produced the event (Phase 11 M2), stamped by the server from the connection's
+    /// identity, never from what a client sends. Null for the engine, scenarios, AI parties and standalone sessions.
+    /// </summary>
+    public Guid? ActorId { get; init; }
+
+    /// <summary>The role that participant held when they gave the command.</summary>
+    public Model.UserRole? ActorRole { get; init; }
+
     public string Type => Payload.GetType().Name;
 }
 
@@ -51,7 +60,9 @@ public sealed record SimEventDraft(
     DateTimeOffset SimTime,
     EventVisibility Visibility,
     string Source,
-    DomainEvent Payload);
+    DomainEvent Payload,
+    Guid? ActorId = null,
+    Model.UserRole? ActorRole = null);
 
 public static class EventSources
 {
@@ -65,4 +76,7 @@ public static class EventSources
     public const string Plume = "plume";
     public const string Comms = "comms";
     public const string Instructor = "instructor";
+
+    /// <summary>Session lifecycle and participants (Phase 11).</summary>
+    public const string Session = "session";
 }

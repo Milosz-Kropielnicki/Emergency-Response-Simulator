@@ -80,6 +80,7 @@ public sealed partial class AarAnalyzer
             Branches = branches,
             Outcomes = [SessionOutcome()],
             Findings = Findings(metrics, branches),
+            Participants = Participants(),
         };
     }
 
@@ -116,12 +117,15 @@ public sealed partial class AarAnalyzer
             case ReportReceived e when !truth:
                 _reports.Add((simEvent.SimTime, e.Location, e.SourceName, e.Claim, e.Source));
                 break;
+            case ParticipantJoined or ParticipantLeft or RoleAssigned or RoleHandedOver:
+                TrackParticipant(simEvent);
+                break;
         }
 
         // A decision is judged on the picture just before it was made.
         var decision = IsDecision(simEvent);
         if (decision)
-            _decisions.Add(Judge(simEvent));
+            _decisions.Add(Judge(simEvent) with { ActorId = simEvent.ActorId, Actor = ActorLabel(simEvent) });
 
         if (truth)
         {
@@ -134,9 +138,10 @@ public sealed partial class AarAnalyzer
         }
 
         var entry = EventDescriber.Describe(simEvent, id => _callsigns.GetValueOrDefault(id), id => _incidents.TryGetValue(id, out var i) ? i.Number : null,
-            id => _agencyNames.GetValueOrDefault(id));
+            id => _agencyNames.GetValueOrDefault(id), id => _people.GetValueOrDefault(id)?.Name);
         if (entry is not null)
-            _timeline.Add(new AarTimelineEntry(entry.Sequence, entry.SimTime, entry.Category, entry.Text, decision, truth, entry.Important || decision));
+            _timeline.Add(new AarTimelineEntry(entry.Sequence, entry.SimTime, entry.Category, entry.Text, decision, truth, entry.Important || decision,
+                simEvent.ActorId, ActorLabel(simEvent)));
     }
 
     /// <summary>Something the trainee did (through C2 or the IAP builder), as opposed to the world or the engine.</summary>
@@ -330,7 +335,7 @@ public sealed partial class AarAnalyzer
     private (string Category, string Text) Describe(SimEvent simEvent)
     {
         var entry = EventDescriber.Describe(simEvent, id => _callsigns.GetValueOrDefault(id), id => _incidents.TryGetValue(id, out var i) ? i.Number : null,
-            id => _agencyNames.GetValueOrDefault(id));
+            id => _agencyNames.GetValueOrDefault(id), id => _people.GetValueOrDefault(id)?.Name);
         var category = simEvent.Payload switch
         {
             IncidentCreated or IncidentUpdated or IncidentCommanderAssigned => "Incident",

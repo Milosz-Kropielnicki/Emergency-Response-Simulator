@@ -1029,6 +1029,69 @@
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
+                    <!-- Networked session (Phase 11): participants, code, lifecycle, roles. Hidden standalone. -->
+                    <TabItem DataContext="{Binding Session}" Visibility="{Binding IsNetworked, Converter={StaticResource BoolToVisibility}}">
+                        <TabItem.Header>
+                            <TextBlock Text="{Binding TabHeader}" />
+                        </TabItem.Header>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="2">
+                                <TextBlock Text="{Binding Summary}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding You}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,2,0,8" />
+
+                                <!-- The instructor's controls -->
+                                <StackPanel Visibility="{Binding IsInstructor, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,8">
+                                    <TextBlock Text="INSTRUCTOR" Style="{StaticResource PanelHeader}" />
+                                    <Button Content="▶ Start the exercise" Command="{Binding StartCommand}" Padding="6,3" Margin="0,0,0,4" FontWeight="SemiBold"
+                                            Visibility="{Binding InLobby, Converter={StaticResource BoolToVisibility}}"
+                                            ToolTip="Starts the clock for everyone; until then trainees can look but not give commands" />
+                                    <DockPanel Margin="0,0,0,4">
+                                        <Button DockPanel.Dock="Right" Content="End session" Command="{Binding EndCommand}" Margin="4,0,0,0" Padding="6,0"
+                                                Foreground="{StaticResource CriticalBrush}" />
+                                        <TextBox Text="{Binding EndReason, UpdateSourceTrigger=PropertyChanged}" ToolTip="Why the session ends (recorded)" />
+                                    </DockPanel>
+                                    <DockPanel>
+                                        <Button DockPanel.Dock="Right" Content="Assign" Command="{Binding AssignCommand}" Margin="4,0,0,0" Padding="6,0"
+                                                ToolTip="Puts the selected participant in this role" />
+                                        <ComboBox ItemsSource="{Binding RoleChoices}" SelectedItem="{Binding AssignRole}" />
+                                    </DockPanel>
+                                </StackPanel>
+
+                                <TextBlock Text="PARTICIPANTS" Style="{StaticResource PanelHeader}" />
+                                <ListBox ItemsSource="{Binding Participants}" SelectedItem="{Binding Selected}" MinHeight="80" Margin="0,0,0,8">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:ParticipantRow}">
+                                            <StackPanel>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock x:Name="Name" Text="{Binding Name}" FontWeight="SemiBold" />
+                                                    <TextBlock x:Name="Me" Text=" (you)" Foreground="{StaticResource AccentBrush}" Visibility="Collapsed" />
+                                                </StackPanel>
+                                                <TextBlock FontSize="11" Foreground="{StaticResource MutedTextBrush}">
+                                                    <Run Text="{Binding Role, Mode=OneWay}" /> · <Run Text="{Binding Status, Mode=OneWay}" />
+                                                </TextBlock>
+                                            </StackPanel>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding IsMe}" Value="True">
+                                                    <Setter TargetName="Me" Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Present}" Value="False">
+                                                    <Setter TargetName="Name" Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <TextBlock Text="HAND OVER YOUR ROLE" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Text="Select who takes your role above, then the role you take on instead." FontSize="11" TextWrapping="Wrap"
+                                           Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,2" />
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Content="Hand over" Command="{Binding HandOverCommand}" Margin="4,0,0,0" Padding="6,0" />
+                                    <ComboBox ItemsSource="{Binding RoleChoices}" SelectedItem="{Binding MyNewRole}" ToolTip="The role you take on" />
+                                </DockPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
                 </TabControl>
             </Border>
         </Grid>

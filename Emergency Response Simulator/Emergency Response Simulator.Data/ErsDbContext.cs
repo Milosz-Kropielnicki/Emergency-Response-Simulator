@@ -188,6 +188,7 @@ public class ErsDbContext(DbContextOptions<ErsDbContext> options) : DbContext(op
             b.Property(e => e.Payload).HasColumnType("jsonb");
             b.HasIndex(e => new { e.SessionId, e.Sequence });
             b.HasIndex(e => new { e.SessionId, e.SimTime });
+            b.HasIndex(e => new { e.SessionId, e.ActorId }); // the AAR's per-participant filter
         });
     }
 }

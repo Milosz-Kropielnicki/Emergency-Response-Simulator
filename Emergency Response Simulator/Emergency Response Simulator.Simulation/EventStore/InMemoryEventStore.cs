@@ -28,6 +28,8 @@ public sealed class InMemoryEventStore : IEventStore
                 Visibility = draft.Visibility,
                 Source = draft.Source,
                 Payload = draft.Payload,
+                ActorId = draft.ActorId,
+                ActorRole = draft.ActorRole,
             };
             _events.Add(appended);
 

@@ -43,10 +43,24 @@ public sealed record AarDecision(
     string Known,
     string Truth,
     Rating Rating,
-    string? Note);
+    string? Note,
+    Guid? ActorId = null,
+    string? Actor = null);
 
 /// <summary>A message or event in the replayable timeline (decisions, radio, dispatches, what happened).</summary>
-public sealed record AarTimelineEntry(long Sequence, DateTimeOffset At, string Category, string Text, bool IsDecision, bool IsTruth, bool Important);
+/// <param name="ActorId">The participant whose command it was (networked sessions, Phase 11).</param>
+public sealed record AarTimelineEntry(long Sequence, DateTimeOffset At, string Category, string Text, bool IsDecision, bool IsTruth, bool Important,
+    Guid? ActorId = null, string? Actor = null);
+
+/// <summary>
+/// One participant in a networked session (Phase 11 M2): when they were there, the roles they held, and how their own
+/// decisions rated.
+/// </summary>
+/// <param name="Present">Time in the session (joined to left, or to the end).</param>
+/// <param name="Score">Share of their rated decisions that were good (fair counts half), 0–100; null with none rated.</param>
+/// <param name="Focus">What most of their commands were about, e.g. "Dispatch 12, Order 5".</param>
+public sealed record AarParticipant(Guid Id, string Name, string Roles, DateTimeOffset JoinedAt, DateTimeOffset? LeftAt, TimeSpan Present,
+    int Commands, int Good, int Fair, int Poor, TimeSpan? MeanResponse, int? Score, string Focus);
 
 /// <summary>A unit's status over the session, for the commitment chart.</summary>
 public sealed record AarStatusSpan(DateTimeOffset From, DateTimeOffset To, UnitStatus Status);
@@ -135,6 +149,17 @@ public sealed class AarReport
     public List<AarOutcome> Outcomes { get; init; } = [];
 
     public IReadOnlyList<AarFinding> Findings { get; init; } = [];
+
+    /// <summary>Who took part (networked sessions); empty for a standalone session.</summary>
+    public IReadOnlyList<AarParticipant> Participants { get; init; } = [];
+
+    /// <summary>The decisions one participant made (everyone's with null).</summary>
+    public IEnumerable<AarDecision> DecisionsOf(Guid? participantId) =>
+        participantId is { } id ? Decisions.Where(d => d.ActorId == id) : Decisions;
+
+    /// <summary>What one participant's commands produced, in order (the whole timeline with null).</summary>
+    public IEnumerable<AarTimelineEntry> TimelineOf(Guid? participantId) =>
+        participantId is { } id ? Timeline.Where(t => t.ActorId == id) : Timeline;
 
     public Competence Overall
     {

@@ -5,18 +5,12 @@ using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
 using Emergency_Response_Simulator.Server;
-using Emergency_Response_Simulator.Simulation.Engine;
 using Emergency_Response_Simulator.Simulation.Hazards;
 using Emergency_Response_Simulator.Simulation.Remote;
 using Emergency_Response_Simulator.Simulation.Scenarios;
 using Emergency_Response_Simulator.Simulation.State;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.AspNetCore.SignalR.Client;
-using Microsoft.AspNetCore.TestHost;
-using Microsoft.Extensions.DependencyInjection;
+using static Emergency_Response_Simulator.Tests.InProcessServer;
 
 namespace Emergency_Response_Simulator.Tests;
 
@@ -26,117 +20,12 @@ namespace Emergency_Response_Simulator.Tests;
 /// </summary>
 public class ServerClientTests
 {
-    private const string Pin = "4321";
-
-    /// <summary>The server in this process, with its own engine stepped by the test (the clock stays paused).</summary>
-    private sealed class InProcessServer : IAsyncDisposable
-    {
-        private readonly WebApplication _app;
-        private readonly List<SimulationConnection> _clients = [];
-
-        private InProcessServer(WebApplication app) => _app = app;
-
-        public static async Task<InProcessServer> StartAsync()
-        {
-            // Command-line settings win over appsettings.Local.json, so the developer's database is never used.
-            var app = ServerHost.Build(
-            [
-                "--ConnectionStrings:Ers=", "--Server:AllowInMemoryStore=true", $"--Server:InstructorPin={Pin}",
-                "--Server:SnapshotInterval=00:00:00.200", "--Server:ClockInterval=00:00:00.100",
-                $"--Simulation:Scenario={BarrowStreetScenario.Key}", "--Simulation:AutoStart=false",
-            ], builder => builder.WebHost.UseTestServer());
-            await app.StartAsync();
-            var server = new InProcessServer(app);
-            // The scenario and roster are seeded by the hosted service: wait for them.
-            await Until(() => server.Store.Count() > 50, TimeSpan.FromSeconds(20));
-            return server;
-        }
-
-        public SimulationEngine Engine => _app.Services.GetRequiredService<SimulationEngine>();
-        public ICopService Cop => _app.Services.GetRequiredService<ICopService>();
-        public InMemoryStoreView Store => new(_app.Services.GetRequiredService<IEventStore>(), Engine.SessionId);
-
-        public async Task<SimulationConnection> ConnectAsync(string? role = null, string? pin = null, bool feed = true)
-        {
-            var test = _app.GetTestServer();
-            var connection = new SimulationConnection(new ClientOptions(test.BaseAddress, role, pin), http =>
-            {
-                http.HttpMessageHandlerFactory = _ => test.CreateHandler();
-                http.WebSocketFactory = async (context, token) => await test.CreateWebSocketClient().ConnectAsync(context.Uri, token);
-                http.Transports = HttpTransportType.WebSockets;
-            });
-            _clients.Add(connection);
-            await connection.ConnectAsync();
-            if (feed) await connection.StartFeedAsync();
-            return connection;
-        }
-
-        public async Task StepAsync(TimeSpan total)
-        {
-            for (var elapsed = TimeSpan.Zero; elapsed < total; elapsed += TimeSpan.FromSeconds(5))
-                await Engine.StepAsync(TimeSpan.FromSeconds(5));
-        }
-
-        /// <summary>Waits until a client has every event it may see that the server has stored.</summary>
-        public Task CaughtUpAsync(SimulationConnection client)
-        {
-            var truth = client.Session!.Truth;
-            return Until(() => client.Mirror.LastSequence >= Store.All().Where(e => truth || e.Visibility == EventVisibility.Perceived)
-                .Select(e => e.Sequence).DefaultIfEmpty(0).Max(), TimeSpan.FromSeconds(20));
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            foreach (var client in _clients) await client.DisposeAsync();
-            await _app.StopAsync();
-            await _app.DisposeAsync();
-        }
-    }
-
-    /// <summary>Synchronous reads of the server's store for assertions.</summary>
-    private sealed class InMemoryStoreView(IEventStore store, Guid session)
-    {
-        public List<SimEvent> All() => store.ReadAsync(session).ToBlockingEnumerable().ToList();
-        public int Count() => All().Count;
-    }
-
-    private static async Task Until(Func<bool> condition, TimeSpan limit)
-    {
-        var deadline = DateTime.UtcNow + limit;
-        while (!condition())
-        {
-            if (DateTime.UtcNow > deadline) throw new TimeoutException("Condition not met in time.");
-            await Task.Delay(20);
-        }
-    }
-
-    private static PerceivedState CopOf(SimulationConnection client)
-    {
-        var cop = new PerceivedState();
-        foreach (var simEvent in client.Mirror.ReadAsync(client.Session!.SessionId).ToBlockingEnumerable())
-            cop.Apply(simEvent);
-        return cop;
-    }
-
-    /// <summary>A fingerprint of a COP: what every view would show.</summary>
-    private static string Fingerprint(ICopService cop) => JsonSerializer.Serialize(new
-    {
-        cop.LastSequence,
-        Incidents = cop.Incidents.OrderBy(i => i.Id).Select(i => $"{i.Id}|{i.Number}|{i.Status}|{i.Priority}|{i.AssignedUnits.Count}"),
-        Units = cop.Units.OrderBy(u => u.Id).Select(u => $"{u.Id}|{u.Status}|{u.AssignedIncidentId}|{u.Location}"),
-        Reports = cop.Reports.Count,
-        Alerts = cop.Alerts.Count,
-        Comms = cop.CommsLog.Count,
-        Zones = cop.Zones.Count,
-        Orders = cop.Orders.Count,
-    });
-
     [Fact]
     public async Task Two_clients_see_the_same_COP_as_the_server()
     {
-        await using var server = await InProcessServer.StartAsync();
-        var a = await server.ConnectAsync();
-        var b = await server.ConnectAsync();
+        await using var server = await StartAsync();
+        var a = await server.JoinAsync("Alex", UserRole.IncidentCommander);
+        var b = await server.JoinAsync("Bea", UserRole.Operations);
         var c2 = RemoteProxy.Create<IC2Service>(a, SimulationHubProtocol.Services.C2);
 
         // A trainee on client A opens an incident and dispatches; the scenario plays on for three minutes.
@@ -157,9 +46,9 @@ public class ServerClientTests
     [Fact]
     public async Task A_trainee_connection_never_receives_truth_and_the_instructor_receives_everything()
     {
-        await using var server = await InProcessServer.StartAsync();
-        var trainee = await server.ConnectAsync();
-        var instructor = await server.ConnectAsync(SimulationHubProtocol.InstructorRole, Pin);
+        await using var server = await StartAsync();
+        var trainee = await server.JoinAsync("Alex", UserRole.IncidentCommander);
+        var instructor = server.Instructor;
         Assert.False(trainee.Session!.Truth);
         Assert.True(instructor.Session!.Truth);
 
@@ -196,15 +85,16 @@ public class ServerClientTests
     [Fact]
     public async Task A_wrong_instructor_PIN_is_refused()
     {
-        await using var server = await InProcessServer.StartAsync();
-        await Assert.ThrowsAnyAsync<Exception>(() => server.ConnectAsync(SimulationHubProtocol.InstructorRole, "0000"));
+        await using var server = await StartAsync();
+        var refused = await Assert.ThrowsAnyAsync<Exception>(() => server.JoinAsync("Mallory", UserRole.Instructor, pin: "0000"));
+        Assert.Contains("PIN", refused.Message);
     }
 
     [Fact]
     public async Task A_dropped_client_reconnects_and_resumes_with_no_gaps_or_duplicates()
     {
-        await using var server = await InProcessServer.StartAsync();
-        var client = await server.ConnectAsync();
+        await using var server = await StartAsync();
+        var client = await server.JoinAsync("Alex", UserRole.IncidentCommander);
         await server.StepAsync(TimeSpan.FromMinutes(1));
         await server.CaughtUpAsync(client);
         var before = client.Mirror.LastSequence;
@@ -221,8 +111,9 @@ public class ServerClientTests
         Assert.Equal(perceived, mirrored);
 
         // And it matches a client that joined fresh (a restarted app).
-        var fresh = await server.ConnectAsync();
+        var fresh = await server.JoinAsync("Bea", UserRole.Dispatcher);
         await server.CaughtUpAsync(fresh);
+        await server.CaughtUpAsync(client);
         Assert.Equal(Fingerprint(CopOf(fresh)), Fingerprint(CopOf(client)));
         Assert.Equal(Fingerprint(server.Cop), Fingerprint(CopOf(client)));
     }
@@ -230,8 +121,8 @@ public class ServerClientTests
     [Fact]
     public async Task A_command_returns_once_the_clients_own_COP_shows_its_result()
     {
-        await using var server = await InProcessServer.StartAsync();
-        var client = await server.ConnectAsync();
+        await using var server = await StartAsync();
+        var client = await server.JoinAsync("Alex", UserRole.IncidentCommander);
         var cop = new PerceivedState();
         cop.Follow(client.Mirror, client.Session!.SessionId);
         await server.CaughtUpAsync(client);
@@ -261,8 +152,8 @@ public class ServerClientTests
         Assert.Contains(CommandDispatcher.Callable, c => c.Method.Name == nameof(IIapService.PullFromCopAsync));
         Assert.DoesNotContain(CommandDispatcher.Callable, c => c.Method.Name == nameof(IAarService.ReplayToAsync)); // runs on the client
 
-        await using var server = await InProcessServer.StartAsync();
-        var client = await server.ConnectAsync();
+        await using var server = await StartAsync();
+        var client = await server.JoinAsync("Pat", UserRole.Planning);
         var c2 = RemoteProxy.Create<IC2Service>(client, SimulationHubProtocol.Services.C2);
         var iap = RemoteProxy.Create<IIapService>(client, SimulationHubProtocol.Services.Iap);
         var incident = (await c2.CreateIncidentAsync(IncidentType.Explosion, IncidentPriority.High, BarrowStreetScenario.FireLocation)).EntityId!.Value;
@@ -280,7 +171,7 @@ public class ServerClientTests
         Assert.Equal("Contain the fire and protect the chemical store.",
             CopOf(client).ActionPlans.Single().Content.CommandersIntent);
 
-        var clock = new RemoteSimulationControl(client);
+        var clock = new RemoteSimulationControl(server.Instructor); // the clock is the instructor's
         await clock.SetTimeScaleAsync(10);
         await Until(() => clock.TimeScale == 10, TimeSpan.FromSeconds(5));
         Assert.Equal(server.Engine.SessionId, clock.SessionId);

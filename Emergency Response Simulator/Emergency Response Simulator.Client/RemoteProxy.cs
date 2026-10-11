@@ -54,7 +54,16 @@ public class RemoteProxy : DispatchProxy
 
     private async Task<T?> CallAsync<T>(string method, JsonElement[] args, CancellationToken cancellationToken)
     {
-        var result = await _connection.CallAsync(_service, method, args, cancellationToken);
+        JsonElement? result;
+        try
+        {
+            result = await _connection.CallAsync(_service, method, args, cancellationToken);
+        }
+        catch (Microsoft.AspNetCore.SignalR.HubException ex) when (typeof(T) == typeof(CommandResult))
+        {
+            // The session refused it (not started, ended, not this role's to give): a command that failed, as standalone.
+            return (T)(object)CommandResult.Fail(RemoteErrors.Message(ex));
+        }
         var value = result is { ValueKind: not JsonValueKind.Null } json ? json.Deserialize<T>(WireJson.Options) : default;
         if (value is CommandResult { Succeeded: true, EventSequence: { } sequence })
             await _connection.Mirror.WaitForAsync(sequence, EchoTimeout, cancellationToken);

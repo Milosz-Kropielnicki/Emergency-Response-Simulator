@@ -168,8 +168,10 @@ public sealed class SimulationEngine : ISimulationControl, IEventPublisher, IWor
     private async Task<SimEvent> AppendLockedAsync(
         EventVisibility visibility, string source, DomainEvent payload, CancellationToken cancellationToken)
     {
+        // A networked command runs on behalf of a participant (Phase 11): the server set who, from the connection.
+        var actor = CommandContext.Ambient.Actor;
         var appended = await _store.AppendAsync(
-            new SimEventDraft(SessionId, SimTime, visibility, source, payload), cancellationToken);
+            new SimEventDraft(SessionId, SimTime, visibility, source, payload, actor?.ParticipantId, actor?.Role), cancellationToken);
         World.Apply(appended);
         return appended;
     }

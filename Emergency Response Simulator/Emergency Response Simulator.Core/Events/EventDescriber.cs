@@ -19,16 +19,19 @@ public static class EventDescriber
     /// <param name="unitName">Resolves a unit id to its callsign.</param>
     /// <param name="incidentName">Resolves an incident id to its number.</param>
     /// <param name="agencyName">Resolves an agency id to its name.</param>
+    /// <param name="participantName">Resolves a participant id to their name.</param>
     /// <returns>Null for events that are bookkeeping rather than history (e.g. AVL fixes).</returns>
     public static TimelineEntry? Describe(
         SimEvent simEvent,
         Func<Guid, string?> unitName,
         Func<Guid, string?> incidentName,
-        Func<Guid, string?>? agencyName = null)
+        Func<Guid, string?>? agencyName = null,
+        Func<Guid, string?>? participantName = null)
     {
         string Unit(Guid id) => unitName(id) ?? "Unknown unit";
         string Incident(Guid id) => incidentName(id) ?? "unknown incident";
         string Agency(Guid id) => agencyName?.Invoke(id) ?? "Agency";
+        string Participant(Guid id) => participantName?.Invoke(id) ?? "A participant";
 
         TimelineEntry Entry(string category, string text, Guid? incident = null, Guid? unit = null, bool important = false) =>
             new(simEvent.Sequence, simEvent.SimTime, simEvent.Visibility, category, text, incident, unit, important);
@@ -184,6 +187,13 @@ public static class EventDescriber
                 $"{e.Issuer}: \"{e.Text}\"", e.IncidentId, important: e.Conflicting),
             MediaEnquiryReceived e => Entry("MEDIA", $"{e.Outlet}: \"{e.Question}\"", e.IncidentId),
             InformationHeld e => Entry("TRUTH", $"{Agency(e.AgencyId)} knows (not yet shared): {e.Claim}"),
+            // Sessions (Phase 11)
+            SessionOpened e => Entry("SESSION", $"Session opened: {e.Title} ({e.Scenario})", important: true),
+            SessionEnded e => Entry("SESSION", $"Session ended: {e.Reason}", important: true),
+            ParticipantJoined e => Entry("SESSION", $"{e.DisplayName} joined as {Roles.Name(e.Role)}"),
+            ParticipantLeft e => Entry("SESSION", $"{Participant(e.ParticipantId)} left ({e.Reason})"),
+            RoleAssigned e => Entry("SESSION", $"{Participant(e.ParticipantId)} is now {Roles.Name(e.Role)}", important: true),
+            RoleHandedOver e => Entry("SESSION", $"{Participant(e.FromParticipantId)} handed {Roles.Name(e.Role)} to {Participant(e.ToParticipantId)}", important: true),
             UnitPositionReported => null, // dozens per minute; shown on the map instead
             _ => Entry(simEvent.Type.ToUpperInvariant(), simEvent.Type),
         };

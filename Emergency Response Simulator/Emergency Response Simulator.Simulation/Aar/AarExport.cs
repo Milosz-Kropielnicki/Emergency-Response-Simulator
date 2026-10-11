@@ -97,6 +97,18 @@ public static class AarExport
                         $"<td>{E(branch.Recommended)}<div class=\"muted\">Alternative: {E(branch.Alternative)}</div></td><td>{E(branch.Effect)}</td><td>{Pill(branch.Rating)}</td></tr>");
         html.Append("</table>");
 
+        // Participants (networked sessions).
+        if (report.Participants.Count > 0)
+        {
+            html.Append("<h2>Participants</h2><table><tr><th>Name</th><th>Roles</th><th class=\"num\">Time in session</th><th class=\"num\">Commands</th><th class=\"num\">Good / fair / poor</th><th class=\"num\">Mean response</th><th class=\"num\">Score</th><th>Mostly</th></tr>");
+            foreach (var person in report.Participants)
+                html.Append($"<tr><td><b>{E(person.Name)}</b></td><td>{E(person.Roles)}</td><td class=\"num\">{E(AarAnalyzer.Duration(person.Present))}</td>" +
+                            $"<td class=\"num\">{person.Commands}</td><td class=\"num\">{person.Good} / {person.Fair} / {person.Poor}</td>" +
+                            $"<td class=\"num\">{(person.MeanResponse is { } mean ? E(AarAnalyzer.Duration(mean)) : "—")}</td>" +
+                            $"<td class=\"num\">{(person.Score is { } score ? score.ToString(CultureInfo.InvariantCulture) : "—")}</td><td class=\"muted\">{E(person.Focus)}</td></tr>");
+            html.Append("</table>");
+        }
+
         // Metrics.
         html.Append("<h2>Performance metrics</h2>");
         foreach (var group in report.Metrics.GroupBy(m => m.Category))
@@ -137,7 +149,7 @@ public static class AarExport
         html.Append("<h2>Decision timeline</h2><table><tr><th>Time</th><th>Decision</th><th>Prompted by</th><th class=\"num\">Took</th><th>What you knew</th><th>What was really happening</th><th></th></tr>");
         foreach (var decision in report.Decisions)
         {
-            html.Append($"<tr><td>{Clock(decision.At)}</td><td><b>{E(decision.Category)}</b> {E(decision.Decision)}{(decision.Note is { } note ? $"<div class=\"muted\">{E(note)}</div>" : "")}</td>" +
+            html.Append($"<tr><td>{Clock(decision.At)}</td><td><b>{E(decision.Category)}</b> {E(decision.Decision)}{(decision.Actor is { } actor ? $"<div class=\"muted\">By {E(actor)}</div>" : "")}{(decision.Note is { } note ? $"<div class=\"muted\">{E(note)}</div>" : "")}</td>" +
                         $"<td>{E(decision.Trigger ?? "—")}</td><td class=\"num\">{(decision.ResponseTime is { } t ? E(AarAnalyzer.Duration(t)) : "—")}</td>" +
                         $"<td class=\"muted\">{E(decision.Known)}</td><td class=\"muted\">{E(decision.Truth)}</td><td>{Pill(decision.Rating)}</td></tr>");
         }
@@ -240,14 +252,18 @@ public static class AarExport
         foreach (var decision in report.Decisions)
             Row("Decision", decision.At, decision.Category, decision.Decision,
                 decision.ResponseTime is { } taken ? AarAnalyzer.Duration(taken) : "", decision.Trigger ?? "", Label(decision.Rating),
-                $"Knew: {decision.Known}. Truth: {decision.Truth}." + (decision.Note is { } note ? $" {note}" : ""));
+                $"Knew: {decision.Known}. Truth: {decision.Truth}." + (decision.Note is { } note ? $" {note}" : "") +
+                (decision.Actor is { } actor ? $" By {actor}." : ""));
+        foreach (var person in report.Participants)
+            Row("Participant", person.JoinedAt, person.Roles, person.Name, $"{person.Commands} commands", AarAnalyzer.Duration(person.Present),
+                person.Score?.ToString(CultureInfo.InvariantCulture) ?? "", $"Good {person.Good}, fair {person.Fair}, poor {person.Poor}. {person.Focus}.");
         foreach (var unit in report.Units)
             Row("Unit", null, unit.Type, unit.Callsign, unit.Committed.ToString("P0", CultureInfo.InvariantCulture), "", "",
                 unit.DelayedEnRoute is { } delayed ? $"Delayed en route {AarAnalyzer.Duration(delayed)}" : "");
         foreach (var delay in report.Delays)
             Row("Delay", delay.At, delay.Callsign, delay.Where, AarAnalyzer.Duration(delay.Lost), "", "", delay.Cause);
         foreach (var entry in report.Timeline)
-            Row(entry.IsTruth ? "Truth" : entry.IsDecision ? "Command" : "Event", entry.At, entry.Category, entry.Text, "", "", "", "");
+            Row(entry.IsTruth ? "Truth" : entry.IsDecision ? "Command" : "Event", entry.At, entry.Category, entry.Text, "", "", "", entry.Actor ?? "");
         return csv.ToString();
     }
 

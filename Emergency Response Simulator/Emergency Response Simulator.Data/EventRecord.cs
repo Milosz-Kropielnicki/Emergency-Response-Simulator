@@ -21,6 +21,11 @@ public class EventRecord
     /// <summary>The <see cref="DomainEvent"/> as JSON (jsonb).</summary>
     public required string Payload { get; set; }
 
+    /// <summary>The participant whose command produced the event (Phase 11); null for the engine and standalone sessions.</summary>
+    public Guid? ActorId { get; set; }
+
+    public Core.Model.UserRole? ActorRole { get; set; }
+
     public SimEvent ToSimEvent() => new()
     {
         Sequence = Sequence,
@@ -30,5 +35,7 @@ public class EventRecord
         Visibility = Visibility,
         Source = Source,
         Payload = EventJson.Deserialize(Payload),
+        ActorId = ActorId,
+        ActorRole = ActorRole,
     };
 }

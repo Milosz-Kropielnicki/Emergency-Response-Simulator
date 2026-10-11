@@ -1,10 +1,7 @@
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Data;
-using Emergency_Response_Simulator.Simulation;
-using Emergency_Response_Simulator.Simulation.Engine;
 using Emergency_Response_Simulator.Simulation.EventStore;
 using Emergency_Response_Simulator.Simulation.Remote;
-using Emergency_Response_Simulator.Simulation.Scenarios;
 
 namespace Emergency_Response_Simulator.Server;
 
@@ -21,6 +18,7 @@ public static class ServerHost
         builder.Services.Configure<ServerOptions>(builder.Configuration.GetSection(ServerOptions.SectionName));
 
         // Decision D4: a networked exercise keeps its record in PostgreSQL. In-memory only when explicitly allowed (dev, tests).
+        // Every session shares the store (events are keyed by session) and the GIS database.
         var connectionString = builder.Configuration.GetConnectionString("Ers");
         var inMemory = string.IsNullOrWhiteSpace(connectionString);
         if (!inMemory)
@@ -31,9 +29,8 @@ public static class ServerHost
             throw new InvalidOperationException(
                 "The server needs PostgreSQL (ConnectionStrings:Ers). For development or tests, set Server:AllowInMemoryStore=true.");
 
-        builder.Services.AddSimulation(builder.Configuration);
-        builder.Services.AddSingleton<IScenario, DemoRosterScenario>();
-        builder.Services.AddSingleton<EventFeed>();
+        // Each session builds its own engine and services when an instructor opens it (SessionRuntime).
+        builder.Services.AddSingleton<SessionManager>();
         builder.Services.AddSingleton<CommandDispatcher>();
         builder.Services.AddHostedService<Broadcaster>();
         builder.Services.AddSignalR(hub => hub.MaximumReceiveMessageSize = 4 * 1024 * 1024)
@@ -43,8 +40,9 @@ public static class ServerHost
         var app = builder.Build();
         app.UseWebSockets();
         app.MapHub<SimulationHub>(SimulationHubProtocol.Path);
-        app.MapGet("/", (SimulationSession session, EventFeed feed) =>
-            Results.Text($"Emergency Response Simulator server. Session {session.Id}; {feed.Subscribers} client(s) streaming."));
+        app.MapGet("/", (SessionManager sessions) => Results.Text(
+            "Emergency Response Simulator server.\n" + string.Join('\n', sessions.All.Select(s =>
+                $"{s.Title} [{s.State}] code {s.Code}: {s.Participants.Count(p => p.Present)} participant(s)"))));
         app.Logger.LogInformation("Simulation server: event store {Store}; clients connect to {Path}",
             inMemory ? "in-memory (development)" : "PostgreSQL", SimulationHubProtocol.Path);
         return app;

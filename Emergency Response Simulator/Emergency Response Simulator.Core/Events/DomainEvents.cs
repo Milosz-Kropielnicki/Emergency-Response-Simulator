@@ -109,6 +109,13 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(SitrepSubmitted), nameof(SitrepSubmitted))]
 [JsonDerivedType(typeof(PublicStatementIssued), nameof(PublicStatementIssued))]
 [JsonDerivedType(typeof(MediaEnquiryReceived), nameof(MediaEnquiryReceived))]
+// Sessions and participants (Phase 11)
+[JsonDerivedType(typeof(SessionOpened), nameof(SessionOpened))]
+[JsonDerivedType(typeof(SessionEnded), nameof(SessionEnded))]
+[JsonDerivedType(typeof(ParticipantJoined), nameof(ParticipantJoined))]
+[JsonDerivedType(typeof(ParticipantLeft), nameof(ParticipantLeft))]
+[JsonDerivedType(typeof(RoleAssigned), nameof(RoleAssigned))]
+[JsonDerivedType(typeof(RoleHandedOver), nameof(RoleHandedOver))]
 // Truth: multi-agency (Phase 10)
 [JsonDerivedType(typeof(InformationHeld), nameof(InformationHeld))]
 // Truth: the world as it really is
@@ -594,6 +601,26 @@ public sealed record PublicStatementIssued(Guid StatementId, Guid? IncidentId, s
 
 /// <summary>A journalist wants to know what is going on.</summary>
 public sealed record MediaEnquiryReceived(Guid EnquiryId, Guid? IncidentId, string Outlet, string Question) : DomainEvent;
+
+// ---- Sessions and participants (Phase 11 M2) ----
+
+/// <summary>An instructor opened a networked session on a scenario; people can join it from the lobby.</summary>
+public sealed record SessionOpened(string Scenario, string Title, Guid CreatedBy) : DomainEvent;
+
+/// <summary>The instructor ended the session: no more commands; the record stays for the review.</summary>
+public sealed record SessionEnded(string Reason, Guid? EndedBy) : DomainEvent;
+
+/// <summary>Someone joined (or rejoined) the session, in a role.</summary>
+public sealed record ParticipantJoined(Guid ParticipantId, string DisplayName, UserRole Role) : DomainEvent;
+
+/// <summary>Someone left, or dropped and didn't come back in time.</summary>
+public sealed record ParticipantLeft(Guid ParticipantId, string Reason) : DomainEvent;
+
+/// <summary>The instructor put a participant in a role.</summary>
+public sealed record RoleAssigned(Guid ParticipantId, UserRole Role) : DomainEvent;
+
+/// <summary>The holder of a role handed it to someone else, and took <paramref name="FromNewRole"/> themselves.</summary>
+public sealed record RoleHandedOver(Guid FromParticipantId, Guid ToParticipantId, UserRole Role, UserRole FromNewRole) : DomainEvent;
 
 /// <summary>Truth: something an agency knows, which command only learns if the agency shares it (information silos).</summary>
 /// <param name="Urgent">Matters to life safety: shared first, even by an agency that is not cooperating well.</param>

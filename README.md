@@ -608,13 +608,13 @@ The other agencies are now joint partners with priorities and knowledge of their
   - **Mutual-aid agreements**.
   - For the instructor, the truth comparison lists everything agencies know and haven't shared.
 
-## Server & clients (Phase 11, M1)
+## Server & clients (Phase 11, M1–M2)
 
 The engine, event store and live COP can now run once, on a **simulation server**, with any number of WPF clients connected over SignalR. Standalone (everything in one process, as before) is still the default.
 
 **How it fits together:**
 - **Event feed** (`EventFeed`): a client asks for the stream after the last sequence it applied. The server queues live events for it at once, sends the history from the store, then drains the queue, skipping what the history covered. So nothing is missed or sent twice, and one pump per connection keeps the stream in order.
-- **Visibility is decided on the server:** a connection that isn't the instructor never has a truth event queued, read or sent. The instructor connection joins the `truth` group.
+- **Visibility is decided on the server:** a connection that isn't an instructor never has a truth event queued, read or sent. Instructors join their session's `truth` group.
 - **The client** (`SimulationConnection`) keeps a `MirrorEventStore`: the server's events with the server's sequence numbers. The COP (`PerceivedState`), AVL trails, the timeline, the comms log and replay run on it unchanged. When the link drops it reconnects (0, 2, 5, then every 10 s, without a limit) and resumes from its last sequence.
 - **Commands:** `RemoteProxy` implements `IC2Service` and `IIapService` for every interface method, one for one, with no hand-written forwarding. On the server, `CommandDispatcher` runs the call on the real service, which validates it against the server's live COP as in standalone. A successful command returns only once the client's own COP shows its result.
   - `ISimulationControl`: start, pause and speed go to the server; the clock comes from its pushes and moves on locally between them.
@@ -623,24 +623,51 @@ The engine, event store and live COP can now run once, on a **simulation server*
 - **Pushes** (`Broadcaster`): the clock to everyone every 0.5 s; the reported traffic feed when it refreshes; and to the `truth` group only, the `WorldSnapshot` and live traffic about once a second.
 - **Wire format** (`WireJson`): `EventJson` plus value tuples and NTS geometries (as WKT).
 
+### Sessions, identity, attribution, concurrency (M2)
+
+- **Lifecycle:** create (pick a scenario) → lobby → join (code, name, role) → the instructor starts → end.
+  - An instructor opens a session with the server's PIN, picking a scenario (`ScenarioCatalog`: Barrow Street, or free play). The server builds that session its own engine, world, COP and services (`SessionRuntime`), sharing only the event store (keyed by session) and the GIS database, so several sessions can run at once.
+  - The instructor gets a 6-character **join code** (no look-alike characters). It stops letting anyone new in when the session ends or after `Server:JoinCodeLifetime` (12 h).
+  - In the **lobby** the clock is stopped and C2/IAP commands are refused ("wait for the instructor"); people can look around. Only the instructor starts the exercise (the Start button, or the play button) and controls the clock.
+  - **Ending** stops the clock for good and refuses commands and new joins. The record stays, and from then on everyone can open the review.
+  - Events: `SessionOpened`, `ParticipantJoined`, `ParticipantLeft`, `RoleAssigned`, `RoleHandedOver`, `SessionEnded` (perceived, so they're in everyone's stream and the AAR).
+- **Identity** (decision D3): a display name and a role. There are no accounts, and an instructor also needs the PIN.
+  - The IC, the command staff and the section chiefs are **one person at a time**; dispatchers, agency chiefs, instructors and observers can be several.
+  - The instructor can **assign** roles. A role holder can **hand over** to someone present and take another role. The instructor role can only be joined with the PIN, never given.
+  - Each participant gets a **reconnect token** (kept in the client's memory only): after a dropped link the client takes its place back as the same person.
+  - Away longer than `Server:DropGrace` (60 s), they count as gone (`ParticipantLeft`, which frees an exclusive role). Coming back later is a rejoin; if their position was filled meanwhile, they come back as an observer.
+- **Attribution:** every event carries `ActorId` and `ActorRole` on the envelope (with an `events` table migration, `EventActors`).
+  - The server sets an ambient `ICommandContext` (AsyncLocal) from the connection's identity around each call. The engine stamps whoever it names on the events the call records. Nothing a client sends says who it is.
+  - The engine's own work, scenarios, AI parties and standalone sessions have no actor. Starting the clock carries the instructor.
+- **Concurrency:** each session's **`CommandGate`** runs C2 and IAP commands one at a time, so each is checked against a COP that already holds every earlier command's result. Two players dispatching the same unit at once: one succeeds, the other is told it isn't available.
+- **AAR:**
+  - Decisions and timeline entries name who gave the command and in which role.
+  - A **Participants** table shows roles over time, time in the session, commands, how their own decisions rated, mean response time, score, and what most of their commands were about.
+  - The decisions and timeline tabs filter by participant (`AarReport.DecisionsOf` / `TimelineOf`). The HTML and CSV exports include both.
+- **Clients:**
+  - The **join dialog** (server, name; join with code and role, or open a session as instructor) appears unless the command line says it all.
+  - The **SESSION** tab (client mode only) shows the session, code and state, and who is in it. The instructor gets Start, End and Assign; anyone can hand their own role over.
+  - The header shows the code and who you are. A refused command shows the server's reason, as standalone failures do.
+
 **Running it:**
 
 ```powershell
-# Server: PostgreSQL required (decision D4); set the instructor PIN in its configuration, not the clients'.
+# Server: PostgreSQL required (decision D4); the instructor PIN lives in its configuration, not the clients'.
 dotnet run --project "Emergency Response Simulator.Server" -- --Server:InstructorPin=2468
 # Development without a database:
 dotnet run --project "Emergency Response Simulator.Server" -- --ConnectionStrings:Ers= --Server:AllowInMemoryStore=true --Server:InstructorPin=2468
 
-# A trainee client, and the instructor's
-"Emergency Response Simulator.exe" --Mode=Client --Server=http://training-pc:5180
-"Emergency Response Simulator.exe" --Mode=Client --Server=http://training-pc:5180 --Role=Instructor --Pin=2468
+# The instructor opens a session (or leave the options off and use the join dialog)
+"Emergency Response Simulator.exe" --Mode=Client --Server=http://training-pc:5180 --Create=barrow-street --Name=Ines --Pin=2468 --Title="Blue watch"
+# Trainees join with the code the instructor reads out
+"Emergency Response Simulator.exe" --Mode=Client --Server=http://training-pc:5180 --Code=8X6UF9 --Name=Alex --Role=IncidentCommander
 ```
 
-- The server listens on port 5180 (`Urls` in its `appsettings.json`), plays Barrow Street (`Simulation:Scenario`), and shows its session and the number of streaming clients at `/`.
+- The server listens on port 5180 (`Urls` in its `appsettings.json`) and lists its sessions, codes and participants at `/`.
 - A client with a GIS database configured still loads the static map layers and road network from it; its events always come from the server.
 - Without a database, routing falls back to straight lines on both sides.
 
-**Not yet** (later milestones): sessions with join codes, lobby and attribution (M2), per-role permissions (M3), the instructor console (M4), observers (M6) and voice (M7). Until M2, the server runs one session for its lifetime.
+**Not yet** (later milestones): the permission matrix (M3), the instructor console (M4), observers (M6) and voice (M7).
 
 ## Local setup
 

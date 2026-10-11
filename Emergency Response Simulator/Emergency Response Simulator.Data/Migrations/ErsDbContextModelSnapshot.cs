@@ -664,6 +664,15 @@ namespace Emergency_Response_Simulator.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Sequence"));
 
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_id");
+
+                    b.Property<string>("ActorRole")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("actor_role");
+
                     b.Property<string>("Payload")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -701,6 +710,9 @@ namespace Emergency_Response_Simulator.Data.Migrations
 
                     b.HasKey("Sequence")
                         .HasName("pk_events");
+
+                    b.HasIndex("SessionId", "ActorId")
+                        .HasDatabaseName("ix_events_session_id_actor_id");
 
                     b.HasIndex("SessionId", "Sequence")
                         .HasDatabaseName("ix_events_session_id_sequence");

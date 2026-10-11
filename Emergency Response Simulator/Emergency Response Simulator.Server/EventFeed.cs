@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Emergency_Response_Simulator.Core.Events;
-using Emergency_Response_Simulator.Simulation.Engine;
 using Emergency_Response_Simulator.Simulation.Remote;
 using Microsoft.AspNetCore.SignalR;
 
@@ -22,15 +21,15 @@ public sealed class EventFeed : IDisposable
     public const int BatchSize = 500;
 
     private readonly IEventStore _store;
-    private readonly SimulationSession _session;
+    private readonly Guid _sessionId;
     private readonly IHubContext<SimulationHub, ISimulationClient> _hub;
     private readonly ILogger<EventFeed> _logger;
     private readonly ConcurrentDictionary<string, Subscriber> _subscribers = new();
 
-    public EventFeed(IEventStore store, SimulationSession session, IHubContext<SimulationHub, ISimulationClient> hub, ILogger<EventFeed> logger)
+    public EventFeed(IEventStore store, Guid sessionId, IHubContext<SimulationHub, ISimulationClient> hub, ILogger<EventFeed> logger)
     {
         _store = store;
-        _session = session;
+        _sessionId = sessionId;
         _hub = hub;
         _logger = logger;
         _store.Appended += OnAppended;
@@ -57,7 +56,7 @@ public sealed class EventFeed : IDisposable
 
     private void OnAppended(object? sender, SimEvent simEvent)
     {
-        if (simEvent.SessionId != _session.Id) return;
+        if (simEvent.SessionId != _sessionId) return;
         foreach (var subscriber in _subscribers.Values)
             if (Visible(simEvent, subscriber.Truth))
                 subscriber.Queue.Writer.TryWrite(simEvent);
@@ -72,7 +71,7 @@ public sealed class EventFeed : IDisposable
         try
         {
             // History the client hasn't applied yet.
-            await foreach (var simEvent in _store.ReadAsync(_session.Id, afterSequence, token))
+            await foreach (var simEvent in _store.ReadAsync(_sessionId, afterSequence, token))
             {
                 last = simEvent.Sequence;
                 if (!Visible(simEvent, subscriber.Truth)) continue;

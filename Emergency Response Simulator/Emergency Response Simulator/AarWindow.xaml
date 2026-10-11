@@ -124,6 +124,23 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
+                        <!-- Participants (networked sessions, Phase 11) -->
+                        <StackPanel Visibility="{Binding HasParticipants, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="PARTICIPANTS" Style="{StaticResource PanelHeader}" />
+                            <DataGrid ItemsSource="{Binding Participants}" Margin="0,0,0,12">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="140" />
+                                    <DataGridTextColumn Header="Roles" Binding="{Binding Roles}" Width="200" />
+                                    <DataGridTextColumn Header="In session" Binding="{Binding Time}" Width="90" />
+                                    <DataGridTextColumn Header="Commands" Binding="{Binding Commands}" Width="80" />
+                                    <DataGridTextColumn Header="Their decisions" Binding="{Binding Ratings}" Width="170" />
+                                    <DataGridTextColumn Header="Mean response" Binding="{Binding Response}" Width="100" />
+                                    <DataGridTextColumn Header="Score" Binding="{Binding Score}" Width="70" />
+                                    <DataGridTextColumn Header="Mostly" Binding="{Binding Focus}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+
                         <TextBlock Text="PERFORMANCE METRICS" Style="{StaticResource PanelHeader}" />
                         <DataGrid ItemsSource="{Binding Metrics}">
                             <DataGrid.Columns>
@@ -150,6 +167,10 @@
             <!-- ===== Decisions ===== -->
             <TabItem Header="DECISIONS">
                 <DockPanel Margin="8">
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6" Visibility="{Binding HasParticipants, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="Who:" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <ComboBox ItemsSource="{Binding ParticipantChoices}" SelectedItem="{Binding ParticipantFilter}" Width="320" HorizontalAlignment="Left" />
+                    </DockPanel>
                     <TextBlock DockPanel.Dock="Top" Style="{StaticResource Muted}" Margin="0,0,0,6"
                                Text="Every command you gave: what prompted it, how long it took, what the COP showed and what was really happening. 'COP then' shows the main window as it was at that moment." />
                     <DataGrid ItemsSource="{Binding Decisions}">
@@ -161,6 +182,7 @@
                                         <StackPanel>
                                             <TextBlock Style="{StaticResource Wrap}"><Run Text="{Binding Category, Mode=OneWay}" FontWeight="SemiBold" /> <Run Text="{Binding Decision, Mode=OneWay}" /></TextBlock>
                                             <TextBlock Text="{Binding Note}" Style="{StaticResource Muted}" FontStyle="Italic" />
+                                            <TextBlock Text="{Binding Actor}" Style="{StaticResource Muted}" Foreground="{StaticResource AccentBrush}" />
                                         </StackPanel>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
@@ -387,6 +409,10 @@
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
                         <CheckBox Content="Decisions and key events only" IsChecked="{Binding DecisionsOnly}" VerticalAlignment="Center" />
                         <CheckBox Content="Include ground truth" IsChecked="{Binding IncludeTruth}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                        <StackPanel Orientation="Horizontal" Margin="12,0,0,0" Visibility="{Binding HasParticipants, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="Who:" VerticalAlignment="Center" Margin="0,0,6,0" />
+                            <ComboBox ItemsSource="{Binding ParticipantChoices}" SelectedItem="{Binding ParticipantFilter}" Width="260" />
+                        </StackPanel>
                         <TextBlock Text="Every action, message and dispatch. 'COP' replays the main window to that moment." Style="{StaticResource Muted}"
                                    VerticalAlignment="Center" Margin="16,0,0,0" />
                     </StackPanel>
@@ -405,7 +431,7 @@
                                             CommandParameter="{Binding At}" />
                                     <TextBlock Grid.Column="1" Text="{Binding Time}" Foreground="{StaticResource MutedTextBrush}" />
                                     <TextBlock x:Name="Category" Grid.Column="2" Text="{Binding Category}" />
-                                    <TextBlock x:Name="Text" Grid.Column="3" Text="{Binding Text}" TextWrapping="Wrap" />
+                                    <TextBlock x:Name="Text" Grid.Column="3" TextWrapping="Wrap"><Run Text="{Binding Text, Mode=OneWay}" /> <Run Text="{Binding Actor, Mode=OneWay}" Foreground="{StaticResource AccentBrush}" /></TextBlock>
                                 </Grid>
                                 <DataTemplate.Triggers>
                                     <DataTrigger Binding="{Binding IsDecision}" Value="True">
