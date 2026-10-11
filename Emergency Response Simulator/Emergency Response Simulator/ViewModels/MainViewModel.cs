@@ -174,6 +174,15 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenAar() => AarRequested?.Invoke(this, EventArgs.Empty);
 
+    /// <summary>Raised when the instructor opens their console (Phase 11 M4).</summary>
+    public event EventHandler? ConsoleRequested;
+
+    /// <summary>The instructor in a networked session; anyone standalone, where one person runs everything.</summary>
+    public bool IsConsoleAvailable => !Session.IsNetworked || Session.IsInstructor;
+
+    [RelayCommand]
+    private void OpenConsole() => ConsoleRequested?.Invoke(this, EventArgs.Empty);
+
     /// <summary>The selected incident's planning state, e.g. "Period 1 (14:00–15:00) · v2 approved, briefed 14:20".</summary>
     [ObservableProperty] private string _planSummary = "";
 
@@ -624,6 +633,7 @@ public partial class MainViewModel : ObservableObject
         Crews.Refresh();
         Agencies.Refresh();
         Session.Refresh();
+        OnPropertyChanged(nameof(IsConsoleAvailable));
         Permissions.Refresh();
         RefreshZones();
         RefreshWeather();

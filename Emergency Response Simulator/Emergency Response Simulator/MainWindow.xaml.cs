@@ -30,6 +30,7 @@ namespace Emergency_Response_Simulator
                 services.GetRequiredService<LiveTraffic>());
             viewModel.IapRequested += (_, _) => ShowIapBuilder();
             viewModel.AarRequested += (_, _) => ShowAar(services);
+            viewModel.ConsoleRequested += (_, _) => ShowConsole(services);
             Loaded += async (_, _) =>
             {
                 await viewModel.Timeline.LoadAsync();
@@ -68,6 +69,26 @@ namespace Emergency_Response_Simulator
                 if (_aarWindow.WindowState == WindowState.Minimized)
                     _aarWindow.WindowState = WindowState.Normal;
                 _aarWindow.Activate();
+            }
+        }
+
+        private InstructorConsoleWindow? _consoleWindow;
+
+        /// <summary>The instructor console (Phase 11 M4), not owned by this window so it can sit on another screen.</summary>
+        private void ShowConsole(IServiceProvider services)
+        {
+            if (_consoleWindow is null)
+            {
+                _consoleWindow = new InstructorConsoleWindow(services.GetRequiredService<InstructorConsoleViewModel>());
+                _consoleWindow.Closed += (_, _) => _consoleWindow = null;
+                Closed += (_, _) => _consoleWindow?.Close();
+                _consoleWindow.Show();
+            }
+            else
+            {
+                if (_consoleWindow.WindowState == WindowState.Minimized)
+                    _consoleWindow.WindowState = WindowState.Normal;
+                _consoleWindow.Activate();
             }
         }
 

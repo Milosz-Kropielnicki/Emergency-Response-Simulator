@@ -105,6 +105,7 @@ public sealed class InteragencySystem : ISimulationSystem
                 ia.Invitations.Remove(invitation);
                 continue;
             }
+            if (world.PlayedByInstructor(Instructor.AiRoles.Agency(invitation.AgencyId))) continue; // the instructor answers (Phase 11 M4)
             var standing = ia.StandingOf(invitation.AgencyId);
             var delay = InvitationDelay * (LiaisonAt(world, invitation.IncidentId) ? 0.5 : 1) * (standing == AgencyStanding.Strained ? 1.5 : 1);
             if (context.SimTime - invitation.At < delay) continue;
@@ -121,13 +122,36 @@ public sealed class InteragencySystem : ISimulationSystem
                 CommsNet.Chat(context, agency.Name, $"{agency.Name}: {refusal}", new UnifiedCommandDeclined(invitation.IncidentId, invitation.AgencyId, refusal));
                 continue;
             }
-
-            var commander = CommanderOf(invitation.AgencyId, agency);
-            var text = $"{commander} ({agency.Name}) is at the command post and joins unified command: {stake}." +
-                       (agency.Priority is { } priority ? $" Our priority: {LowerFirst(priority)}." : "");
-            CommsNet.Chat(context, agency.Name, text,
-                new UnifiedCommandJoined(invitation.IncidentId, invitation.AgencyId, agency.Name, commander, agency.Priority));
+            Join(context, invitation, agency, $"{stake}." + (agency.Priority is { } priority ? $" Our priority: {LowerFirst(priority)}." : ""), null);
         }
+    }
+
+    private static void Join(SimulationContext context, PendingInvitation invitation, WorldAgency agency, string why, Guid? messageId)
+    {
+        var commander = CommanderOf(invitation.AgencyId, agency);
+        CommsNet.Chat(context, agency.Name, $"{commander} ({agency.Name}) is at the command post and joins unified command: {why}",
+            new UnifiedCommandJoined(invitation.IncidentId, invitation.AgencyId, agency.Name, commander, agency.Priority), null, messageId);
+    }
+
+    /// <summary>
+    /// The instructor answers an invitation to unified command as the agency (Phase 11 M4): it joins, or declines in their
+    /// words. Returns false when there is no such invitation waiting.
+    /// </summary>
+    public static bool AnswerInvitationByHand(SimulationContext context, Guid invitationId, bool join, string? text, Guid message)
+    {
+        var world = context.World;
+        var invitation = world.Interagency.Invitations.FirstOrDefault(i => i.Id == invitationId);
+        if (invitation is null || !world.Agencies.TryGetValue(invitation.AgencyId, out var agency)) return false;
+        world.Interagency.Invitations.Remove(invitation);
+        if (join)
+            Join(context, invitation, agency, string.IsNullOrWhiteSpace(text) ? "we'll work with you on this." : text.Trim(), message);
+        else
+        {
+            var refusal = string.IsNullOrWhiteSpace(text) ? "We won't be joining unified command." : text.Trim();
+            CommsNet.Chat(context, agency.Name, $"{agency.Name}: {refusal}", new UnifiedCommandDeclined(invitation.IncidentId, invitation.AgencyId, refusal),
+                null, message);
+        }
+        return true;
     }
 
     /// <summary>Why the agency has a part in the incident, or null when it has none.</summary>
@@ -176,17 +200,16 @@ public sealed class InteragencySystem : ISimulationSystem
         var ia = world.Interagency;
         foreach (var pending in ia.Assistance.ToList())
         {
+            if (world.PlayedByInstructor(Instructor.AiRoles.Agency(pending.Request.AgencyId))) continue; // the instructor answers (Phase 11 M4)
             if (context.SimTime - pending.At < AssistanceDelay) continue;
             ia.Assistance.Remove(pending);
             var request = pending.Request;
             if (!world.Agencies.TryGetValue(request.AgencyId, out var agency)) continue;
 
-            var fleet = world.Units.Values.Where(u => u.AgencyId == request.AgencyId && !u.BrokenDown).ToList();
-            var free = fleet.Where(u => u.Phase == ResponsePhase.Idle && u.OrderedIncidentId is null)
-                .OrderBy(u => world.Interagency.Incidents.TryGetValue(request.IncidentId, out var facts) ? GeoMath.DistanceMeters(u.Location, facts.Location) : 0)
-                .ToList();
+            var free = FreeUnits(world, request);
+            var fleet = world.Units.Values.Count(u => u.AgencyId == request.AgencyId && !u.BrokenDown);
             var share = ReserveShare(world, request.AgencyId, request.IncidentId);
-            var reserve = share >= 1 ? free.Count : (int)Math.Ceiling(fleet.Count * share);
+            var reserve = share >= 1 ? free.Count : (int)Math.Ceiling(fleet * share);
             var granted = Math.Clamp(free.Count - reserve, 0, request.Quantity);
             var units = free.Take(granted).ToList();
 
@@ -199,11 +222,40 @@ public sealed class InteragencySystem : ISimulationSystem
                         : free.Count > 0
                             ? $"we can't release any: the {free.Count} we have free {(free.Count == 1 ? "is" : "are")} our only cover."
                             : "nobody free: all our units are committed.";
-            context.EmitPerceived(new AgencyAssistanceDecided(request.RequestId, granted, units.Select(u => u.Id).ToList(), reason), EventSources.Comms);
-            foreach (var unit in units)
-                context.EmitPerceived(new UnitDispatched(unit.Id, request.IncidentId, null), EventSources.Engine);
-            CommsNet.Chat(context, agency.Name, $"{agency.Name}: {reason}", null, TimeSpan.Zero);
+            Release(context, request, agency, units, reason, null);
         }
+    }
+
+    private static List<WorldUnit> FreeUnits(WorldState world, AgencyAssistanceRequested request) =>
+        world.Units.Values.Where(u => u.AgencyId == request.AgencyId && !u.BrokenDown && u.Phase == ResponsePhase.Idle && u.OrderedIncidentId is null)
+            .OrderBy(u => world.Interagency.Incidents.TryGetValue(request.IncidentId, out var facts) ? GeoMath.DistanceMeters(u.Location, facts.Location) : 0)
+            .ToList();
+
+    private static void Release(SimulationContext context, AgencyAssistanceRequested request, WorldAgency agency, List<WorldUnit> units, string reason,
+        Guid? messageId)
+    {
+        context.EmitPerceived(new AgencyAssistanceDecided(request.RequestId, units.Count, units.Select(u => u.Id).ToList(), reason), EventSources.Comms);
+        foreach (var unit in units)
+            context.EmitPerceived(new UnitDispatched(unit.Id, request.IncidentId, null), EventSources.Engine);
+        CommsNet.Chat(context, agency.Name, $"{agency.Name}: {reason}", null, TimeSpan.Zero, messageId);
+    }
+
+    /// <summary>
+    /// The instructor answers a request for units as the agency (Phase 11 M4): sends up to <paramref name="quantity"/> of
+    /// its free units, nearest first, or none. Returns false when there is no such request waiting.
+    /// </summary>
+    public static bool AnswerAssistanceByHand(SimulationContext context, Guid requestId, bool grant, int? quantity, string? text, Guid message)
+    {
+        var world = context.World;
+        var pending = world.Interagency.Assistance.FirstOrDefault(a => a.Request.RequestId == requestId);
+        if (pending is null || !world.Agencies.TryGetValue(pending.Request.AgencyId, out var agency)) return false;
+        world.Interagency.Assistance.Remove(pending);
+        var units = grant ? FreeUnits(world, pending.Request).Take(Math.Clamp(quantity ?? pending.Request.Quantity, 0, pending.Request.Quantity)).ToList() : [];
+        var reason = !string.IsNullOrWhiteSpace(text) ? text.Trim()
+            : units.Count > 0 ? $"sending {Callsigns(units)}. They will work to your incident commander."
+            : "we can't release any units to you at the moment.";
+        Release(context, pending.Request, agency, units, reason, message);
+        return true;
     }
 
     /// <summary>The share of its fleet an agency keeps back for its own area when asked for help.</summary>
@@ -660,7 +712,8 @@ public sealed class InteragencySystem : ISimulationSystem
             }
 
             var count = _enquiries.GetValueOrDefault(incidentId);
-            if (context.SimTime >= next && count < 8)
+            // Taken over by the instructor (Phase 11 M4): journalists ring only when they play one.
+            if (context.SimTime >= next && count < 8 && !world.PlayedByInstructor(Instructor.AiRoles.Media))
             {
                 _enquiries[incidentId] = count + 1;
                 _nextEnquiry[incidentId] = context.SimTime + facts.Priority switch

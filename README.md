@@ -608,7 +608,7 @@ The other agencies are now joint partners with priorities and knowledge of their
   - **Mutual-aid agreements**.
   - For the instructor, the truth comparison lists everything agencies know and haven't shared.
 
-## Server & clients (Phase 11, M1–M3)
+## Server & clients (Phase 11, M1–M4)
 
 The engine, event store and live COP can now run once, on a **simulation server**, with any number of WPF clients connected over SignalR. Standalone (everything in one process, as before) is still the default.
 
@@ -705,7 +705,47 @@ dotnet run --project "Emergency Response Simulator.Server" -- --ConnectionString
   - The client switches to the new role's layout when the role changes; the header's picker offers every layout, including the full one.
   - Workspaces only arrange; permissions are separate.
 
-**Not yet** (later milestones): the instructor console (M4), AI role players (M5), observers (M6) and voice (M7).
+### Instructor console (M4)
+
+- **Its own window:**
+  - **Opening it:** the 🎛 Console button opens it for the instructor (or anyone, standalone); trainees don't get it.
+  - **As a separate client:** `--Console=true` starts the console on its own, e.g. on a second machine joined as `--Role=Instructor`; there can be several instructors.
+  - **The contract:** actions go through `IInstructorService` (`Core/Contracts`). The server lets only the instructor call it and runs it through the session's command gate.
+- **Injects:** the scenario script live, with each inject's time and state (in 2:30, waiting for its condition, fired 14:05, held, skipped).
+  - **Fire now:** early, whatever its time or condition.
+  - **Hold:** it waits past its time until released.
+  - **Release:** if its time has passed, it goes off at the next tick.
+  - **Skip:** it never goes off.
+  - **Ad hoc from the template library** (`InjectTemplates`): wind shift (reported or not), incident escalates, secondary incident, 999 call, unit breaks down, radio fails, road blocked, hospital under pressure, social media rumour. Each takes parameters with defaults and places itself relative to the largest live incident.
+  - **What's recorded:** every inject that goes off is recorded as `InjectFired`: on time from the script, early, or ad hoc. Holds and skips are recorded as `InjectHeld` / `InjectReleased` / `InjectSkipped`.
+- **Player monitor** (`PlayerMonitor`), from the event stream and the COP:
+  - each participant's commands, recent ones, and the time since their last;
+  - **idle** after 5 sim-minutes without a command (observers never count as idle);
+  - a live activity feed of who did what;
+  - unacknowledged alerts with their age;
+  - radio load per channel (on air, emergency traffic);
+  - **bookmarks** for the debrief (`InstructorBookmarked`, optionally about a participant).
+- **Role-play:** speak as anyone, recorded as `InstructorRolePlay`. It reaches command through the usual comms, with their delays, black spots and busy channels:
+  - **a crew on a radio channel:** a voice transmission and a field report;
+  - **another agency, utility or hospital:** a chat message;
+  - **a 999 caller:** a call in the queue;
+  - **a journalist ringing command:** a media enquiry the PIO must answer;
+  - **an official asking for a decision:** an approval request.
+- **Take over and hand back AI roles** (the role-player registry). Taken over, a role's decisions wait in the console for the instructor, who answers in the role's name (`AiRoleTakenOver` / `AiRoleHandedBack`, held in `WorldState.HumanRoles`):
+  - **Regional Duty Officer:** mutual aid, including requests under the agreements.
+  - **National Directorate:** specialist teams, and mutual aid outside the agreements.
+  - **Outside organisations:** replies to notifications.
+  - **The media:** journalists ring only when the instructor plays one.
+  - **Each AI-run agency's control room:** its own jobs and initiative, and its answers to invitations to unified command and requests for units.
+
+  The systems that played them (`CommandResponseSystem`, `InteragencySystem`, `AgencyAiSystem`) carry on with everything else. A hand-made decision goes down the same path as an automatic one: approved mutual aid sets off with the usual lead time and counts against its agreement. Hand a role back and the simulation answers whatever is still waiting.
+- **Hidden from the trainees:** everything the instructor does is ground truth stamped with the instructor, so trainees see only its effect in the world: the call, the message, the wind change once reported.
+- **In the review:**
+  - An **Instructor** table lists injects fired early, held, skipped or made ad hoc, role-play, roles taken over and handed back, decisions made in a role, and bookmarks. Injects that went off on time are counted rather than listed.
+  - In the timeline, whatever the role-play produced in the world (the message, call, enquiry, report, approval request or decision) shows as "Instructor role-play as …". The trainee's own commands are never marked.
+  - The HTML and CSV exports include both.
+
+**Not yet** (later milestones): AI role players for unfilled positions (M5), observers (M6) and voice (M7).
 
 ## Local setup
 

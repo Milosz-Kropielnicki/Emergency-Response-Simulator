@@ -1,9 +1,11 @@
 using System.Windows;
 using Emergency_Response_Simulator.Client;
+using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Model;
 using Emergency_Response_Simulator.Data;
 using Emergency_Response_Simulator.Simulation;
+using Emergency_Response_Simulator.Simulation.Engine;
 using Emergency_Response_Simulator.Simulation.EventStore;
 using Emergency_Response_Simulator.Simulation.Remote;
 using Emergency_Response_Simulator.Simulation.Scenarios;
@@ -74,11 +76,18 @@ namespace Emergency_Response_Simulator
             builder.Services.AddSingleton<InstructorViewModel>();
             builder.Services.AddSingleton<AarViewModel>();
             builder.Services.AddSingleton<MainViewModel>();
+            builder.Services.AddSingleton(sp => new InstructorConsoleViewModel(sp.GetRequiredService<IInstructorService>(), sp.GetRequiredService<CopView>(),
+                sp.GetRequiredService<IEventStore>(), sp.GetRequiredService<SimulationSession>(), sp.GetRequiredService<ISimulationControl>(),
+                sp.GetService<SimulationConnection>()));
             builder.Services.AddSingleton<MainWindow>();
 
             _host = builder.Build();
 
-            var window = _host.Services.GetRequiredService<MainWindow>();
+            // --Console: a separate instructor client (Phase 11 M4), the console on its own (the COP stays on another machine or screen).
+            Window window = builder.Configuration.GetValue<bool>("Console") && _host.Services.GetRequiredService<InstructorConsoleViewModel>().IsAvailable
+                ? new InstructorConsoleWindow(_host.Services.GetRequiredService<InstructorConsoleViewModel>())
+                : _host.Services.GetRequiredService<MainWindow>();
+            MainWindow = window;
             window.Show();
 
             try

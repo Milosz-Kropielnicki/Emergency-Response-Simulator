@@ -60,7 +60,7 @@ public static class CommsNet
             : $"Control, {unit.Callsign}: {report.Claim}", report, priority);
 
     /// <summary>Someone without a tracked unit on the radio, e.g. a group supervisor reading back an order.</summary>
-    public static void Voice(SimulationContext context, string channel, string from, string text, DomainEvent? payload)
+    public static void Voice(SimulationContext context, string channel, string from, string text, DomainEvent? payload, Guid? id = null)
     {
         var radio = context.World.Radio;
         if (!radio.Active)
@@ -70,7 +70,7 @@ public static class CommsNet
         }
         radio.Outbox.Add(new Transmission
         {
-            Channel = channel, From = from, To = "Control", Text = text, Payload = payload,
+            Id = id ?? Guid.NewGuid(), Channel = channel, From = from, To = "Control", Text = text, Payload = payload,
             QueuedAt = context.SimTime, NotBefore = context.SimTime,
         });
     }
@@ -89,7 +89,7 @@ public static class CommsNet
     }
 
     /// <summary>A message from another organisation, arriving after the time it takes to phone or type it.</summary>
-    public static void Chat(SimulationContext context, string from, string text, DomainEvent? payload, TimeSpan? delay = null)
+    public static void Chat(SimulationContext context, string from, string text, DomainEvent? payload, TimeSpan? delay = null, Guid? id = null)
     {
         var radio = context.World.Radio;
         if (!radio.Active)
@@ -99,7 +99,7 @@ public static class CommsNet
         }
         radio.Outbox.Add(new Transmission
         {
-            Kind = TransmissionKind.Chat, Channel = RadioPlan.Chat, From = from, To = "Control", Text = text, Payload = payload,
+            Id = id ?? Guid.NewGuid(), Kind = TransmissionKind.Chat, Channel = RadioPlan.Chat, From = from, To = "Control", Text = text, Payload = payload,
             QueuedAt = context.SimTime, NotBefore = context.SimTime + (delay ?? TimeSpan.FromSeconds(20)),
         });
     }

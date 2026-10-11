@@ -189,7 +189,18 @@ public sealed class WorldInteragency
 
 public sealed record WorldJurisdiction(JurisdictionDeclared Info, Geometry Area);
 
-public sealed record PendingInvitation(Guid IncidentId, Guid AgencyId, DateTimeOffset At);
+public sealed record PendingInvitation(Guid IncidentId, Guid AgencyId, DateTimeOffset At)
+{
+    /// <summary>Stable for the incident and agency, so the instructor console can name it (Phase 11 M4).</summary>
+    public Guid Id { get; } = Mix(IncidentId, AgencyId);
+
+    private static Guid Mix(Guid a, Guid b)
+    {
+        var (x, y) = (a.ToByteArray(), b.ToByteArray());
+        for (var i = 0; i < 16; i++) x[i] ^= (byte)(y[(i + 5) % 16] + i);
+        return new Guid(x);
+    }
+}
 
 public sealed record PendingAssistance(AgencyAssistanceRequested Request, DateTimeOffset At);
 

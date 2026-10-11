@@ -99,6 +99,7 @@ public static class ServiceCollectionExtensions
                 configuration.GetValue<bool>($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.DemoAutoResponse)}")));
 
         services.AddSingleton<IC2Service, C2Service>();
+        services.AddSingleton<IInstructorService>(sp => new Instructor.InstructorService(sp.GetRequiredService<SimulationEngine>(), sp.GetServices<ISimulationSystem>()));
         services.AddSingleton<ICommsService>(sp => new CommsService(sp.GetRequiredService<ICopService>(), sp.GetRequiredService<IC2Service>(),
             sp.GetRequiredService<IEventStore>(), sp.GetRequiredService<SimulationSession>().Id));
         // Branch re-runs need a scripted scenario; they share the (read-only) road network and terrain once loaded.

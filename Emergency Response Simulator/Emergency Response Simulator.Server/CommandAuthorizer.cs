@@ -30,6 +30,10 @@ public static class CommandAuthorizer
                 throw new HubException("The exercise hasn't started yet: wait for the instructor.");
             case SimulationHubProtocol.Services.C2 or SimulationHubProtocol.Services.Iap when session.State == SessionState.Ended:
                 throw new HubException("The session has ended.");
+            case SimulationHubProtocol.Services.Instructor when !instructor:
+                throw new HubException("The instructor console is the instructor's.");
+            case SimulationHubProtocol.Services.Instructor when session.State == SessionState.Ended && !method.StartsWith("List", StringComparison.Ordinal):
+                throw new HubException("The session has ended.");
             case SimulationHubProtocol.Services.Aar when !participant.Truth && session.State != SessionState.Ended
                                                          && method is nameof(IAarService.BuildReportAsync) or nameof(IAarService.CompareBranchesAsync):
                 throw new HubException("Only the instructor can open the after-action review until the session has ended.");

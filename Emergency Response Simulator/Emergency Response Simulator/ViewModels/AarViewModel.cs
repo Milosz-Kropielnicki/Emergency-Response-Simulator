@@ -27,6 +27,9 @@ public sealed record AarTimelineRow(DateTimeOffset At, string Time, string Categ
 /// <summary>One participant's line in the review (networked sessions).</summary>
 public sealed record AarParticipantRow(string Name, string Roles, string Time, int Commands, string Ratings, string Response, string Score, string Focus);
 
+/// <summary>Something the instructor did to run the exercise (Phase 11 M4).</summary>
+public sealed record AarInstructorRow(string Time, string Kind, string Text);
+
 /// <summary>A choice in the participant filter: everyone (null) or one person.</summary>
 public sealed record ParticipantChoice(Guid? Id, string Label)
 {
@@ -95,6 +98,12 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
     public ObservableCollection<AarDelayRow> Delays { get; } = [];
     public ObservableCollection<AarTimelineRow> Timeline { get; } = [];
     public ObservableCollection<AarParticipantRow> Participants { get; } = [];
+
+    /// <summary>How the instructor ran the exercise (Phase 11 M4); scripted injects that went off on time are counted, not listed.</summary>
+    public ObservableCollection<AarInstructorRow> Instructor { get; } = [];
+
+    [ObservableProperty] private bool _hasInstructor;
+    [ObservableProperty] private string _instructorNote = "";
     public ObservableCollection<ParticipantChoice> ParticipantChoices { get; } = [];
 
     /// <summary>Shows only this participant's decisions and commands (networked sessions, Phase 11).</summary>
@@ -224,6 +233,7 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
         Replace(Findings, report.Findings);
         Replace(Metrics, report.Metrics.Select(m => new AarMetricRow(m.Category, m.Name, m.Display, m.Standard, m.Rating, AarExport.Label(m.Rating), m.Explanation)));
         FillParticipants(report);
+        FillInstructor(report);
         FillDecisions();
         Replace(Branches, report.Branches.Select(b => new AarBranchRow(b.Topic, b.At is { } at ? Clock(at) : "", b.Yours, b.Recommended, b.Alternative,
             b.Effect, b.Rating, AarExport.Label(b.Rating))));
@@ -291,6 +301,14 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
         Replace(Decisions, Report.DecisionsOf(ParticipantFilter?.Id).Select(d => new AarDecisionRow(d.At, Clock(d.At), d.Category, d.Decision,
             d.Trigger ?? "—", d.ResponseTime is { } t ? AarAnalyzer.Duration(t) : "—", d.Known, d.Truth, d.Rating, AarExport.Label(d.Rating), d.Note ?? "",
             d.Actor ?? "")));
+    }
+
+    private void FillInstructor(AarReport report)
+    {
+        var steered = report.Instructor.Where(a => a.Kind != "Inject (on time)").ToList();
+        HasInstructor = steered.Count > 0;
+        Replace(Instructor, steered.Select(a => new AarInstructorRow(Clock(a.At), a.Kind, a.Text)));
+        InstructorNote = $"{report.Instructor.Count(a => a.Kind == "Inject (on time)")} scripted inject(s) went off on time. Timeline entries marked as role-play were the instructor speaking or deciding as someone in the world.";
     }
 
     private void FillParticipants(AarReport report)

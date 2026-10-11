@@ -49,8 +49,16 @@ public sealed record AarDecision(
 
 /// <summary>A message or event in the replayable timeline (decisions, radio, dispatches, what happened).</summary>
 /// <param name="ActorId">The participant whose command it was (networked sessions, Phase 11).</param>
+/// <param name="RolePlay">Something the instructor said or decided as someone in the world (Phase 11 M4).</param>
 public sealed record AarTimelineEntry(long Sequence, DateTimeOffset At, string Category, string Text, bool IsDecision, bool IsTruth, bool Important,
-    Guid? ActorId = null, string? Actor = null);
+    Guid? ActorId = null, string? Actor = null, bool RolePlay = false);
+
+/// <summary>
+/// What the instructor did to run the exercise (Phase 11 M4): injects fired, held, released and skipped, role-play,
+/// roles taken over and handed back, and bookmarks.
+/// </summary>
+/// <param name="Kind">e.g. "Inject fired early", "Role-play", "Decision", "Bookmark".</param>
+public sealed record AarInstructorAction(DateTimeOffset At, string Kind, string Text, string? By);
 
 /// <summary>
 /// One participant in a networked session (Phase 11 M2): when they were there, the roles they held, and how their own
@@ -152,6 +160,9 @@ public sealed class AarReport
 
     /// <summary>Who took part (networked sessions); empty for a standalone session.</summary>
     public IReadOnlyList<AarParticipant> Participants { get; init; } = [];
+
+    /// <summary>How the instructor ran the exercise (Phase 11 M4), in time order.</summary>
+    public IReadOnlyList<AarInstructorAction> Instructor { get; init; } = [];
 
     /// <summary>The decisions one participant made (everyone's with null).</summary>
     public IEnumerable<AarDecision> DecisionsOf(Guid? participantId) =>

@@ -136,6 +136,29 @@ public sealed class SimulationEngine : ISimulationControl, IEventPublisher, IWor
         Stepped?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// Acts on the world now, between ticks and whether or not the clock runs (Phase 11 M4: the instructor firing an
+    /// inject, speaking as someone, deciding as an AI role). Runs like a system's update with no time passing, and
+    /// records what it emits as whoever the ambient command context names.
+    /// </summary>
+    public async Task<T> ApplyAsync<T>(Func<SimulationContext, T> action, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var context = new SimulationContext(World, SimTime, TimeSpan.Zero);
+            var result = action(context);
+            foreach (var (visibility, source, payload) in context.Emitted)
+                await AppendLockedAsync(visibility, source, payload, cancellationToken);
+            Snapshot = WorldSnapshot.Capture(World, SimTime);
+            return result;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     /// <summary>Ticks in real time until cancelled. The engine starts paused.</summary>
     public async Task RunAsync(CancellationToken cancellationToken)
     {

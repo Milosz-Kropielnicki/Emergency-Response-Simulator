@@ -24,6 +24,7 @@ public sealed class CommandDispatcher
         [SimulationHubProtocol.Services.Iap] = typeof(IIapService),
         [SimulationHubProtocol.Services.Control] = typeof(ISimulationControl),
         [SimulationHubProtocol.Services.Aar] = typeof(IAarService),
+        [SimulationHubProtocol.Services.Instructor] = typeof(IInstructorService),
     };
 
     private static readonly Dictionary<(string Service, string Method, int Args), MethodInfo> Methods = BuildTable();
@@ -109,7 +110,7 @@ public sealed class CommandDispatcher
             }
         }
 
-        var done = service is SimulationHubProtocol.Services.C2 or SimulationHubProtocol.Services.Iap
+        var done = service is SimulationHubProtocol.Services.C2 or SimulationHubProtocol.Services.Iap or SimulationHubProtocol.Services.Instructor
             ? await session.Gate.RunAsync(Run, cancellationToken)
             : await Run();
 

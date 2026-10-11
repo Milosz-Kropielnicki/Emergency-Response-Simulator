@@ -141,6 +141,23 @@
                             </DataGrid>
                         </StackPanel>
 
+                        <!-- How the instructor ran it (Phase 11 M4) -->
+                        <StackPanel Visibility="{Binding HasInstructor, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="INSTRUCTOR" Style="{StaticResource PanelHeader}" />
+                            <TextBlock Text="{Binding InstructorNote}" Style="{StaticResource Muted}" Margin="0,0,0,4" />
+                            <DataGrid ItemsSource="{Binding Instructor}" Margin="0,0,0,12">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="70" />
+                                    <DataGridTextColumn Header="What" Binding="{Binding Kind}" Width="230" />
+                                    <DataGridTemplateColumn Header="Detail" Width="*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate><TextBlock Text="{Binding Text}" Style="{StaticResource Wrap}" /></DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+
                         <TextBlock Text="PERFORMANCE METRICS" Style="{StaticResource PanelHeader}" />
                         <DataGrid ItemsSource="{Binding Metrics}">
                             <DataGrid.Columns>

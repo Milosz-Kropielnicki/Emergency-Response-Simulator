@@ -118,6 +118,15 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(RoleHandedOver), nameof(RoleHandedOver))]
 [JsonDerivedType(typeof(RoleHandoverBegun), nameof(RoleHandoverBegun))]
 [JsonDerivedType(typeof(RoleHandoverCancelled), nameof(RoleHandoverCancelled))]
+// Instructor console (Phase 11 M4): ground truth, so trainees never see the hand behind the scenario
+[JsonDerivedType(typeof(InjectFired), nameof(InjectFired))]
+[JsonDerivedType(typeof(InjectHeld), nameof(InjectHeld))]
+[JsonDerivedType(typeof(InjectReleased), nameof(InjectReleased))]
+[JsonDerivedType(typeof(InjectSkipped), nameof(InjectSkipped))]
+[JsonDerivedType(typeof(InstructorRolePlay), nameof(InstructorRolePlay))]
+[JsonDerivedType(typeof(AiRoleTakenOver), nameof(AiRoleTakenOver))]
+[JsonDerivedType(typeof(AiRoleHandedBack), nameof(AiRoleHandedBack))]
+[JsonDerivedType(typeof(InstructorBookmarked), nameof(InstructorBookmarked))]
 // Truth: multi-agency (Phase 10)
 [JsonDerivedType(typeof(InformationHeld), nameof(InformationHeld))]
 // Truth: the world as it really is
@@ -638,6 +647,39 @@ public sealed record RoleHandoverBegun(Guid HandoverId, Guid FromParticipantId, 
 
 /// <summary>A handover that didn't finish: one of the two left, or their roles changed meanwhile.</summary>
 public sealed record RoleHandoverCancelled(Guid HandoverId, string Reason) : DomainEvent;
+
+// ---- Instructor console (Phase 11 M4). All ground truth: trainees never see the hand behind the scenario. ----
+
+/// <summary>An inject went off: on time from the script, early at the instructor's word, or ad hoc from a template.</summary>
+/// <param name="Number">Its number in the scenario script; 0 for an ad-hoc inject.</param>
+/// <param name="Early">Fired by the instructor before its scripted time.</param>
+/// <param name="Template">The template an ad-hoc inject was made from.</param>
+public sealed record InjectFired(int Number, string Description, bool Early = false, string? Template = null) : DomainEvent;
+
+/// <summary>The instructor held a scripted inject: it won't go off at its time until released.</summary>
+public sealed record InjectHeld(int Number, string Description) : DomainEvent;
+
+/// <summary>A held inject is back on the script; if its time has passed it goes off at once.</summary>
+public sealed record InjectReleased(int Number, string Description) : DomainEvent;
+
+/// <summary>The instructor dropped a scripted inject from this run.</summary>
+public sealed record InjectSkipped(int Number, string Description) : DomainEvent;
+
+/// <summary>
+/// The instructor spoke or decided as someone in the world: a crew, an agency, a caller, a journalist, an official, or
+/// an AI role they had taken over. <paramref name="Refers"/> are the ids of what it produced in the world (the message,
+/// call, enquiry or decision), so the review can mark those as instructor role-play.
+/// </summary>
+public sealed record InstructorRolePlay(Guid RolePlayId, string Kind, string As, string? Channel, string Text, IReadOnlyList<Guid> Refers) : DomainEvent;
+
+/// <summary>The instructor took over a role the simulation was playing; its decisions wait for them.</summary>
+public sealed record AiRoleTakenOver(string RoleKey, string Name) : DomainEvent;
+
+/// <summary>The simulation plays the role again.</summary>
+public sealed record AiRoleHandedBack(string RoleKey, string Name) : DomainEvent;
+
+/// <summary>The instructor marked a moment to come back to in the debrief.</summary>
+public sealed record InstructorBookmarked(Guid BookmarkId, string Note, Guid? ParticipantId = null) : DomainEvent;
 
 /// <summary>Truth: something an agency knows, which command only learns if the agency shares it (information silos).</summary>
 /// <param name="Urgent">Matters to life safety: shared first, even by an agency that is not cooperating well.</param>

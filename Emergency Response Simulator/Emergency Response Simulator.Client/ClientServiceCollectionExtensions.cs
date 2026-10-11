@@ -48,6 +48,7 @@ public static class ClientServiceCollectionExtensions
         services.AddSingleton(RemoteProxy.Create<IIapService>(connection, SimulationHubProtocol.Services.Iap));
         services.AddSingleton<ISimulationControl>(new RemoteSimulationControl(connection));
         services.AddSingleton<IAarService>(new ClientAarService(connection));
+        services.AddSingleton(RemoteProxy.Create<IInstructorService>(connection, SimulationHubProtocol.Services.Instructor)); // the server refuses non-instructors
         services.AddSingleton<ICommsService>(sp => new CommsService(sp.GetRequiredService<ICopService>(), sp.GetRequiredService<IC2Service>(),
             connection.Mirror, session.SessionId));
 

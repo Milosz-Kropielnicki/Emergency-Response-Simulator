@@ -199,6 +199,18 @@ public static class EventDescriber
             RoleHandoverBegun e => Entry("SESSION", $"{Participant(e.FromParticipantId)} is handing {Roles.Name(e.Role)} to {Participant(e.ToParticipantId)} " +
                 (e.FullBriefing ? "with a full briefing" : "in a quick changeover") + $" (until {e.CompletesAt:HH:mm:ss})"),
             RoleHandoverCancelled e => Entry("SESSION", $"Role handover called off: {e.Reason}"),
+
+            // Instructor console (Phase 11 M4), ground truth
+            InjectFired e => Entry("INSTRUCTOR", e.Number == 0 ? $"Ad-hoc inject ({e.Template}): {e.Description}"
+                : e.Early ? $"Inject {e.Number} fired early: {e.Description}" : $"Inject {e.Number}: {e.Description}", important: e.Number == 0 || e.Early),
+            InjectHeld e => Entry("INSTRUCTOR", $"Inject {e.Number} held: {e.Description}", important: true),
+            InjectReleased e => Entry("INSTRUCTOR", $"Inject {e.Number} released: {e.Description}"),
+            InjectSkipped e => Entry("INSTRUCTOR", $"Inject {e.Number} skipped: {e.Description}", important: true),
+            InstructorRolePlay e => Entry("INSTRUCTOR", e.Kind == "Decision" ? $"Instructor as {e.As}: {e.Text}"
+                : $"Instructor role-play as {e.As}{(e.Channel is { } channel ? $" on {channel}" : "")}: \"{e.Text}\"", important: true),
+            AiRoleTakenOver e => Entry("INSTRUCTOR", $"Instructor takes over {e.Name}"),
+            AiRoleHandedBack e => Entry("INSTRUCTOR", $"{e.Name} handed back to the simulation"),
+            InstructorBookmarked e => Entry("INSTRUCTOR", $"Bookmark{(e.ParticipantId is { } who ? $" ({Participant(who)})" : "")}: {e.Note}", important: true),
             UnitPositionReported => null, // dozens per minute; shown on the map instead
             _ => Entry(simEvent.Type.ToUpperInvariant(), simEvent.Type),
         };

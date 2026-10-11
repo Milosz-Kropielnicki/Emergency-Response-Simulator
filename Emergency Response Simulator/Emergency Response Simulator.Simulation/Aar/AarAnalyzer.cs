@@ -81,6 +81,7 @@ public sealed partial class AarAnalyzer
             Outcomes = [SessionOutcome()],
             Findings = [.. Findings(metrics, branches), .. HandoverFindings()],
             Participants = Participants(),
+            Instructor = _instructor,
         };
     }
 
@@ -117,6 +118,9 @@ public sealed partial class AarAnalyzer
             case ReportReceived e when !truth:
                 _reports.Add((simEvent.SimTime, e.Location, e.SourceName, e.Claim, e.Source));
                 break;
+            case InjectFired or InjectHeld or InjectReleased or InjectSkipped or InstructorRolePlay or AiRoleTakenOver or AiRoleHandedBack or InstructorBookmarked:
+                TrackInstructor(simEvent);
+                break;
             case ParticipantJoined or ParticipantLeft or RoleAssigned or RoleHandedOver:
                 TrackParticipant(simEvent);
                 break;
@@ -139,9 +143,10 @@ public sealed partial class AarAnalyzer
 
         var entry = EventDescriber.Describe(simEvent, id => _callsigns.GetValueOrDefault(id), id => _incidents.TryGetValue(id, out var i) ? i.Number : null,
             id => _agencyNames.GetValueOrDefault(id), id => _people.GetValueOrDefault(id)?.Name);
+        var rolePlay = RolePlayOf(payload);
         if (entry is not null)
             _timeline.Add(new AarTimelineEntry(entry.Sequence, entry.SimTime, entry.Category, entry.Text, decision, truth, entry.Important || decision,
-                simEvent.ActorId, ActorLabel(simEvent)));
+                simEvent.ActorId, rolePlay is { } playing ? $"Instructor role-play as {playing}" : ActorLabel(simEvent), rolePlay is not null));
     }
 
     /// <summary>Something the trainee did (through C2 or the IAP builder), as opposed to the world or the engine.</summary>

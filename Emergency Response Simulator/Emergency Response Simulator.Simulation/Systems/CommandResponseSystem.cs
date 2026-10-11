@@ -144,35 +144,14 @@ public sealed class CommandResponseSystem : ISimulationSystem
             var request = pending.Request;
             if (!pending.Decided)
             {
-                var ia = world.Interagency;
-                // Phase 10: mutual aid comes under the standing agreements, when the area has any.
-                var agreement = request.Kind == ResourceRequestKind.MutualAid ? AgreementFor(world, request) : null;
-                var outsideAgreements = request.Kind == ResourceRequestKind.MutualAid && ia.Agreements.Count > 0 && agreement is null;
-                // A declared major emergency (EOC at partial or above) speeds up decisions; an overruled provider drags its feet.
-                var pace = (ia.MajorEmergency ? 0.6 : 1) * (agreement is not null && ia.Reluctant.Contains(agreement.Provider) ? 2 : 1);
-                var (approver, delay, lead) = request.Kind switch
-                {
-                    ResourceRequestKind.MutualAid when agreement is not null => (agreement.ApprovedBy, agreement.DecisionTime * pace, agreement.LeadTime),
-                    ResourceRequestKind.MutualAid when outsideAgreements => (NationalDirectorate, OutsideAgreementDecisionDelay * pace, OutsideAgreementLeadTime),
-                    ResourceRequestKind.MutualAid => ("Regional Duty Officer", MutualAidDecisionDelay * pace, MutualAidLeadTime),
-                    ResourceRequestKind.SpecialistTeam => (NationalDirectorate, SpecialistDecisionDelay * pace, SpecialistLeadTime),
-                    _ => (ControlRoomFor(request.UnitType), TimeSpan.Zero, AdditionalLeadTime),
-                };
-                if (context.SimTime - pending.RequestedAt < delay) continue;
+                var terms = TermsOf(world, request);
+                // Taken over by the instructor (Phase 11 M4): the decision waits for them.
+                if (terms.Role is { } role && world.PlayedByInstructor(role)) continue;
+                if (context.SimTime - pending.RequestedAt < terms.Delay) continue;
 
-                pending.Decided = true;
-                pending.Agreement = agreement;
                 var priority = world.ReportedIncidentPriorities.GetValueOrDefault(request.IncidentId, IncidentPriority.Medium);
-                var (approved, quantity, reason) = Decide(world, request, agreement, outsideAgreements, priority);
-
-                pending.Granted = approved ? quantity : null;
-                pending.ArriveAt = approved ? context.SimTime + lead : null;
-                var partly = approved && quantity < request.Quantity ? $" Sending {quantity} of the {request.Quantity}: {reason}" : "";
-                CommsNet.Chat(context, approver,
-                    approved ? $"Request approved: {request.Description}. Expected on scene {pending.ArriveAt?.ToLocalTime():HH:mm}.{partly}" : reason!,
-                    new ResourceRequestDecided(request.RequestId, approved, approver, approved && quantity == request.Quantity ? null : reason,
-                        pending.ArriveAt, approved && quantity < request.Quantity ? quantity : null), TimeSpan.Zero);
-                if (!approved) world.PendingRequests.Remove(pending);
+                var (approved, quantity, reason) = Decide(world, request, terms.Agreement, terms.OutsideAgreements, priority);
+                Announce(context, pending, terms, approved, quantity, reason, terms.Approver);
                 continue;
             }
 
@@ -184,6 +163,78 @@ public sealed class CommandResponseSystem : ISimulationSystem
         }
     }
 
+    /// <summary>Who decides a request, how long they take, how long the resources take to come, and the role that plays them.</summary>
+    public sealed record RequestTerms(string Approver, TimeSpan Delay, TimeSpan Lead, MutualAidAgreementRegistered? Agreement, bool OutsideAgreements, string? Role);
+
+    public static RequestTerms TermsOf(WorldState world, ResourceRequested request)
+    {
+        var ia = world.Interagency;
+        // Phase 10: mutual aid comes under the standing agreements, when the area has any.
+        var agreement = request.Kind == ResourceRequestKind.MutualAid ? AgreementFor(world, request) : null;
+        var outsideAgreements = request.Kind == ResourceRequestKind.MutualAid && ia.Agreements.Count > 0 && agreement is null;
+        // A declared major emergency (EOC at partial or above) speeds up decisions; an overruled provider drags its feet.
+        var pace = (ia.MajorEmergency ? 0.6 : 1) * (agreement is not null && ia.Reluctant.Contains(agreement.Provider) ? 2 : 1);
+        return request.Kind switch
+        {
+            ResourceRequestKind.MutualAid when agreement is not null =>
+                new(agreement.ApprovedBy, agreement.DecisionTime * pace, agreement.LeadTime, agreement, false, Instructor.AiRoles.RegionalDutyOfficer),
+            ResourceRequestKind.MutualAid when outsideAgreements =>
+                new(NationalDirectorate, OutsideAgreementDecisionDelay * pace, OutsideAgreementLeadTime, null, true, Instructor.AiRoles.NationalDirectorate),
+            ResourceRequestKind.MutualAid =>
+                new(RegionalDutyOfficer, MutualAidDecisionDelay * pace, MutualAidLeadTime, null, false, Instructor.AiRoles.RegionalDutyOfficer),
+            ResourceRequestKind.SpecialistTeam =>
+                new(NationalDirectorate, SpecialistDecisionDelay * pace, SpecialistLeadTime, null, false, Instructor.AiRoles.NationalDirectorate),
+            _ => new(ControlRoomFor(request.UnitType), TimeSpan.Zero, AdditionalLeadTime, null, false, null),
+        };
+    }
+
+    public const string RegionalDutyOfficer = "Regional Duty Officer";
+
+    /// <summary>The decision goes out as a message from the approver; approved resources set off.</summary>
+    private static void Announce(SimulationContext context, PendingRequest pending, RequestTerms terms, bool approved, int quantity, string? reason,
+        string approver, Guid? messageId = null)
+    {
+        var request = pending.Request;
+        pending.Decided = true;
+        pending.Agreement = terms.Agreement;
+        pending.Granted = approved ? quantity : null;
+        pending.ArriveAt = approved ? context.SimTime + terms.Lead : null;
+        var partly = approved && quantity < request.Quantity ? $" Sending {quantity} of the {request.Quantity}" + (reason is null ? "." : $": {reason}") : "";
+        CommsNet.Chat(context, approver,
+            approved ? $"Request approved: {request.Description}. Expected on scene {pending.ArriveAt?.ToLocalTime():HH:mm}.{partly}" : reason ?? "Request declined.",
+            new ResourceRequestDecided(request.RequestId, approved, approver, approved && quantity == request.Quantity ? null : reason ?? (approved ? null : "Declined."),
+                pending.ArriveAt, approved && quantity < request.Quantity ? quantity : null), TimeSpan.Zero, messageId);
+        if (!approved) context.World.PendingRequests.Remove(pending);
+    }
+
+    /// <summary>
+    /// The instructor decides a request as the role they have taken over (Phase 11 M4): in that role's name, with the
+    /// usual lead time; approved mutual aid counts against its agreement as usual. Returns false when it isn't waiting.
+    /// </summary>
+    public static bool DecideByHand(SimulationContext context, Guid requestId, bool approve, int? quantity, string? text, string approver, Guid messageId)
+    {
+        var pending = context.World.PendingRequests.FirstOrDefault(p => p.Request.RequestId == requestId && !p.Decided);
+        if (pending is null) return false;
+        var terms = TermsOf(context.World, pending.Request);
+        var granted = Math.Clamp(quantity ?? pending.Request.Quantity, 1, pending.Request.Quantity);
+        var message = messageId;
+        Announce(context, pending, terms, approve, granted, string.IsNullOrWhiteSpace(text) ? null : text.Trim(), approver, message);
+        return true;
+    }
+
+    /// <summary>The instructor answers a notification as the organisation it went to. Returns false when it isn't waiting.</summary>
+    public static bool ReplyByHand(SimulationContext context, Guid notificationId, string text, Guid messageId)
+    {
+        var pending = context.World.PendingNotifications.FirstOrDefault(p => p.Notification.NotificationId == notificationId);
+        if (pending is null) return false;
+        context.World.PendingNotifications.Remove(pending);
+        var recipient = pending.Notification.Recipient;
+        var reply = text.StartsWith(recipient, StringComparison.OrdinalIgnoreCase) ? text : $"{recipient}: {text}";
+        var message = messageId;
+        CommsNet.Chat(context, recipient, reply, new NotificationAnswered(notificationId, reply), TimeSpan.Zero, message);
+        return true;
+    }
+
     private const string NationalDirectorate = "National Directorate for Fire & Emergency Management";
 
     /// <summary>Mutual aid outside every standing agreement goes to the national level, slower and only for the worst incidents.</summary>
@@ -192,7 +243,7 @@ public sealed class CommandResponseSystem : ISimulationSystem
     public static readonly TimeSpan OutsideAgreementLeadTime = TimeSpan.FromMinutes(30);
 
     /// <summary>The agreement that covers the request's unit type, with the most units still to give.</summary>
-    private static MutualAidAgreementRegistered? AgreementFor(WorldState world, ResourceRequested request)
+    public static MutualAidAgreementRegistered? AgreementFor(WorldState world, ResourceRequested request)
     {
         var type = request.UnitType ?? UnitType.Engine;
         return world.Interagency.Agreements.Values
@@ -319,6 +370,7 @@ public sealed class CommandResponseSystem : ISimulationSystem
 
     private static void AnswerNotifications(SimulationContext context)
     {
+        if (context.World.PlayedByInstructor(Instructor.AiRoles.OutsideOrganisations)) return; // the instructor answers (Phase 11 M4)
         foreach (var pending in context.World.PendingNotifications.ToList())
         {
             var notification = pending.Notification;

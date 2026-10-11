@@ -109,6 +109,18 @@ public static class AarExport
             html.Append("</table>");
         }
 
+        // How the instructor ran it (Phase 11 M4); scripted injects that went off on time are counted, not listed.
+        var steered = report.Instructor.Where(a => a.Kind != "Inject (on time)").ToList();
+        if (steered.Count > 0)
+        {
+            html.Append("<h2>Instructor</h2>");
+            html.Append($"<p class=\"muted\">{report.Instructor.Count - steered.Count} scripted inject(s) went off on time. Timeline entries marked as role-play were the instructor speaking or deciding as someone in the world.</p>");
+            html.Append("<table><tr><th>Time</th><th>What</th><th>Detail</th></tr>");
+            foreach (var action in steered)
+                html.Append($"<tr><td>{Clock(action.At)}</td><td><b>{E(action.Kind)}</b></td><td>{E(action.Text)}</td></tr>");
+            html.Append("</table>");
+        }
+
         // Metrics.
         html.Append("<h2>Performance metrics</h2>");
         foreach (var group in report.Metrics.GroupBy(m => m.Category))
@@ -263,7 +275,9 @@ public static class AarExport
         foreach (var delay in report.Delays)
             Row("Delay", delay.At, delay.Callsign, delay.Where, AarAnalyzer.Duration(delay.Lost), "", "", delay.Cause);
         foreach (var entry in report.Timeline)
-            Row(entry.IsTruth ? "Truth" : entry.IsDecision ? "Command" : "Event", entry.At, entry.Category, entry.Text, "", "", "", entry.Actor ?? "");
+            Row(entry.IsTruth ? "Truth" : entry.IsDecision ? "Command" : entry.RolePlay ? "Role-play" : "Event", entry.At, entry.Category, entry.Text, "", "", "", entry.Actor ?? "");
+        foreach (var action in report.Instructor)
+            Row("Instructor", action.At, action.Kind, action.Text, "", "", "", action.By ?? "");
         return csv.ToString();
     }
 

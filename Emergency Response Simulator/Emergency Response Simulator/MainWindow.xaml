@@ -70,6 +70,9 @@
                     <!-- Role workspaces (Phase 11 M3): a default layout per role over the same COP. -->
                     <ComboBox ItemsSource="{Binding Workspaces}" SelectedItem="{Binding SelectedWorkspace}" Width="170" Margin="0,0,8,0"
                               VerticalAlignment="Center" ToolTip="{Binding SelectedWorkspace.Purpose}" />
+                    <Button Content="🎛 Console" Command="{Binding OpenConsoleCommand}" Margin="0,0,8,0"
+                            Visibility="{Binding IsConsoleAvailable, Converter={StaticResource BoolToVisibility}}"
+                            ToolTip="Instructor console: fire, hold and skip injects, watch the players, role-play, take over AI roles" />
                     <Button Content="📊 AAR" Command="{Binding OpenAarCommand}" Margin="0,0,8,0"
                             ToolTip="After-action review: decision timeline, metrics, heatmaps, branch comparison and exportable reports" />
                     <Button Content="📋 IAP Builder" Command="{Binding OpenIapCommand}" Margin="0,0,12,0"

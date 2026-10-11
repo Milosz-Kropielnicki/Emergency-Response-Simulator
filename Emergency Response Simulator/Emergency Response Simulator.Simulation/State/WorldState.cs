@@ -104,6 +104,14 @@ public sealed class WorldState
 
     public WorldInteragency Interagency { get; } = new();
 
+    /// <summary>
+    /// Roles the instructor has taken over from the simulation (Phase 11 M4), by role key: the systems that play them
+    /// leave their decisions waiting for the instructor.
+    /// </summary>
+    public HashSet<string> HumanRoles { get; } = [];
+
+    public bool PlayedByInstructor(string roleKey) => HumanRoles.Contains(roleKey);
+
     /// <summary>Units committed to an incident (as ordered), for span-of-control counts.</summary>
     public IReadOnlyCollection<Guid> UnitsAt(Guid incidentId) =>
         Units.Values.Where(u => u.OrderedIncidentId == incidentId).Select(u => u.Id).ToList();
@@ -435,6 +443,12 @@ public sealed class WorldState
                 break;
             case ResourceRequested e:
                 PendingRequests.Add(new PendingRequest(e, simEvent.SimTime));
+                break;
+            case AiRoleTakenOver e:
+                HumanRoles.Add(e.RoleKey);
+                break;
+            case AiRoleHandedBack e:
+                HumanRoles.Remove(e.RoleKey);
                 break;
             case ApprovalRequested e:
                 ApprovalRequesters[e.ApprovalId] = e.RequestedBy;

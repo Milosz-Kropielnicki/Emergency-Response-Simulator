@@ -30,6 +30,9 @@ public static class SimulationHubProtocol
         public const string Iap = "iap";
         public const string Control = "control";
         public const string Aar = "aar";
+
+        /// <summary>The instructor console (Phase 11 M4): the instructor only.</summary>
+        public const string Instructor = "instructor";
     }
 }
 

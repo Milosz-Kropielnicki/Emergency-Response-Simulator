@@ -1,0 +1,325 @@
+<Window x:Class="Emergency_Response_Simulator.InstructorConsoleWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Emergency_Response_Simulator.ViewModels"
+        Title="Instructor Console" Width="1180" Height="820" MinWidth="900" MinHeight="560"
+        Background="{StaticResource BackgroundBrush}" Foreground="{StaticResource TextBrush}" FontSize="12">
+    <Window.Resources>
+        <Style x:Key="Muted" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="Small" TargetType="Button">
+            <Setter Property="Padding" Value="6,1" />
+            <Setter Property="Margin" Value="3,0,0,0" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+    </Window.Resources>
+
+    <DockPanel Margin="12">
+        <!-- Header: what happened to the last action -->
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+            <TextBlock DockPanel.Dock="Left" Text="INSTRUCTOR CONSOLE" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding Status}" VerticalAlignment="Center" HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" Margin="16,0,0,0">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Failed}" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </DockPanel>
+        <TextBlock DockPanel.Dock="Top" Style="{StaticResource Muted}" Margin="0,0,0,8"
+                   Text="Everything here is recorded as ground truth for the review. Trainees never see the hand behind it: only what reaches them in the world, with the usual delays." />
+
+        <TabControl>
+            <!-- ===== Injects ===== -->
+            <TabItem Header="INJECTS">
+                <Grid Margin="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="{Binding ScriptSummary, StringFormat='SCENARIO SCRIPT · {0}'}" Style="{StaticResource PanelHeader}" />
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Injects}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:InjectRow}">
+                                        <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="2,4">
+                                            <DockPanel>
+                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Button Content="Fire now" Style="{StaticResource Small}" IsEnabled="{Binding CanFire}"
+                                                            Command="{Binding DataContext.FireCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding Number}" />
+                                                    <Button Content="Hold" Style="{StaticResource Small}" IsEnabled="{Binding CanHold}"
+                                                            Command="{Binding DataContext.HoldCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding Number}" />
+                                                    <Button Content="Release" Style="{StaticResource Small}" IsEnabled="{Binding CanRelease}"
+                                                            Command="{Binding DataContext.ReleaseCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding Number}" />
+                                                    <Button Content="Skip" Style="{StaticResource Small}" IsEnabled="{Binding CanSkip}"
+                                                            Command="{Binding DataContext.SkipCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding Number}" />
+                                                </StackPanel>
+                                                <TextBlock DockPanel.Dock="Left" Text="{Binding At}" FontFamily="Consolas" Width="52" VerticalAlignment="Top" />
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
+                                                    <TextBlock x:Name="State" Text="{Binding State}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </Border>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding Status}" Value="Held">
+                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Status}" Value="Fired">
+                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource OkBrush}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Status}" Value="Skipped">
+                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+
+                    <!-- Ad hoc -->
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="AD-HOC INJECT" Style="{StaticResource PanelHeader}" />
+                        <ComboBox ItemsSource="{Binding Templates}" SelectedItem="{Binding Template}" DisplayMemberPath="Name" Margin="0,0,0,4" />
+                        <TextBlock Text="{Binding Template.Description}" Style="{StaticResource Muted}" Margin="0,0,0,6" />
+                        <ItemsControl ItemsSource="{Binding Fields}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:ParameterField}">
+                                    <StackPanel Margin="0,0,0,6">
+                                        <TextBlock Text="{Binding Label}" Style="{StaticResource FieldLabel}" />
+                                        <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding Value}"
+                                                  Visibility="{Binding IsChoice, Converter={StaticResource BoolToVisibility}}" />
+                                        <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap"
+                                                 Visibility="{Binding IsText, Converter={StaticResource BoolToVisibility}}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="⚡ Fire ad-hoc inject" Command="{Binding FireAdHocCommand}" Padding="8,4" HorizontalAlignment="Left" FontWeight="SemiBold" />
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- ===== Players ===== -->
+            <TabItem>
+                <TabItem.Header>
+                    <TextBlock Text="{Binding PlayersSummary}" />
+                </TabItem.Header>
+                <Grid Margin="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="2*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="PARTICIPANTS" Style="{StaticResource PanelHeader}" />
+                        <ItemsControl ItemsSource="{Binding Players}" Margin="0,0,0,8">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:PlayerRow}">
+                                    <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="2,3">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="170" />
+                                                <ColumnDefinition Width="110" />
+                                                <ColumnDefinition Width="90" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding Role}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding Commands}" />
+                                                <TextBlock Text="{Binding LastCommand, StringFormat='last {0}'}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                            </StackPanel>
+                                            <TextBlock x:Name="Idle" Grid.Column="2" Text="{Binding Idle}" ToolTip="Since their last command (simulation time)" />
+                                            <TextBlock Grid.Column="3" Text="{Binding LastAction}" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                        </Grid>
+                                    </Border>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding IsIdle}" Value="True">
+                                            <Setter TargetName="Idle" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                            <Setter TargetName="Idle" Property="FontWeight" Value="SemiBold" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                    <DockPanel Grid.Row="1">
+                        <TextBlock DockPanel.Dock="Top" Text="ACTIVITY (latest first)" Style="{StaticResource PanelHeader}" />
+                        <ListBox ItemsSource="{Binding Feed}" Background="{StaticResource PanelBrush}" Foreground="{StaticResource TextBrush}" BorderThickness="0">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:FeedRow}">
+                                    <TextBlock TextWrapping="Wrap">
+                                        <Run Text="{Binding Time, Mode=OneWay}" FontFamily="Consolas" Foreground="{StaticResource MutedTextBrush}" />
+                                        <Run Text="{Binding Who, Mode=OneWay}" FontWeight="SemiBold" />
+                                        <Run Text="{Binding Text, Mode=OneWay}" />
+                                    </TextBlock>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+
+                    <ScrollViewer Grid.Column="2" Grid.RowSpan="2" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <TextBlock Text="UNACKNOWLEDGED ALERTS" Style="{StaticResource PanelHeader}" />
+                            <ItemsControl ItemsSource="{Binding Alerts}" Margin="0,0,0,10">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Foreground="{StaticResource WarningBrush}" TextWrapping="Wrap" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="RADIO LOAD (last 2 min)" Style="{StaticResource PanelHeader}" />
+                            <ItemsControl ItemsSource="{Binding ChannelLoads}" Margin="0,0,0,10" />
+                            <TextBlock Text="BOOKMARKS" Style="{StaticResource PanelHeader}" />
+                            <DockPanel Margin="0,0,0,4">
+                                <Button DockPanel.Dock="Right" Content="🔖 Bookmark" Command="{Binding BookmarkCommand}" Margin="4,0,0,0" Padding="6,0" />
+                                <TextBox Text="{Binding BookmarkNote, UpdateSourceTrigger=PropertyChanged}" ToolTip="A moment to come back to in the debrief" />
+                            </DockPanel>
+                            <ItemsControl ItemsSource="{Binding Bookmarks}" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <!-- ===== Role-play ===== -->
+            <TabItem Header="ROLE-PLAY">
+                <StackPanel Margin="4" MaxWidth="720" HorizontalAlignment="Left">
+                    <TextBlock Text="SPEAK AS SOMEONE IN THE WORLD" Style="{StaticResource PanelHeader}" />
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
+                               Text="A crew on the radio, another agency or a hospital by phone, a 999 caller, a journalist ringing command, or an official asking for a decision. It reaches command through the usual comms; the review marks it as instructor role-play." />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="110" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Kind" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding RolePlayKinds}" SelectedItem="{Binding RolePlayKind}" Margin="0,2" />
+                        <TextBlock Grid.Row="1" Text="As" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding RolePlayAs, UpdateSourceTrigger=PropertyChanged}" Margin="0,2"
+                                 ToolTip="A unit's call sign, an organisation, a caller, an outlet, an official's title" />
+                        <TextBlock Grid.Row="2" Text="Channel" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"
+                                   Visibility="{Binding IsRadio, Converter={StaticResource BoolToVisibility}}" />
+                        <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding Channels}" SelectedItem="{Binding RolePlayChannel}" Margin="0,2"
+                                  Visibility="{Binding IsRadio, Converter={StaticResource BoolToVisibility}}" />
+                        <TextBlock Grid.Row="3" Text="About" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+                        <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding Incidents}" SelectedItem="{Binding RolePlayIncident}" Margin="0,2"
+                                  ToolTip="The incident a journalist or official asks about" />
+                        <TextBlock Grid.Row="4" Text="Says" Style="{StaticResource FieldLabel}" VerticalAlignment="Top" Margin="0,6,0,0" />
+                        <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding RolePlayText, UpdateSourceTrigger=PropertyChanged}" Margin="0,2"
+                                 TextWrapping="Wrap" AcceptsReturn="True" MinHeight="80" />
+                    </Grid>
+                    <Button Content="📞 Say it" Command="{Binding SayCommand}" HorizontalAlignment="Left" Padding="10,4" Margin="110,6,0,0" FontWeight="SemiBold" />
+                </StackPanel>
+            </TabItem>
+
+            <!-- ===== Roles the simulation plays ===== -->
+            <TabItem>
+                <TabItem.Header>
+                    <TextBlock Text="{Binding RolesSummary}" />
+                </TabItem.Header>
+                <Grid Margin="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="ROLE-PLAYER REGISTRY" Style="{StaticResource PanelHeader}" />
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource Muted}" Margin="0,0,0,6"
+                                   Text="Take a role over and its decisions wait for you; hand it back and the simulation plays it again." />
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding AiRoles}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:AiRoleRow}">
+                                        <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="2,4">
+                                            <DockPanel>
+                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Button x:Name="Take" Content="Take over" Style="{StaticResource Small}"
+                                                            Command="{Binding DataContext.TakeOverCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding Key}" />
+                                                    <Button x:Name="Back" Content="Hand back" Style="{StaticResource Small}" Visibility="Collapsed"
+                                                            Command="{Binding DataContext.HandBackCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding Key}" />
+                                                </StackPanel>
+                                                <StackPanel>
+                                                    <TextBlock>
+                                                        <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
+                                                        <Run x:Name="State" Text="{Binding State, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    </TextBlock>
+                                                    <TextBlock Text="{Binding Covers}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding System}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </Border>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding TakenOver}" Value="True">
+                                                <Setter TargetName="Take" Property="Visibility" Value="Collapsed" />
+                                                <Setter TargetName="Back" Property="Visibility" Value="Visible" />
+                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+
+                    <DockPanel Grid.Column="2">
+                        <TextBlock DockPanel.Dock="Top" Text="WAITING FOR YOU" Style="{StaticResource PanelHeader}" />
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Waiting}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:WaitingRow}">
+                                        <Border Style="{StaticResource Panel}" Margin="0,0,0,6" Padding="8">
+                                            <StackPanel>
+                                                <TextBlock>
+                                                    <Run Text="{Binding Role, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" />
+                                                    <Run Text="{Binding Since, StringFormat=' · since {0}', Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                </TextBlock>
+                                                <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Margin="0,2,0,4" />
+                                                <DockPanel Visibility="{Binding HasQuantity, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,4">
+                                                    <TextBlock Text="How many" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" Width="70" />
+                                                    <TextBox Text="{Binding Quantity, UpdateSourceTrigger=PropertyChanged}" Width="50" HorizontalAlignment="Left" />
+                                                </DockPanel>
+                                                <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="40"
+                                                         ToolTip="What you say as the role (optional, except for a reply)" Margin="0,0,0,4" />
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Button Content="{Binding ApproveLabel}" Padding="8,2"
+                                                            Command="{Binding DataContext.ApproveCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
+                                                    <Button Content="Decline" Padding="8,2" Margin="6,0,0,0" Visibility="{Binding CanDecline, Converter={StaticResource BoolToVisibility}}"
+                                                            Command="{Binding DataContext.DeclineCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>
