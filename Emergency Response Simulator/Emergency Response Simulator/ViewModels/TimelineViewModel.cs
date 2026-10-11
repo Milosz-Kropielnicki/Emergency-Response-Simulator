@@ -111,6 +111,14 @@ public sealed partial class TimelineViewModel : ObservableObject
         await ReplayToAsync(row.SimTime);
     }
 
+    /// <summary>Shows the COP as it was at a moment (from the after-action review's decision timeline).</summary>
+    public async Task ReplayAtAsync(DateTimeOffset at)
+    {
+        if (_sessionStart is { } start)
+            ReplaySeconds = Math.Clamp((at - start).TotalSeconds, 0, MaxSeconds);
+        await ReplayToAsync(at);
+    }
+
     [RelayCommand]
     private void ReturnToLive()
     {

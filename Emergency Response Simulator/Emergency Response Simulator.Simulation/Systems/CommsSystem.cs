@@ -478,7 +478,7 @@ public sealed class CommsSystem(CommsOptions? options = null, IRoutingService? r
             radio.Queue.Add(new Transmission
             {
                 Channel = original.Channel, From = original.From, UnitId = original.UnitId, To = original.To,
-                Text = $"{original.Text} (repeat)", Payload = original.Payload, Priority = 2,
+                Text = original.Text.EndsWith("(repeat)") ? original.Text : $"{original.Text} (repeat)", Payload = original.Payload, Priority = 2,
                 QueuedAt = context.SimTime, NotBefore = context.SimTime + TimeSpan.FromSeconds(3),
             });
         }

@@ -16,6 +16,7 @@ namespace Emergency_Response_Simulator
         private readonly MainViewModel _viewModel;
         private readonly MapController _map;
         private IapWindow? _iapWindow;
+        private AarWindow? _aarWindow;
 
         public MainWindow(MainViewModel viewModel, CopView cop, IServiceProvider services, IConfiguration configuration)
         {
@@ -28,6 +29,7 @@ namespace Emergency_Response_Simulator
                 services.GetRequiredService<RoutingService>(), services.GetRequiredService<TrafficFeed>(),
                 services.GetRequiredService<LiveTraffic>());
             viewModel.IapRequested += (_, _) => ShowIapBuilder();
+            viewModel.AarRequested += (_, _) => ShowAar(services);
             Loaded += async (_, _) =>
             {
                 await viewModel.Timeline.LoadAsync();
@@ -49,6 +51,23 @@ namespace Emergency_Response_Simulator
                 if (_iapWindow.WindowState == WindowState.Minimized)
                     _iapWindow.WindowState = WindowState.Normal;
                 _iapWindow.Activate();
+            }
+        }
+
+        /// <summary>One review window; asking again brings it to the front (it keeps its report until refreshed).</summary>
+        private void ShowAar(IServiceProvider services)
+        {
+            if (_aarWindow is null)
+            {
+                _aarWindow = new AarWindow(services.GetRequiredService<AarViewModel>()) { Owner = this };
+                _aarWindow.Closed += (_, _) => _aarWindow = null;
+                _aarWindow.Show();
+            }
+            else
+            {
+                if (_aarWindow.WindowState == WindowState.Minimized)
+                    _aarWindow.WindowState = WindowState.Normal;
+                _aarWindow.Activate();
             }
         }
 

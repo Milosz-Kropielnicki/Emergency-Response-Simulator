@@ -294,6 +294,21 @@ public sealed class PerceivedState : ICopService
                 cleared.EmergencyTraffic = e.Active;
                 break;
 
+            // The same Mayday heard again (a repeat call, a relay): keep what is known about it, fill in a clearer account.
+            case MaydayDeclared e when _maydays.TryGetValue(e.MaydayId, out var known):
+                if (known.Unclear && !e.Unclear)
+                {
+                    known.Details = e.Details;
+                    known.Unclear = false;
+                    known.Member ??= e.Member;
+                    if (e.Member is { } named && _crews.TryGetValue(e.UnitId, out var namedCrew))
+                    {
+                        foreach (var member in namedCrew.Members.Where(m => Names(m, named)))
+                            member.Status = MemberStatus.InDistress;
+                    }
+                }
+                break;
+
             case MaydayDeclared e:
                 _maydays[e.MaydayId] = new Mayday
                 {

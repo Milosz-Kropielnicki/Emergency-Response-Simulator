@@ -95,6 +95,12 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenIap() => IapRequested?.Invoke(this, EventArgs.Empty);
 
+    /// <summary>Raised when the trainee or instructor opens the after-action review.</summary>
+    public event EventHandler? AarRequested;
+
+    [RelayCommand]
+    private void OpenAar() => AarRequested?.Invoke(this, EventArgs.Empty);
+
     /// <summary>The selected incident's planning state, e.g. "Period 1 (14:00–15:00) · v2 approved, briefed 14:20".</summary>
     [ObservableProperty] private string _planSummary = "";
 

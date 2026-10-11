@@ -1,0 +1,270 @@
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
+using System.Windows;
+using System.Windows.Media;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Emergency_Response_Simulator.Core.Contracts;
+using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.Simulation.Aar;
+using Emergency_Response_Simulator.Simulation.Engine;
+using Microsoft.Win32;
+
+namespace Emergency_Response_Simulator.ViewModels;
+
+public sealed record AarMetricRow(string Category, string Name, string Display, string Standard, Rating Rating, string RatingText, string Explanation);
+
+public sealed record AarDecisionRow(DateTimeOffset At, string Time, string Category, string Decision, string Trigger, string Took,
+    string Known, string Truth, Rating Rating, string RatingText, string Note);
+
+public sealed record AarBranchRow(string Topic, string Time, string Yours, string Recommended, string Alternative, string Effect, Rating Rating, string RatingText);
+
+public sealed record AarOutcomeRow(string Label, string Hurt, string Dead, string Firefighters, string Fire, string FirstOnScene, string Notes, string Actions);
+
+public sealed record AarTimelineRow(DateTimeOffset At, string Time, string Category, string Text, bool IsDecision, bool IsTruth);
+
+/// <summary>A coloured stretch of a unit's commitment strip, in pixels.</summary>
+public sealed record GanttBar(double Left, double Width, Brush Fill, string Tip);
+
+public sealed record GanttRow(string Callsign, string Committed, IReadOnlyList<GanttBar> Bars);
+
+public sealed record HeatCell(double Opacity, string Tip);
+
+public sealed record HeatmapView(string Title, string Subtitle, int Columns, IReadOnlyList<HeatCell> Cells, IReadOnlyList<string> Hotspots);
+
+public sealed record AarDelayRow(string Time, string Callsign, string Lost, string Where, string Cause);
+
+/// <summary>
+/// The after-action review window (Design Document §22): summary and findings, the decision timeline (with "show the
+/// COP then"), metrics, commitment and delay analytics with heatmaps, branch points and the re-run comparison, the full
+/// replayable timeline, and exports for debriefing and certification.
+/// </summary>
+public sealed partial class AarViewModel(IAarService aar, SimulationSession session, TimelineViewModel timeline) : ObservableObject
+{
+    /// <summary>Pixels the commitment chart spreads the session across.</summary>
+    public const double GanttWidth = 720;
+
+    private CancellationTokenSource? _branches;
+
+    public AarReport? Report { get; private set; }
+
+    [ObservableProperty] private bool _hasReport;
+    [ObservableProperty] private bool _isBusy;
+    [ObservableProperty] private string _status = "Build the review to analyse the session so far.";
+    [ObservableProperty] private string _title = "";
+    [ObservableProperty] private string _subtitle = "";
+    [ObservableProperty] private string _overall = "";
+    [ObservableProperty] private string _score = "";
+    [ObservableProperty] private Competence _competence;
+    [ObservableProperty] private bool _decisionsOnly = true;
+    [ObservableProperty] private bool _includeTruth;
+    [ObservableProperty] private bool _isComparing;
+    [ObservableProperty] private string _branchStatus = "";
+    [ObservableProperty] private int _branchRuns = 2;
+
+    // Sign-off for the exported report.
+    [ObservableProperty] private string _trainee = "";
+    [ObservableProperty] private string _role = "Incident commander";
+    [ObservableProperty] private string _assessor = "";
+    [ObservableProperty] private string _comments = "";
+    [ObservableProperty] private string _verdict = "Not given";
+
+    public bool CanCompare => aar.CanCompareBranches;
+
+    public IReadOnlyList<string> Verdicts { get; } = ["Not given", "Competent", "Developing", "Not yet competent"];
+    public IReadOnlyList<int> RunChoices { get; } = [1, 2, 3, 5];
+
+    public ObservableCollection<AarFinding> Findings { get; } = [];
+    public ObservableCollection<AarMetricRow> Metrics { get; } = [];
+    public ObservableCollection<AarDecisionRow> Decisions { get; } = [];
+    public ObservableCollection<AarBranchRow> Branches { get; } = [];
+    public ObservableCollection<AarOutcomeRow> Outcomes { get; } = [];
+    public ObservableCollection<GanttRow> Gantt { get; } = [];
+    public ObservableCollection<string> GanttScale { get; } = [];
+    public ObservableCollection<HeatmapView> Heatmaps { get; } = [];
+    public ObservableCollection<AarDelayRow> Delays { get; } = [];
+    public ObservableCollection<AarTimelineRow> Timeline { get; } = [];
+
+    partial void OnDecisionsOnlyChanged(bool value) => FillTimeline();
+    partial void OnIncludeTruthChanged(bool value) => FillTimeline();
+
+    private static string Clock(DateTimeOffset at) => MainViewModel.Time(at, seconds: true);
+
+    [RelayCommand]
+    private async Task BuildAsync()
+    {
+        if (IsBusy) return;
+        IsBusy = true;
+        Status = "Analysing the session…";
+        try
+        {
+            var previous = Report?.Outcomes.Skip(1).ToList() ?? [];
+            Report = await aar.BuildReportAsync(session.Id);
+            Report.Outcomes.AddRange(previous); // keep a comparison already run
+            Fill(Report);
+            Status = $"Reviewed {Report.Timeline.Count} events and {Report.Decisions.Count} decisions, as of {Clock(Report.To)}.";
+        }
+        catch (Exception ex)
+        {
+            Status = $"The review could not be built: {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task CompareAsync()
+    {
+        if (IsComparing)
+        {
+            _branches?.Cancel();
+            return;
+        }
+        if (Report is null) await BuildAsync();
+        if (Report is null) return;
+
+        IsComparing = true;
+        _branches = new CancellationTokenSource();
+        var progress = new Progress<string>(message => BranchStatus = message);
+        try
+        {
+            var outcomes = await aar.CompareBranchesAsync(session.Id, BranchRuns, progress, _branches.Token);
+            Report.Outcomes.RemoveRange(1, Report.Outcomes.Count - 1);
+            Report.Outcomes.AddRange(outcomes);
+            FillOutcomes(Report);
+            BranchStatus = $"Re-ran the scenario {BranchRuns} time(s) under each policy for as long as your session ran.";
+        }
+        catch (OperationCanceledException)
+        {
+            BranchStatus = "Comparison cancelled.";
+        }
+        catch (Exception ex)
+        {
+            BranchStatus = $"The comparison failed: {ex.Message}";
+        }
+        finally
+        {
+            IsComparing = false;
+        }
+    }
+
+    /// <summary>Shows the COP as it was when the decision was made (the main window goes into replay).</summary>
+    [RelayCommand]
+    private Task ShowCopAsync(DateTimeOffset at) => timeline.ReplayAtAsync(at);
+
+    [RelayCommand]
+    private void ExportHtml()
+    {
+        if (Report is null) return;
+        var path = Ask("HTML report|*.html", "html");
+        if (path is null) return;
+        File.WriteAllText(path, AarExport.Html(Report, SignOff()));
+        Status = $"Report saved to {path}";
+        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+    }
+
+    [RelayCommand]
+    private void ExportCsv()
+    {
+        if (Report is null) return;
+        var path = Ask("CSV (spreadsheet)|*.csv", "csv");
+        if (path is null) return;
+        File.WriteAllText(path, AarExport.Csv(Report), new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        Status = $"Data saved to {path}";
+    }
+
+    private string? Ask(string filter, string extension)
+    {
+        var name = string.Concat($"AAR {Report!.Title} {Report.From.ToLocalTime():yyyy-MM-dd HHmm}".Split(Path.GetInvalidFileNameChars()));
+        var dialog = new SaveFileDialog { Filter = filter, FileName = $"{name}.{extension}", AddExtension = true };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+
+    private AarSignOff SignOff() => new(
+        string.IsNullOrWhiteSpace(Trainee) ? "(trainee)" : Trainee.Trim(), Role.Trim(),
+        string.IsNullOrWhiteSpace(Assessor) ? "(assessor)" : Assessor.Trim(), string.IsNullOrWhiteSpace(Comments) ? null : Comments.Trim(),
+        Verdict switch { "Competent" => Core.Model.Competence.Competent, "Developing" => Core.Model.Competence.Developing,
+            "Not yet competent" => Core.Model.Competence.NotYetCompetent, _ => null });
+
+    // ---- Filling the views ----
+
+    private void Fill(AarReport report)
+    {
+        HasReport = true;
+        Title = report.Title;
+        Subtitle = $"{report.From.ToLocalTime():dddd d MMMM, HH:mm}–{report.To.ToLocalTime():HH:mm} · {AarAnalyzer.Duration(report.Duration)} of simulated time";
+        Competence = report.Overall;
+        Overall = AarExport.Label(report.Overall);
+        Score = $"{report.Score} / 100";
+
+        Replace(Findings, report.Findings);
+        Replace(Metrics, report.Metrics.Select(m => new AarMetricRow(m.Category, m.Name, m.Display, m.Standard, m.Rating, AarExport.Label(m.Rating), m.Explanation)));
+        Replace(Decisions, report.Decisions.Select(d => new AarDecisionRow(d.At, Clock(d.At), d.Category, d.Decision, d.Trigger ?? "—",
+            d.ResponseTime is { } t ? AarAnalyzer.Duration(t) : "—", d.Known, d.Truth, d.Rating, AarExport.Label(d.Rating), d.Note ?? "")));
+        Replace(Branches, report.Branches.Select(b => new AarBranchRow(b.Topic, b.At is { } at ? Clock(at) : "", b.Yours, b.Recommended, b.Alternative,
+            b.Effect, b.Rating, AarExport.Label(b.Rating))));
+        FillOutcomes(report);
+        FillGantt(report);
+        Replace(Heatmaps, report.Heatmaps.Select(Heatmap));
+        Replace(Delays, report.Delays.Take(40).Select(d => new AarDelayRow(Clock(d.At), d.Callsign, AarAnalyzer.Duration(d.Lost), d.Where, d.Cause)));
+        FillTimeline();
+    }
+
+    private void FillOutcomes(AarReport report) =>
+        Replace(Outcomes, report.Outcomes.Select(o => new AarOutcomeRow(o.Label, $"{o.Injured:0.#}", $"{o.Deaths:0.#}", $"{o.FirefightersInDistress:0.#}",
+            $"{o.PeakFireSquareMeters:N0} m²", o.FirstOnSceneMinutes is { } m ? $"{m:0.0} min" : "—", o.Notes,
+            string.Join(Environment.NewLine, (o.KeyActions ?? []).Take(25)))));
+
+    private static readonly Dictionary<string, Brush> Colours = [];
+
+    private static Brush Colour(UnitStatus status)
+    {
+        var hex = AarExport.StatusColour(status);
+        if (Colours.TryGetValue(hex, out var brush)) return brush;
+        brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+        brush.Freeze();
+        return Colours[hex] = brush;
+    }
+
+    private void FillGantt(AarReport report)
+    {
+        var total = Math.Max(1, report.Duration.TotalSeconds);
+        Replace(Gantt, report.Units.Select(u => new GanttRow(u.Callsign, $"{u.Committed:P0}", u.Spans.Select(s => new GanttBar(
+            (s.From - report.From).TotalSeconds / total * GanttWidth, Math.Max(1, (s.To - s.From).TotalSeconds / total * GanttWidth),
+            Colour(s.Status), $"{Core.Events.EventDescriber.Humanize(s.Status)} {Clock(s.From)}–{Clock(s.To)}")).ToList())));
+        var step = report.Duration.TotalMinutes > 60 ? 15 : report.Duration.TotalMinutes > 20 ? 10 : 5;
+        Replace(GanttScale, Enumerable.Range(0, (int)(report.Duration.TotalMinutes / step) + 1).Select(i => $"+{i * step} min"));
+    }
+
+    private static HeatmapView Heatmap(AarHeatmap map)
+    {
+        var max = Math.Max(map.Max, 0.001);
+        var cells = new List<HeatCell>();
+        for (var row = map.Rows - 1; row >= 0; row--) // north at the top
+        {
+            for (var column = 0; column < map.Columns; column++)
+            {
+                var value = map.Values[row * map.Columns + column];
+                cells.Add(new HeatCell(value <= 0 ? 0 : 0.15 + 0.85 * Math.Sqrt(value / max), value <= 0 ? "" : $"{value:0.#} {map.Unit}"));
+            }
+        }
+        return new HeatmapView(map.Title, $"{map.Columns * map.CellMeters / 1000:0.#} km square around the incident (ring); darkest {map.Max:0.#} {map.Unit}",
+            map.Columns, cells, map.Hotspots);
+    }
+
+    private void FillTimeline()
+    {
+        if (Report is null) return;
+        Replace(Timeline, Report.Timeline.Where(t => (!DecisionsOnly || t.IsDecision || t.Important) && (IncludeTruth || !t.IsTruth))
+            .Select(t => new AarTimelineRow(t.At, Clock(t.At), t.Category, t.Text, t.IsDecision, t.IsTruth)));
+    }
+
+    private static void Replace<T>(ObservableCollection<T> target, IEnumerable<T> items)
+    {
+        target.Clear();
+        foreach (var item in items) target.Add(item);
+    }
+}

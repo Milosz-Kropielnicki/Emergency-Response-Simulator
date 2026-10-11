@@ -1,0 +1,466 @@
+<Window x:Class="Emergency_Response_Simulator.AarWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Emergency_Response_Simulator.ViewModels"
+        Title="After-Action Review" Width="1280" Height="860" MinWidth="960" MinHeight="600"
+        Background="{StaticResource BackgroundBrush}" Foreground="{StaticResource TextBrush}" FontSize="12"
+        WindowStartupLocation="CenterOwner">
+    <Window.Resources>
+        <!-- Rating text coloured by how it compares with the standard. -->
+        <Style x:Key="RatingText" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Rating}" Value="Good">
+                    <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Rating}" Value="Fair">
+                    <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Rating}" Value="Poor">
+                    <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="Wrap" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="Muted" TargetType="TextBlock" BasedOn="{StaticResource Wrap}">
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+        </Style>
+        <Style TargetType="DataGrid">
+            <Setter Property="AutoGenerateColumns" Value="False" />
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="HeadersVisibility" Value="Column" />
+            <Setter Property="GridLinesVisibility" Value="Horizontal" />
+            <Setter Property="Background" Value="{StaticResource PanelBrush}" />
+            <Setter Property="RowBackground" Value="{StaticResource PanelBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="CanUserAddRows" Value="False" />
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{StaticResource PanelRaisedBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,1,1" />
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="Padding" Value="4,3" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
+                            <ContentPresenter />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel Margin="12">
+        <!-- Header -->
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                <Button Content="↻ Build / refresh review" Command="{Binding BuildCommand}" Padding="10,4" FontWeight="SemiBold"
+                        ToolTip="Analyse the whole session so far: decisions, metrics, analytics and branch points" />
+            </StackPanel>
+            <StackPanel>
+                <TextBlock Text="AFTER-ACTION REVIEW" Style="{StaticResource PanelHeader}" />
+                <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="Bold" />
+                <TextBlock Text="{Binding Subtitle}" Style="{StaticResource Muted}" />
+                <TextBlock Text="{Binding Status}" Style="{StaticResource Muted}" FontStyle="Italic" Margin="0,2,0,0" />
+            </StackPanel>
+        </DockPanel>
+
+        <TabControl IsEnabled="{Binding HasReport}">
+            <!-- ===== Summary ===== -->
+            <TabItem Header="SUMMARY">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="8">
+                        <UniformGrid Columns="3" Margin="0,0,0,12">
+                            <Border Style="{StaticResource Panel}" Margin="0,0,8,0" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Text="AGAINST THE STANDARDS" Style="{StaticResource PanelHeader}" />
+                                    <TextBlock x:Name="Verdict" Text="{Binding Overall}" FontSize="22" FontWeight="Bold" />
+                                    <TextBlock Text="{Binding Score, StringFormat=Score {0}}" Style="{StaticResource Muted}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Panel}" Margin="4,0" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Text="DECISIONS" Style="{StaticResource PanelHeader}" />
+                                    <TextBlock Text="{Binding Decisions.Count}" FontSize="22" FontWeight="Bold" />
+                                    <TextBlock Text="commands given, each judged on what you knew at the time" Style="{StaticResource Muted}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Panel}" Margin="8,0,0,0" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Text="KEY DECISION POINTS" Style="{StaticResource PanelHeader}" />
+                                    <TextBlock Text="{Binding Branches.Count}" FontSize="22" FontWeight="Bold" />
+                                    <TextBlock Text="compared with the recommended response (Branches tab)" Style="{StaticResource Muted}" />
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+
+                        <TextBlock Text="DEBRIEF POINTS" Style="{StaticResource PanelHeader}" />
+                        <ItemsControl ItemsSource="{Binding Findings}" Margin="0,0,0,12">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="0,2">
+                                        <TextBlock x:Name="Mark" DockPanel.Dock="Left" Text="▲" Width="18" Foreground="{StaticResource CriticalBrush}" />
+                                        <TextBlock Text="{Binding Text}" Style="{StaticResource Wrap}" />
+                                    </DockPanel>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding Strength}" Value="True">
+                                            <Setter TargetName="Mark" Property="Text" Value="✔" />
+                                            <Setter TargetName="Mark" Property="Foreground" Value="{StaticResource OkBrush}" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="PERFORMANCE METRICS" Style="{StaticResource PanelHeader}" />
+                        <DataGrid ItemsSource="{Binding Metrics}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Area" Binding="{Binding Category}" Width="110" />
+                                <DataGridTextColumn Header="Measure" Binding="{Binding Name}" Width="240" />
+                                <DataGridTextColumn Header="Result" Binding="{Binding Display}" Width="150" />
+                                <DataGridTextColumn Header="Standard" Binding="{Binding Standard}" Width="130" />
+                                <DataGridTemplateColumn Header="Rating" Width="70">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate><TextBlock Text="{Binding RatingText}" Style="{StaticResource RatingText}" /></DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Notes" Width="*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate><TextBlock Text="{Binding Explanation}" Style="{StaticResource Muted}" /></DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ===== Decisions ===== -->
+            <TabItem Header="DECISIONS">
+                <DockPanel Margin="8">
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource Muted}" Margin="0,0,0,6"
+                               Text="Every command you gave: what prompted it, how long it took, what the COP showed and what was really happening. 'COP then' shows the main window as it was at that moment." />
+                    <DataGrid ItemsSource="{Binding Decisions}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="70" />
+                            <DataGridTemplateColumn Header="Decision" Width="2*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource Wrap}"><Run Text="{Binding Category, Mode=OneWay}" FontWeight="SemiBold" /> <Run Text="{Binding Decision, Mode=OneWay}" /></TextBlock>
+                                            <TextBlock Text="{Binding Note}" Style="{StaticResource Muted}" FontStyle="Italic" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Prompted by" Width="1.2*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate><TextBlock Text="{Binding Trigger}" Style="{StaticResource Wrap}" /></DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Took" Binding="{Binding Took}" Width="80" />
+                            <DataGridTemplateColumn Header="Rating" Width="60">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate><TextBlock Text="{Binding RatingText}" Style="{StaticResource RatingText}" /></DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="What you knew" Width="1.5*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate><TextBlock Text="{Binding Known}" Style="{StaticResource Muted}" /></DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="What was really happening" Width="1.5*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate><TextBlock Text="{Binding Truth}" Style="{StaticResource Wrap}" Foreground="#C792EA" /></DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Width="76">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="COP then" Padding="6,0" FontSize="11"
+                                                Command="{Binding DataContext.ShowCopCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding At}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ===== Analytics ===== -->
+            <TabItem Header="ANALYTICS">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                    <StackPanel Margin="8">
+                        <TextBlock Text="RESOURCE COMMITMENT OVER TIME" Style="{StaticResource PanelHeader}" />
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,6"
+                                   Text="Grey available · blue dispatched or en route · orange on scene or operating · purple transporting · red out of service. Hover a bar for times." />
+                        <ItemsControl ItemsSource="{Binding Gantt}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:GanttRow}">
+                                    <DockPanel Margin="0,1" Height="16">
+                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Callsign}" Width="110" VerticalAlignment="Center" />
+                                        <TextBlock DockPanel.Dock="Right" Text="{Binding Committed}" Width="44" TextAlignment="Right" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource MutedTextBrush}" />
+                                        <ItemsControl ItemsSource="{Binding Bars}" Width="720" HorizontalAlignment="Left">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><Canvas Background="{StaticResource PanelRaisedBrush}" /></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemContainerStyle>
+                                                <Style TargetType="ContentPresenter">
+                                                    <Setter Property="Canvas.Left" Value="{Binding Left}" />
+                                                </Style>
+                                            </ItemsControl.ItemContainerStyle>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type vm:GanttBar}">
+                                                    <Rectangle Width="{Binding Width}" Height="14" Fill="{Binding Fill}" ToolTip="{Binding Tip}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <ItemsControl ItemsSource="{Binding GanttScale}" Margin="110,2,0,12" Width="720" HorizontalAlignment="Left">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate><TextBlock Text="{Binding}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" /></DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="HEATMAPS" Style="{StaticResource PanelHeader}" />
+                        <ItemsControl ItemsSource="{Binding Heatmaps}" Margin="0,0,0,12">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:HeatmapView}">
+                                    <Border Style="{StaticResource Panel}" BorderThickness="1" Margin="0,0,12,12" Width="380">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding Subtitle}" Style="{StaticResource Muted}" FontSize="11" Margin="0,0,0,4" />
+                                            <Grid Width="336" Height="336" HorizontalAlignment="Left">
+                                                <ItemsControl ItemsSource="{Binding Cells}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate><UniformGrid Columns="24" Background="{StaticResource PanelRaisedBrush}" /></ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate DataType="{x:Type vm:HeatCell}">
+                                                            <Rectangle Fill="{StaticResource CriticalBrush}" Opacity="{Binding Opacity}" ToolTip="{Binding Tip}" />
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <Ellipse Width="12" Height="12" Stroke="{StaticResource TextBrush}" StrokeThickness="2"
+                                                         HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" ToolTip="The incident" />
+                                                <TextBlock Text="N ↑" FontSize="10" Margin="4,2" IsHitTestVisible="False" />
+                                            </Grid>
+                                            <ItemsControl ItemsSource="{Binding Hotspots}" Margin="0,4,0,0">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate><TextBlock Text="{Binding StringFormat=• {0}}" Style="{StaticResource Wrap}" FontSize="11" /></DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="DELAYS EN ROUTE" Style="{StaticResource PanelHeader}" />
+                        <DataGrid ItemsSource="{Binding Delays}" MaxHeight="300">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="70" />
+                                <DataGridTextColumn Header="Unit" Binding="{Binding Callsign}" Width="110" />
+                                <DataGridTextColumn Header="Lost" Binding="{Binding Lost}" Width="90" />
+                                <DataGridTextColumn Header="Where" Binding="{Binding Where}" Width="200" />
+                                <DataGridTextColumn Header="Why" Binding="{Binding Cause}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ===== Branches ===== -->
+            <TabItem Header="BRANCHES">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="8">
+                        <TextBlock Text="KEY DECISIONS AGAINST THE RECOMMENDED RESPONSE" Style="{StaticResource PanelHeader}" />
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,6"
+                                   Text="For each decision point: what you did, the recommended response, the alternative, and the likely difference, estimated from what really happened in your session." />
+                        <DataGrid ItemsSource="{Binding Branches}">
+                            <DataGrid.Columns>
+                                <DataGridTemplateColumn Header="Decision point" Width="150">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Topic}" FontWeight="SemiBold" Style="{StaticResource Wrap}" />
+                                                <TextBlock Text="{Binding Time}" Style="{StaticResource Muted}" />
+                                                <TextBlock Text="{Binding RatingText}" Style="{StaticResource RatingText}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="What you did" Width="*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate><TextBlock Text="{Binding Yours}" Style="{StaticResource Wrap}" /></DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Recommended / alternative" Width="*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Recommended}" Style="{StaticResource Wrap}" />
+                                                <TextBlock Text="{Binding Alternative, StringFormat=Alternative: {0}}" Style="{StaticResource Muted}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Likely difference" Width="1.4*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate><TextBlock Text="{Binding Effect}" Style="{StaticResource Wrap}" /></DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <TextBlock Text="SAME SCENARIO, OTHER COMMANDERS" Style="{StaticResource PanelHeader}" Margin="0,16,0,4" />
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,6"
+                                   Text="Re-runs the scenario in the background under the recommended response and with nobody in command, for as long as your session ran. The world is random (the fire, the casualties, the collapse), so each is run several times and averaged." />
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6" Visibility="{Binding CanCompare, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="Runs each" VerticalAlignment="Center" Margin="0,0,6,0" />
+                            <ComboBox ItemsSource="{Binding RunChoices}" SelectedItem="{Binding BranchRuns}" Width="50" />
+                            <Button Command="{Binding CompareCommand}" Margin="8,0,0,0" Padding="10,3">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                        <Setter Property="Content" Value="▶ Run comparison" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsComparing}" Value="True">
+                                                <Setter Property="Content" Value="■ Cancel" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <TextBlock Text="{Binding BranchStatus}" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="10,0,0,0" />
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource Muted}" Text="Only a scripted scenario (Barrow Street) can be re-run."
+                                   Visibility="{Binding CanCompare, Converter={x:Static vm:Converters.FalseToVisible}}" />
+                        <DataGrid ItemsSource="{Binding Outcomes}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Commander" Binding="{Binding Label}" Width="160" />
+                                <DataGridTextColumn Header="Hurt" Binding="{Binding Hurt}" Width="50" />
+                                <DataGridTextColumn Header="Dead" Binding="{Binding Dead}" Width="50" />
+                                <DataGridTextColumn Header="Firefighters in distress" Binding="{Binding Firefighters}" Width="150" />
+                                <DataGridTextColumn Header="Largest fire" Binding="{Binding Fire}" Width="100" />
+                                <DataGridTextColumn Header="First on scene" Binding="{Binding FirstOnScene}" Width="100" />
+                                <DataGridTemplateColumn Header="What command did" Width="*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Expander Header="{Binding Notes}" FontSize="11">
+                                                <TextBlock Text="{Binding Actions}" FontFamily="Consolas" FontSize="11" TextWrapping="Wrap" Margin="12,2,0,0" />
+                                            </Expander>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ===== Timeline ===== -->
+            <TabItem Header="TIMELINE">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                        <CheckBox Content="Decisions and key events only" IsChecked="{Binding DecisionsOnly}" VerticalAlignment="Center" />
+                        <CheckBox Content="Include ground truth" IsChecked="{Binding IncludeTruth}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                        <TextBlock Text="Every action, message and dispatch. 'COP' replays the main window to that moment." Style="{StaticResource Muted}"
+                                   VerticalAlignment="Center" Margin="16,0,0,0" />
+                    </StackPanel>
+                    <ListBox ItemsSource="{Binding Timeline}" FontFamily="Consolas" FontSize="12" VirtualizingPanel.IsVirtualizing="True">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:AarTimelineRow}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="44" />
+                                        <ColumnDefinition Width="72" />
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button Content="COP" Padding="4,0" FontSize="10" Margin="0,0,6,0"
+                                            Command="{Binding DataContext.ShowCopCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding At}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Time}" Foreground="{StaticResource MutedTextBrush}" />
+                                    <TextBlock x:Name="Category" Grid.Column="2" Text="{Binding Category}" />
+                                    <TextBlock x:Name="Text" Grid.Column="3" Text="{Binding Text}" TextWrapping="Wrap" />
+                                </Grid>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsDecision}" Value="True">
+                                        <Setter TargetName="Category" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                        <Setter TargetName="Category" Property="FontWeight" Value="Bold" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsTruth}" Value="True">
+                                        <Setter TargetName="Category" Property="Foreground" Value="#C792EA" />
+                                        <Setter TargetName="Text" Property="Foreground" Value="#C792EA" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ===== Export ===== -->
+            <TabItem Header="EXPORT">
+                <StackPanel Margin="12" MaxWidth="640" HorizontalAlignment="Left">
+                    <TextBlock Text="REPORT FOR DEBRIEFING AND CERTIFICATION" Style="{StaticResource PanelHeader}" />
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
+                               Text="The HTML report holds everything in this window plus a sign-off block, and prints to PDF from any browser. The CSV has every metric, decision, branch point, delay and event for a spreadsheet." />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="120" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Trainee" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1" Text="{Binding Trainee, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" />
+                        <TextBlock Grid.Row="1" Text="Role" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Role, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" />
+                        <TextBlock Grid.Row="2" Text="Assessor" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+                        <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Assessor, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" />
+                        <TextBlock Grid.Row="3" Text="Assessor's verdict" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+                        <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding Verdicts}" SelectedItem="{Binding Verdict}" Margin="0,2" Width="200" HorizontalAlignment="Left" />
+                        <TextBlock Grid.Row="4" Text="Comments" Style="{StaticResource FieldLabel}" VerticalAlignment="Top" Margin="0,4,0,0" />
+                        <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding Comments, UpdateSourceTrigger=PropertyChanged}" Margin="0,2" Height="90"
+                                 AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" />
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Margin="120,10,0,0">
+                        <Button Content="Export HTML report…" Command="{Binding ExportHtmlCommand}" Padding="10,4" FontWeight="SemiBold" />
+                        <Button Content="Export CSV…" Command="{Binding ExportCsvCommand}" Padding="10,4" Margin="8,0,0,0" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Muted}" Margin="120,8,0,0"
+                               Text="Run the branch comparison first to include it in the report." />
+                </StackPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

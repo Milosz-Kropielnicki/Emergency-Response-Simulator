@@ -1,5 +1,6 @@
 using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Events;
+using Emergency_Response_Simulator.Simulation.Aar;
 using Emergency_Response_Simulator.Simulation.Engine;
 using Emergency_Response_Simulator.Simulation.Hazards;
 using Emergency_Response_Simulator.Simulation.Routing;
@@ -97,7 +98,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IC2Service, C2Service>();
         services.AddSingleton<ICommsService>(sp => new CommsService(sp.GetRequiredService<ICopService>(), sp.GetRequiredService<IC2Service>(),
             sp.GetRequiredService<IEventStore>(), sp.GetRequiredService<SimulationSession>().Id));
-        services.AddSingleton<IAarService, AarService>();
+        // Branch re-runs need a scripted scenario; they share the (read-only) road network and terrain once loaded.
+        var scenario = configuration[$"{SimulationOptions.SectionName}:Scenario"];
+        services.AddSingleton<IAarService>(sp => new AarService(sp.GetRequiredService<IEventStore>(), sp.GetRequiredService<IRoutingService>(),
+            BranchRunner.CanRun(scenario)
+                ? new BranchRunner(() => sp.GetRequiredService<RoutingService>().Network, sp.GetRequiredService<HazardTerrain>())
+                : null));
         services.AddSingleton<IIapService>(sp => new IapService(
             sp.GetRequiredService<ICopService>(), sp.GetRequiredService<IEventPublisher>(), sp.GetRequiredService<IC2Service>(),
             sp.GetRequiredService<ISimulationControl>(), sp.GetRequiredService<IRoutingService>(), sp.GetService<IGisService>()));

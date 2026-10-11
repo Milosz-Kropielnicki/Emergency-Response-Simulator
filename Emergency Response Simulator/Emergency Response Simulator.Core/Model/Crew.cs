@@ -202,7 +202,7 @@ public sealed class Mayday
     public Guid Id { get; init; }
     public Guid UnitId { get; init; }
     public required string Callsign { get; init; }
-    public string? Member { get; init; }
+    public string? Member { get; set; }
     public Guid? IncidentId { get; init; }
 
     /// <summary>What was heard: who, where, what's wrong (garbled if the call was).</summary>

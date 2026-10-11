@@ -67,6 +67,8 @@
                     </TextBlock>
                     <TextBlock Text="{Binding EventStoreLabel}" Foreground="{StaticResource MutedTextBrush}"
                                VerticalAlignment="Center" Margin="0,0,16,0" />
+                    <Button Content="📊 AAR" Command="{Binding OpenAarCommand}" Margin="0,0,8,0"
+                            ToolTip="After-action review: decision timeline, metrics, heatmaps, branch comparison and exportable reports" />
                     <Button Content="📋 IAP Builder" Command="{Binding OpenIapCommand}" Margin="0,0,12,0"
                             ToolTip="Incident Action Plan for the selected incident: objectives, organisation, assignments, comms, medical and safety plans" />
                     <Button Command="{Binding TogglePlayCommand}" MinWidth="80" ToolTip="Start or pause the simulation">

@@ -67,7 +67,7 @@ The simulator separates **what is happening** from **what command believes is ha
 | `IAvlService` | Where are my resources? | Contract only, Phase 3 |
 | `IPlumeService` | Where is the hazard going? | HTTP client plus Python stub model (the trainee's prediction); a simple truth plume runs in-engine since Phase 6; real model comes in Phase 12 |
 | `ICommsService` | Who said what, on which channel? | Implemented (`CommsService` over the COP's comms log) |
-| `IAarService` | How did we get here? | Timeline and replay implemented; metrics come in Phase 9 |
+| `IAarService` | How did we get here? | Implemented: timeline, replay, the analysed review, branch re-runs (Phase 9) |
 | `ISimulationControl` | Start, pause, speed | Implemented (`SimulationEngine`) |
 
 ## GIS (Phase 1)
@@ -484,6 +484,60 @@ Every unit now carries a crew of named people (`CrewSystem`, Order 16), each wit
   - **Crews:** for each crew, its shift (overtime in amber), time on task, its last condition report, qualifications, relief and peer-support status, and an expandable crew list. Buttons: Rehab, Relieve, Quick relief and Peer support.
   - The unit tab lists the crew, qualifications, shift and condition, and the resource board's Crew column shows people on duty and condition.
   - For the instructor: real fatigue and stress per crew, firefighters in distress (also marked on the map), and what handovers lost. The comparison shows crews more tired than they've admitted, and relief crews on a channel command doesn't know about.
+
+## After-action review & metrics (Phase 9)
+
+The review (`AarAnalyzer`, behind `IAarService.BuildReportAsync`) is worked out from the event stream alone, so the same session always gives the same report.
+- Perceived events rebuild the COP as it stood at each moment, so each decision is judged on what was known just before it.
+- Truth events rebuild what was really happening.
+
+Open it with **📊 AAR** in the header. It opens in its own window, so the COP can replay beside it.
+
+- **Decision timeline:**
+  - Every command (C2 or IAP) is listed with what prompted it, how long it took, what the COP showed and what was really happening.
+  - It is rated against the standard where there is one:
+
+    | Decision | Prompt | Good / fair within |
+    |---|---|---|
+    | Open an incident | First report nearby | 2 / 4 min |
+    | First dispatch to it | Incident opened | 1 / 3 min |
+    | Decide a request | Request | 2 / 5 min |
+    | Evacuation signal | First collapse warning | 1 / 2.5 min; poor if after the collapse |
+    | Rescue team | Mayday | 1 / 3 min |
+    | Emergency traffic, PAR | Mayday | 1 / 2 min, 2 / 5 min |
+    | Hazard zones | First report of chemicals | 3 / 6 min |
+    | Callback, read-back confirmation, patch | Missed call, unclear read-back, "can't raise you" | 1–2 / 2–5 min |
+
+  - Orders to crews without the qualification are rated poor.
+  - **COP then** replays the main window to that moment. The **Timeline** tab replays every action, message and dispatch (ground truth optional).
+- **Performance metrics:**
+
+  | Area | Measures |
+  |---|---|
+  | Dispatch | First report to incident opened, to first dispatch, to first unit on scene; how long the emergency went unreported (context) |
+  | Resources | Utilisation and peak commitment; units never committed; time lost en route; longest spell without rehab; crews kept on past their shift |
+  | Communications | Messages heard broken or garbled; "say again" on unclear ones; transmissions never heard (truth); unclear read-backs resolved; orders never read back; orders a crew wasn't qualified for; radio discipline; missed calls rung back |
+  | Command | Alerts acknowledged; time to decide requests; IAP objectives achieved (or no plan); span of control exceeded |
+  | Safety | Longest gap between PARs; Mayday to rescue team; emergency traffic for Maydays; firefighters in distress |
+  | Outcome (truth) | Casualties and deaths (and deaths before treatment); largest fire |
+
+  These roll up into a score and **Competent / Developing / Not yet competent**. Any poor key decision holds back "Competent".
+- **Heatmaps and analytics:**
+  - A commitment chart shows each unit's status over the session.
+  - Two heatmaps cover 3.6 km around the incident (150 m cells), from the AVL feed: **resource commitment** (unit-minutes committed) and **delays en route** (minutes stopped or under 10 km/h). Each names its hotspots.
+  - A delay table lists every hold-up of a minute or more and every re-route that pushed arrival back, with where and why.
+- **Branching AAR:**
+  - Each key decision point gets what you did, the recommended response, the alternative, and the likely difference, estimated from what really happened.
+  - Decision points: opening the incident, first dispatch, evacuating the building, each Mayday and its emergency traffic, authority to evacuate, the chemical hazard, the hospital pre-alert.
+  - Example: "It came down at 14:23:10 with crews inside: 1 firefighter trapped. Signalled at the recommended time, crews would have been out 1 min 45 s before the collapse."
+  - **Same scenario, other commanders** (`BranchRunner`, Barrow Street only) re-runs the scenario headless, for as long as your session ran:
+    - under the **recommended response** (`ExpertPolicy`: it sees only the COP and acts with human delays; it confirms the location before opening, sends a full first attendance, sets hazard zones, approves the evacuation, pre-alerts hospitals, sounds the evacuation signal on a warning, and so on);
+    - with **no response**.
+    - Each policy is run several times and averaged, because the world is random. The results sit beside your outcome, with what each commander did.
+  - Each branch has its own event store, traffic and COP, and shares only the read-only road network and terrain.
+- **Exports** (`AarExport`):
+  - A self-contained **HTML report**: summary and verdict, debrief points, outcome comparison, key decisions, metrics, commitment chart and heatmaps (SVG), delays, decision timeline, key events, and a sign-off block with trainee, role, assessor, the assessor's verdict, comments and signature lines. It prints to PDF from any browser.
+  - A **CSV** with every metric, branch point, outcome, decision, unit, delay and event in one sheet.
 
 ## Local setup
 

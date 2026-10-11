@@ -75,8 +75,10 @@ public sealed class HazardReportingSystem(IRoutingService? routing = null) : ISi
 
             var nearestIncident = world.Incidents.Values.Where(i => !i.Extinguished)
                 .MinBy(i => GeoMath.DistanceMeters(i.Location, unit.Location));
+            // DefaultIfEmpty: MinBy over value tuples throws when no hazard is active (the fire is already out).
             var nearestHazard = world.Hazards.Values.Where(h => !h.Ended && h.Model is { IsActive: true })
-                .Select(h => (Hazard: h, Distance: Distance(h, unit.Location)))
+                .Select(h => (Hazard: (WorldHazard?)h, Distance: Distance(h, unit.Location)))
+                .DefaultIfEmpty((Hazard: (WorldHazard?)null, Distance: double.PositiveInfinity))
                 .MinBy(x => x.Distance);
             var incidentDistance = nearestIncident is null ? double.PositiveInfinity : GeoMath.DistanceMeters(nearestIncident.Location, unit.Location);
             if (incidentDistance <= 250 || nearestHazard.Distance <= 250) continue;
