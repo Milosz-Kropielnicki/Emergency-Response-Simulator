@@ -16,6 +16,17 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// Registers only the GIS service (static map layers, the road network): for a client, whose events come from the
+    /// server rather than this database (Phase 11).
+    /// </summary>
+    public static IServiceCollection AddErsGis(this IServiceCollection services, string connectionString)
+    {
+        services.AddDbContextFactory<ErsDbContext>(options => ConfigureErsDb(options, connectionString));
+        services.AddSingleton<IGisService, GisService>();
+        return services;
+    }
+
     public static void ConfigureErsDb(DbContextOptionsBuilder options, string connectionString) =>
         options
             .UseNpgsql(connectionString, npgsql => npgsql.UseNetTopologySuite())

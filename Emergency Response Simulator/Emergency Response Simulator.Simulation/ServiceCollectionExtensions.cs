@@ -47,6 +47,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<SimulationSession>().Id));
         services.AddSingleton<ISimulationControl>(sp => sp.GetRequiredService<SimulationEngine>());
         services.AddSingleton<IEventPublisher>(sp => sp.GetRequiredService<SimulationEngine>());
+        services.AddSingleton<IWorldSnapshotSource>(sp => sp.GetRequiredService<SimulationEngine>());
 
         services.AddSingleton<ICopService>(sp =>
         {

@@ -21,13 +21,15 @@ Emergency Response Simulator/
 ├─ Emergency Response Simulator.Core        entities, events, module contracts (no dependencies but NTS)
 ├─ Emergency Response Simulator.Simulation  engine, world/perceived state, C2, AAR, plume client
 ├─ Emergency Response Simulator.Data        EF Core + PostGIS schema, event store, GIS service
-├─ Emergency Response Simulator             WPF shell (composition root)
+├─ Emergency Response Simulator.Server      ASP.NET Core + SignalR host for networked sessions (Phase 11)
+├─ Emergency Response Simulator.Client      SignalR client: mirrored event stream, remote service proxies (Phase 11)
+├─ Emergency Response Simulator             WPF shell (composition root; standalone or client)
 └─ Emergency Response Simulator.Tests       xUnit
 hazard-models/                              Python plume service + tests
 database/                                   local PostgreSQL setup script
 ```
 
-Dependencies point inward: `App → Simulation, Data → Core`. Simulation and Data do not know about each other; the app wires them together.
+Dependencies point inward: `App → Client, Simulation, Data → Core` and `Server → Simulation, Data → Core`. Simulation and Data do not know about each other; the app (or the server) wires them together. The wire contract both sides share lives in `Simulation/Remote`.
 
 ## Truth vs perception
 
@@ -605,6 +607,40 @@ The other agencies are now joint partners with priorities and knowledge of their
   - **Other agencies**: type, jurisdiction, units free, priority, standing, unified command and assistance status, and Ask for units / Ask what they know.
   - **Mutual-aid agreements**.
   - For the instructor, the truth comparison lists everything agencies know and haven't shared.
+
+## Server & clients (Phase 11, M1)
+
+The engine, event store and live COP can now run once, on a **simulation server**, with any number of WPF clients connected over SignalR. Standalone (everything in one process, as before) is still the default.
+
+**How it fits together:**
+- **Event feed** (`EventFeed`): a client asks for the stream after the last sequence it applied. The server queues live events for it at once, sends the history from the store, then drains the queue, skipping what the history covered. So nothing is missed or sent twice, and one pump per connection keeps the stream in order.
+- **Visibility is decided on the server:** a connection that isn't the instructor never has a truth event queued, read or sent. The instructor connection joins the `truth` group.
+- **The client** (`SimulationConnection`) keeps a `MirrorEventStore`: the server's events with the server's sequence numbers. The COP (`PerceivedState`), AVL trails, the timeline, the comms log and replay run on it unchanged. When the link drops it reconnects (0, 2, 5, then every 10 s, without a limit) and resumes from its last sequence.
+- **Commands:** `RemoteProxy` implements `IC2Service` and `IIapService` for every interface method, one for one, with no hand-written forwarding. On the server, `CommandDispatcher` runs the call on the real service, which validates it against the server's live COP as in standalone. A successful command returns only once the client's own COP shows its result.
+  - `ISimulationControl`: start, pause and speed go to the server; the clock comes from its pushes and moves on locally between them.
+  - `IAarService`: replay and the timeline run on the client's copy (a trainee's has no truth in it). The full review and branch re-runs run on the server, and only the instructor may ask for them until roles arrive (M3).
+  - `ICommsService` is the usual comms service over the local COP, sending through the C2 proxy.
+- **Pushes** (`Broadcaster`): the clock to everyone every 0.5 s; the reported traffic feed when it refreshes; and to the `truth` group only, the `WorldSnapshot` and live traffic about once a second.
+- **Wire format** (`WireJson`): `EventJson` plus value tuples and NTS geometries (as WKT).
+
+**Running it:**
+
+```powershell
+# Server: PostgreSQL required (decision D4); set the instructor PIN in its configuration, not the clients'.
+dotnet run --project "Emergency Response Simulator.Server" -- --Server:InstructorPin=2468
+# Development without a database:
+dotnet run --project "Emergency Response Simulator.Server" -- --ConnectionStrings:Ers= --Server:AllowInMemoryStore=true --Server:InstructorPin=2468
+
+# A trainee client, and the instructor's
+"Emergency Response Simulator.exe" --Mode=Client --Server=http://training-pc:5180
+"Emergency Response Simulator.exe" --Mode=Client --Server=http://training-pc:5180 --Role=Instructor --Pin=2468
+```
+
+- The server listens on port 5180 (`Urls` in its `appsettings.json`), plays Barrow Street (`Simulation:Scenario`), and shows its session and the number of streaming clients at `/`.
+- A client with a GIS database configured still loads the static map layers and road network from it; its events always come from the server.
+- Without a database, routing falls back to straight lines on both sides.
+
+**Not yet** (later milestones): sessions with join codes, lobby and attribution (M2), per-role permissions (M3), the instructor console (M4), observers (M6) and voice (M7). Until M2, the server runs one session for its lifetime.
 
 ## Local setup
 

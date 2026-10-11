@@ -11,7 +11,7 @@ namespace Emergency_Response_Simulator.Simulation.Engine;
 /// Owns the simulation clock and the ground truth, runs the systems every tick, and is the single
 /// writer to the event stream for a session so that sequence order equals causal order.
 /// </summary>
-public sealed class SimulationEngine : ISimulationControl, IEventPublisher
+public sealed class SimulationEngine : ISimulationControl, IEventPublisher, IWorldSnapshotSource
 {
     private readonly IEventStore _store;
     private readonly IReadOnlyList<ISimulationSystem> _systems;

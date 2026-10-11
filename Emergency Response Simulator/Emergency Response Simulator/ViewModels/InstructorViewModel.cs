@@ -27,13 +27,13 @@ public sealed record WorldFact(string Label, string Value);
 /// </summary>
 public partial class InstructorViewModel : ObservableObject
 {
-    private readonly SimulationEngine _engine;
+    private readonly IWorldSnapshotSource _world;
     private readonly ICopService _cop;
     private readonly LiveTraffic _traffic;
 
-    public InstructorViewModel(SimulationEngine engine, ICopService liveCop, LiveTraffic traffic)
+    public InstructorViewModel(IWorldSnapshotSource world, ICopService liveCop, LiveTraffic traffic)
     {
-        _engine = engine;
+        _world = world;
         _cop = liveCop;
         _traffic = traffic;
         var timer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => Refresh(),
@@ -55,7 +55,7 @@ public partial class InstructorViewModel : ObservableObject
 
     private void Refresh()
     {
-        var snapshot = _engine.Snapshot;
+        var snapshot = _world.Snapshot;
         if (ReferenceEquals(snapshot, Snapshot)) return;
         Snapshot = snapshot;
 

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Emergency_Response_Simulator.Server</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Emergency Response Simulator.Core\Emergency Response Simulator.Core.csproj" />
+    <ProjectReference Include="..\Emergency Response Simulator.Simulation\Emergency Response Simulator.Simulation.csproj" />
+    <ProjectReference Include="..\Emergency Response Simulator.Data\Emergency Response Simulator.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Machine-specific connection strings, written by database/Setup-Database.ps1 (git-ignored). -->
+    <None Include="..\appsettings.Local.json" Link="appsettings.Local.json" CopyToOutputDirectory="PreserveNewest"
+          Condition="Exists('..\appsettings.Local.json')" />
+  </ItemGroup>
+
+</Project>

@@ -1,28 +1,29 @@
-# Emergency Response Simulator — Development Timeline
+# Emergency Response Simulator — Development Timeline (v1.2)
 
-
-**Ordering principle:** Start with the foundational data and simulation architecture, then build the core COP/C2 loop, then layer on the high-impact training features (communications, human factors, AAR, multi-agency, instructor tools), then add advanced realism and supporting systems.
+**Revision note (v1.2):** The former Phase 11 (*Instructor Tools & Multiplayer*) is now **Phase 12**. A new, detailed **Phase 11** — the implementation plan for server/client split, sessions, identity, attribution, permissions, instructor console, AI role players, observer mode, and voice — has been inserted ahead of it. All subsequent phases have been shifted down by one. The total phase count is now 22.
 
 ---
 
-## Phase 0 — Architecture & Foundations  
+## Phase 0 — Architecture & Foundations
+**Weeks 1–4 | 4 weeks**
 
 **Focus:** Define the data model, event stream, simulation tick, and module boundaries.
 
 **Deliverables:**
-- Core entity model: Unit, Incident, Resource, Report, Alert, Event, Zone, GISLayer, User, Agency, IAP, OperationalPeriod.
+- Core entity model: Unit, Incident, Resource, Report, Alert, Event, Zone, GISLayer, User, Agency, IAP, OperationalPeriod, Participant, Actor.
 - Append-only time-stamped event stream architecture.
 - Simulation engine skeleton: true world state vs perceived state.
 - Database schema: PostgreSQL + PostGIS for static/dynamic GIS.
-- API contracts between modules: COP, C2, IAP, GIS, AVL, Plume, Comms, AAR.
+- API contracts between modules: COP, C2, IAP, GIS, AVL, Plume, Comms, AAR, SessionHub.
 - UI shell: main dashboard layout, top/left/right pop-out panels, map placeholder.
-- Technical stack decision: C# .NET for UI/engine, Python for hazard models, PostGIS.
+- Technical stack decision: C# .NET for UI/engine, Python for hazard models, PostgreSQL + PostGIS.
 
 **Dependencies:** None.
 
 ---
 
-## Phase 1 — GIS & Map Core  
+## Phase 1 — GIS & Map Core
+**Weeks 5–10 | 6 weeks**
 
 **Focus:** Geographic foundation and map rendering.
 
@@ -39,6 +40,7 @@
 ---
 
 ## Phase 2 — COP Core & Situational Data
+**Weeks 11–16 | 6 weeks**
 
 **Focus:** The Common Operating Picture as a shared information system.
 
@@ -46,17 +48,19 @@
 - Incident objects: type, location, priority, status, threats, casualties, assigned resources, IC.
 - Resource objects: callsign, type, location, status, assignment, crew, equipment, ETA, comms.
 - Status dynamics: AVAILABLE → DISPATCHED → EN ROUTE → ON SCENE → OPERATING → TRANSPORTING → AVAILABLE.
-- Reports & alerts: source, timestamp, confidence, location accuracy, verification status (Known/Reported/Estimated/Suspected/Confirmed).
+- Reports & alerts: source, timestamp, confidence, location accuracy, verification status.
 - COP display: incident status board, resource board, alerts/intelligence feed.
 - Time dimension: history log, event timeline, replay foundation.
 - Attention management: critical alerts, resource shortages, situation changes, communication failures.
 - Operational boundaries: Hot/Warm/Cold zones, evacuation zones, command posts, staging areas.
+- `PerceivedState.Apply(SimEvent)` as the sole COP projection function.
 
 **Dependencies:** Phase 1.
 
 ---
 
 ## Phase 3 — AVL & Resource Tracking
+**Weeks 17–22 | 6 weeks**
 
 **Focus:** Real-time location and status of mobile resources.
 
@@ -73,8 +77,9 @@
 ---
 
 ## Phase 4 — C2 Dispatch & Command
+**Weeks 23–28 | 6 weeks**
 
-**Focus:** Command and control execution — “Make it happen.”
+**Focus:** Command and control execution — "Make it happen."
 
 **Deliverables:**
 - Dispatch interface: assign units to incidents, reassign, cancel.
@@ -83,12 +88,14 @@
 - Span of control mechanics: cognitive/organizational penalty for unwieldy structures.
 - Resource request: mutual aid, additional resources, specialist teams.
 - Integration with COP and resource board.
+- Service contracts defined: `IC2Service`, `IIapService`, `ICommsService`, `ISimulationControl`, `IAarService`.
 
 **Dependencies:** Phase 3.
 
 ---
 
 ## Phase 5 — IAP Builder & ICS
+**Weeks 29–34 | 6 weeks**
 
 **Focus:** Incident Action Plan creation and ICS compliance.
 
@@ -106,8 +113,9 @@
 ---
 
 ## Phase 6 — Simulation Engine & Basic AI
+**Weeks 35–42 | 8 weeks**
 
-**Focus:** The world beyond the player’s perception.
+**Focus:** The world beyond the player's perception.
 
 **Deliverables:**
 - Agent-based modeling: responders, civilians, vehicles.
@@ -117,33 +125,37 @@
 - Dynamic scenario updates: wind, release rate, road closures, casualty count, hospital capacity.
 - AI-controlled agencies: other fire/EMS/police units.
 - Separation of true world state from COP perceived state.
+- `WorldSnapshot` immutable record captured each step.
+- `SimulationEngine._gate` single-writer guarantee.
+- `ScriptedInjectSystem` with timed/conditional injects.
 
 **Dependencies:** Phase 5.
 
 ---
 
-## Phase 7 — Communications Realism  
-
+## Phase 7 — Communications Realism
+**Weeks 43–48 | 6 weeks**  
 **High-impact training feature #2**
 
 **Focus:** The fog of war through realistic communications.
 
 **Deliverables:**
 - Multi-channel radio: fire, EMS, police, inter-agency.
-- Push-to-talk simulation, call signs, closed-loop communication, read-backs.
+- Push-to-talk *timing* on typed messages, call signs, closed-loop communication, read-backs.
 - Channel congestion, radio discipline.
 - Degraded communications: dead zones, cell tower failures, battery life, interoperability patches.
 - Delays, missed calls, corrupted messages.
 - Incoming emergency calls, field reports, inter-agency chats.
 - Language and cultural barriers.
 - Right panel: communication hub toggles and display.
+- Text transcripts in the event stream (`TransmitAsync` with held seconds).
 
 **Dependencies:** Phase 6.
 
 ---
 
-## Phase 8 — Human Factors & Crew Management  
-
+## Phase 8 — Human Factors & Crew Management
+**Weeks 49–54 | 6 weeks**  
 **High-impact training feature #1**
 
 **Focus:** Making resources feel human.
@@ -159,8 +171,8 @@
 
 ---
 
-## Phase 9 — After-Action Review & Metrics  
-
+## Phase 9 — After-Action Review & Metrics
+**Weeks 55–60 | 6 weeks**  
 **High-impact training feature #4**
 
 **Focus:** The key training value — learning from decisions.
@@ -171,13 +183,14 @@
 - Heatmaps and analytics: resource commitment, delays.
 - Branching AAR: compare player decisions to optimal/alternative outcomes.
 - Exportable reports for certification and debriefing.
+- `AarAnalyzer` foundations.
 
 **Dependencies:** Phase 2 (event stream), Phase 8.
 
 ---
 
-## Phase 10 — Multi-Agency & Interoperability  
-
+## Phase 10 — Multi-Agency & Interoperability
+**Weeks 61–66 | 6 weeks**  
 **High-impact training feature #3**
 
 **Focus:** Joint command and inter-agency friction.
@@ -189,30 +202,145 @@
 - EOC activation levels: normal to full activation.
 - Interagency friction: competing priorities, resource hoarding, information silos.
 - Mutual aid agreements and authority disputes.
+- `AgencyAiSystem`, `InteragencySystem`, `CommandResponseSystem` (AI-side only).
+- `User`, `UserRole` (IC, Ops, Planning, Logistics, Finance/Admin, Safety, Liaison, PIO, Dispatcher, Agency Chief, Instructor, Observer).
+- `EventSources.Instructor`, `ReportSource.Instructor` defined (unused).
 
 **Dependencies:** Phase 9.
 
 ---
 
-## Phase 11 — Instructor Tools & Multiplayer  
+## Phase 11 — Instructor Tools & Multiplayer: Foundation *(NEW)*
+**Weeks 67–82 | 16 weeks**
 
-**High-impact training feature #5**
+**Focus:** Splitting the single-process engine into a server and clients, and delivering the core multiplayer, identity, permissions, instructor, observer, and voice foundations. This is the concrete implementation that the previous Phase 11 (now Phase 12) assumed.
 
-**Focus:** Turning it into a team trainer.
+**Baseline:** Phases 0–10 complete.
 
-**Deliverables:**
-- Instructor console: control injects, monitor player actions, role-play.
-- Multiplayer roles: IC, Operations, Planning, Logistics, PIO, Safety, Liaison.
-- AI-driven role players: other agencies, civilians, media, politicians.
-- Voice communication: simulated radio with push-to-talk, channels, recording.
-- Observer mode for assessment.
+**Underlying gap addressed:** The engine, event store, COP and all UI currently run in one WPF process (`App.xaml.cs`). Everything else depends on splitting that into a server and clients.
+
+**Seams exploited:** The COP is already a pure projection of the event stream (`PerceivedState.Apply`); `EventJson` is already the single wire/storage format; the service contracts are what the UI depends on; the engine is already the single writer (`SimulationEngine._gate`); `WorldSnapshot` is the natural payload for instructor clients.
+
+### Architecture Decisions
+
+| # | Decision | Recommendation |
+|---|---|---|
+| D1 | Server host and transport | **ASP.NET Core server + SignalR**; WPF clients using `Microsoft.AspNetCore.SignalR.Client`. |
+| D2 | Single-player mode | **Yes** — `--Mode=Standalone` (today's DI) vs `--Mode=Client --Server=…`. |
+| D3 | Identity | **Session join code + display name + role**; instructor PIN. No accounts/passwords (classroom LAN). |
+| D4 | Event store for multiplayer | **PostgreSQL required in server mode**; in-memory still allowed for Standalone/tests. |
+| D5 | Unfilled roles | **The IC holds every unfilled function** (ICS doctrine). |
+| D6 | Voice | **Real audio over the server**: NAudio + Opus via Concentus + SignalR streaming behind `IVoiceTransport`. Typed PTT stays as fallback. |
+| D7 | Speech for AI-run parties | **Speech-to-text into the existing PTT path** (faster-whisper in the Python service); AI replies stay text (TTS optional later). |
+| D8 | Politicians in Phase 11 | **A basic official/politician role player now**; depth goes to Phase 14. |
+
+### Milestones
+
+#### M1 — Server/Client Split (L) · foundation for everything else
+- New projects: `Emergency Response Simulator.Server` (ASP.NET Core, net10.0) and `Emergency Response Simulator.Client` (SignalR client, remote proxies, event feed).
+- Event feed: client sends last applied sequence; server replays from `IEventStore.ReadAsync(session, after)` then streams live from `Appended`. Reconnects resume with no gaps.
+- **Visibility enforced server-side:** `Truth` events go only to the `truth` group. Trainee connections never receive them.
+- Commands: proxies implement `IC2Service` (44 methods), `IIapService`, `ICommsService`, `ISimulationControl`, `IAarService` over a strongly typed hub, mirroring interfaces 1:1.
+- Instructor data: server pushes `WorldSnapshot` and `LiveTraffic` to the `truth` group at 1 Hz.
+- WPF composition: `App.xaml.cs` chooses Standalone or Client DI.
+- **Exit criteria:** Two clients see an identical COP. A trainee connection receives zero Truth events (asserted). Killing and reconnecting restores the COP with no gaps. All existing tests pass in Standalone.
+
+#### M2 — Sessions, Identity, Attribution, Concurrency (M)
+- Session lifecycle: create (pick scenario) → lobby → join (code, name, role) → instructor starts → end. New events: `ParticipantJoined`, `ParticipantLeft`, `RoleAssigned`, `RoleHandedOver`.
+- Attribution: `Guid? ActorId` + `UserRole? ActorRole` on events; server stamps actor from connection identity, never client input; ambient `ICommandContext` (AsyncLocal).
+- Concurrency: server-side **`CommandGate`** serialises C2 commands and validates against the up-to-date COP.
+- AAR: per-participant metrics and timeline filter.
+- **Exit criteria:** Every command event carries its actor. Two simultaneous dispatches: exactly one succeeds. AAR timeline filters by participant.
+
+#### M3 — Roles, Permissions, Workspaces (M)
+- Permission matrix enforced by server-side `CommandAuthorizer`; UI mirrors via `CanExecute`.
+- Unfilled roles fall to IC. `AssignIcsPositionAsync` gains optional `userId`.
+- Role handover reuses Phase 8 handover model.
+- Role workspaces: default layout per role over the same COP.
+- **Exit criteria:** Permission-matrix test for every command × role. Ops player cannot issue a public statement even if the UI is bypassed.
+
+#### M4 — Instructor Console (L)
+- Separate instructor client (role `Instructor`, `truth` group).
+- Live injects: fire now / hold / release / skip / ad-hoc inject from a template library. Recorded as `InjectFired/Held/Skipped`.
+- Monitor players: live per-participant activity feed, idle indicators, unacknowledged alerts, comms load, bookmarks.
+- Role-play: send on any channel as a unit/agency/caller/journalist/official; AAR marks as instructor role-play.
+- Take over / hand back an AI role: role-player registry controls `AgencyAiSystem`, `InteragencySystem`, `CommandResponseSystem`.
+- **Exit criteria:** Instructor runs Barrow Street live — fire an early inject, hold another, inject a wind shift, approve mutual aid as Regional Duty Officer, phone the IC as a journalist. All appear correctly in the AAR.
+
+#### M5 — AI Role Players: Fill the Gaps (S–M)
+- `PoliticalPressureSystem`: local TD, council chief executive, minister's office. Calls IC or PIO at severity-scaled intervals; escalates when ignored. Instructor-controllable.
+- Human-played agencies (stretch): replace binary `Agency.AiControlled` with the registry controller.
+
+#### M6 — Observer Mode (M)
+- Read-only client: server refuses every command; generalise `CopView.IsReplay` to `IsReadOnly`.
+- Views: perceived only, or perceived + truth (instructor grants truth per observer). "Follow participant X."
+- Live assessment: time-stamped observer notes and ratings tagged to participant + event sequence (`AssessmentNoteRecorded`). Hidden from trainees. Rubric: Competent / Developing / Not yet competent.
+- AAR: notes on timeline, per-participant scoring combines metrics + observer ratings.
+
+#### M7 — Voice Communications (L)
+- Client audio: NAudio WASAPI, Opus 20 ms frames (Concentus). Real PTT key.
+- Server voice router behind `IVoiceTransport`: channel membership follows role workspace; half-duplex; Phase 7 degradation applied to audio.
+- Talking to simulated parties: transcribed (faster-whisper with callsign-biased vocabulary), enters `TransmitAsync` path. Transcript is the event; audio is attached.
+- Recording: each transmission stored as Opus clip with `RadioAudioRecorded`. AAR timeline plays clips back. Retention setting; consent notice at join.
+- **Exit criteria:** Two players talk on a tactical channel with half-duplex. A spoken order to an AI unit is read back. Every transmission plays back in the AAR.
+
+### Cross-Cutting Work
+- **Tests:** truth leakage, reconnect catch-up, concurrent conflicting commands, permission matrix, actor stamping, inject control, AI role takeover/hand-back, observer read-only, voice routing with fake transport, Standalone suite.
+- **Migrations:** `ActorId`, `ActorRole`; participants; assessment notes; audio clip metadata.
+- **Determinism:** human and instructor actions are events; `BranchRunner` re-runs remain single-player and AI-only.
+- **Performance:** measure fan-out per client and snapshot size at 1 Hz with 900 civilians.
+- **Security (LAN scope):** server validates and authorises everything; join codes expire; no secrets in client config.
+- **Docs:** README for running a server, joining, instructor guide, observer guide.
+
+### Order and Checkpoints
+```
+M1 ─► M2 ─► M3 ─┬─► M4 ─► M5
+                ├─► M6
+                └─► M7 (client audio spike may start during M3)
+```
+1. After M1: two clients share a COP. Go/no-go on SignalR.
+2. After M3: full ICS team of 3–4 players runs Barrow Street; IC covers unfilled roles.
+3. After M4 + M6: instructor-led exercise with observer; AAR shows per-player actions and notes.
+4. After M7: voice exercise; recordings in the AAR.
+
+**Early spike (1–2 days, during M1):** Concentus + NAudio + SignalR streaming prototype to confirm latency on the training LAN before committing to D6.
+
+### Risks
+| Risk | Mitigation |
+|---|---|
+| View models assume in-process services | Proxies await until the COP has applied the resulting sequence before returning |
+| Truth leaks via snapshots/descriptions | Server-side group filtering plus leakage test on every event type |
+| Speech recognition on radio jargon | Callsign-biased vocabulary; typed PTT fallback; instructor can correct transcript |
+| Scope creep into Phase 14 | M5 limited to basic official role player; depth deferred |
+| Voice latency over SignalR | Early spike; `IVoiceTransport` lets WebRTC replace it later |
 
 **Dependencies:** Phase 10.
 
 ---
 
-## Phase 12 — Plume & Hazard Models  
+## Phase 12 — Instructor Tools & Multiplayer: Completion
+**Weeks 83–88 | 6 weeks**  
+**High-impact training feature #5**
 
+**Focus:** Consolidating and polishing the multiplayer trainer.
+
+**Deliverables:**
+- Instructor console: full control of injects, monitor player actions, role-play (all M4 capabilities hardened through live use).
+- Multiplayer roles: IC, Operations, Planning, Logistics, PIO, Safety, Liaison (all M3 roles fully fleshed out).
+- AI-driven role players: other agencies, civilians, media, politicians (M5 expanded; media/political depth).
+- Voice communication: simulated radio with push-to-talk, channels, recording (M7 hardened).
+- Observer mode for assessment (M6 hardened).
+- Role-based workspaces and default layouts finalised.
+- Instructor and observer documentation.
+
+**Dependencies:** Phase 11.
+
+> *Note:* Phase 11 delivers the concrete technical implementation. Phase 12 is the completion, hardening, and polish of that implementation in live exercises, including expanded AI role-player behaviour and finalisation of instructor and observer workflows.
+
+---
+
+## Phase 13 — Plume & Hazard Models
+**Weeks 89–94 | 6 weeks**
 
 **Focus:** Advanced dispersion prediction.
 
@@ -222,30 +350,32 @@
 - Inputs: chemical, quantity, release rate, temperature, pressure, weather, terrain.
 - Output: geographic zones (low, moderate, high concentration).
 - GIS overlay: schools, hospitals, residential areas inside plume.
-- Alerts: “School within projected hazard area.”
+- Alerts: "School within projected hazard area."
 - Dynamic updates: wind shifts, revised release rate.
 
 **Dependencies:** Phase 6.
 
 ---
 
-## Phase 13 — Public, Media, Political & Legal
+## Phase 14 — Public, Media, Political & Legal
+**Weeks 95–100 | 6 weeks**
 
 **Focus:** External pressures.
 
 **Deliverables:**
 - Media and social media: press conferences, rumours, misinformation.
-- Political pressure: elected officials, agency heads, community leaders.
+- Political pressure: elected officials, agency heads, community leaders (expanding `PoliticalPressureSystem` from Phase 11).
 - Legal and liability: documentation, negligence, evacuation authority.
 - Public behaviour: evacuation compliance, panic, looting, spontaneous volunteers, convergence.
 - Vulnerable populations: elderly, disabled, homeless, pets, non-English speakers.
 - Family reunification and victim assistance.
 
-**Dependencies:** Phase 11.
+**Dependencies:** Phase 12.
 
 ---
 
-## Phase 14 — Logistics & Resource Sustainment
+## Phase 15 — Logistics & Resource Sustainment
+**Weeks 101–106 | 6 weeks**
 
 **Focus:** Supporting the operation over time.
 
@@ -256,11 +386,12 @@
 - Cost tracking and finance: personnel time, equipment costs, contracts, reimbursement.
 - Mutual aid and resource ordering: local, state, federal.
 
-**Dependencies:** Phase 13.
+**Dependencies:** Phase 14.
 
 ---
 
-## Phase 15 — Medical, Mass Casualty & Public Health
+## Phase 16 — Medical, Mass Casualty & Public Health
+**Weeks 107–112 | 6 weeks**
 
 **Focus:** Health and medical surge.
 
@@ -271,11 +402,12 @@
 - Public health interventions: quarantine, isolation, mass prophylaxis, points of dispensing.
 - Behavioural health: crisis counselling, psychological triage.
 
-**Dependencies:** Phase 14.
+**Dependencies:** Phase 15.
 
 ---
 
-## Phase 16 — Evacuation, Shelter & Infrastructure
+## Phase 17 — Evacuation, Shelter & Infrastructure
+**Weeks 113–118 | 6 weeks**
 
 **Focus:** Population protection and critical systems.
 
@@ -286,25 +418,27 @@
 - Cyber and GPS degradation: jamming, spoofing, ransomware.
 - Environmental impact: air, water, soil, wildlife.
 
-**Dependencies:** Phase 15.
+**Dependencies:** Phase 16.
 
 ---
 
-## Phase 17 — Documentation & ICS Forms
+## Phase 18 — Documentation & ICS Forms
+**Weeks 119–124 | 6 weeks**
 
 **Focus:** Standardized documentation.
 
 **Deliverables:**
 - ICS forms: 201–215, 215A, 220, situation reports.
 - IAP versioning and operational periods.
-- Decision logs: every order, request, approval time-stamped.
+- Decision logs: every order, request, approval time-stamped, now with actor attribution from Phase 11.
 - Safety and medical plans embedded in IAP.
 
-**Dependencies:** Phase 5, Phase 9.
+**Dependencies:** Phase 5, Phase 9, Phase 11.
 
 ---
 
-## Phase 18 — Scenario Design & Adaptive Training
+## Phase 19 — Scenario Design & Adaptive Training
+**Weeks 125–130 | 6 weeks**
 
 **Focus:** Reusable, dynamic training content.
 
@@ -315,11 +449,12 @@
 - Real-world data integration: historical incidents, weather APIs, GIS data.
 - Incident-within-incident: responder down, active shooter, secondary device.
 
-**Dependencies:** Phase 17.
+**Dependencies:** Phase 18.
 
 ---
 
-## Phase 19 — Data Standards & Integration
+## Phase 20 — Data Standards & Integration
+**Weeks 131–134 | 4 weeks**
 
 **Focus:** Interoperability and external systems.
 
@@ -327,13 +462,14 @@
 - NIMS/ICS compliance: terminology, forms, organization.
 - Data standards: CAP, EDXL, NIEM, HL7 for hospital data.
 - API-first architecture: external tools feed/consume data.
-- Modular services: COP, IAP, C2, GIS, AVL, Plume, Comms, AAR as separate systems.
+- Modular services: COP, IAP, C2, GIS, AVL, Plume, Comms, AAR as separate systems (now exposed over the Phase 11 server).
 
-**Dependencies:** Phase 18.
+**Dependencies:** Phase 19.
 
 ---
 
-## Phase 20 — UI/UX & Accessibility
+## Phase 21 — UI/UX & Accessibility
+**Weeks 135–138 | 4 weeks**
 
 **Focus:** Usability under pressure.
 
@@ -342,69 +478,99 @@
 - Accessibility: color-blind modes, screen readers, dyslexia-friendly fonts, localization.
 - Dark mode and night operations.
 - Mobile companion app for field reports and check-ins.
+- Role workspaces (from Phase 11) hardened and documented.
 
-**Dependencies:** Phase 19.
+**Dependencies:** Phase 20.
 
 ---
 
-## Phase 21 — Ethical & Psychological Considerations
+## Phase 22 — Ethical & Psychological Considerations
+**Weeks 139–140 | 2 weeks**
 
 **Focus:** Responsible training.
 
 **Deliverables:**
 - Content warnings and debrief support.
 - Avoid glorifying trauma: focus on decision-making.
-- Bias awareness: scenarios don’t reinforce stereotypes.
+- Bias awareness: scenarios don't reinforce stereotypes.
 - Psychological safety: allow failure without humiliation.
+- Voice recording consent (from Phase 11) documented in ethics policy.
 
-**Dependencies:** Phase 20.
+**Dependencies:** Phase 21.
 
 ---
 
 ## Critical Path & Minimum Viable Product
 
-**Critical path:**  
-Phase 0 → Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6 → Phase 7 → Phase 8 → Phase 9 → Phase 10 → Phase 11.
+**Critical path:**
+Phase 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → **11 (new)** → 12 → 13 → 14 → 15 → 16 → 17 → 18 → 19 → 20 → 21 → 22.
 
-**Minimum Viable Product (MVP):**  
-Phases 0–6 plus a basic version of Phase 9 (AAR). This gives a functional COP, GIS/AVL, C2 dispatch, IAP builder, simulation engine with basic AI, and after-action replay. It is enough to train core decision-making under uncertainty.
+**Minimum Viable Product (MVP):**
+Phases 0–6 plus a basic version of Phase 9 (AAR). This gives a functional COP, GIS/AVL, C2 dispatch, IAP builder, simulation engine with basic AI, and after-action replay.
+
+**Multiplayer MVP (additional):**
+Phase 11 M1–M4 plus M6. This gives a LAN server, sessions, roles, permissions, instructor console, and observer mode. Voice (M7) and politician AI (M5) can follow.
 
 **Parallelization opportunities:**
-- Phase 12 (Plume) can run alongside Phases 7–11 with a dedicated Python developer.
-- Phase 17 (Documentation) can start after Phase 5.
-- Phase 18 (Scenario Editor) can start after Phase 6.
-- Phase 20 (UI/UX) should be ongoing throughout, not left to the end.
-- Phase 21 (Ethics) can be integrated into design reviews from Phase 0.
+- **Phase 13 (Plume)** can run alongside Phases 11–12 with a dedicated Python developer.
+- **Phase 18 (Documentation)** can start after Phase 5.
+- **Phase 19 (Scenario Editor)** can start after Phase 6.
+- **Phase 21 (UI/UX)** should be ongoing throughout, not left to the end.
+- **Phase 22 (Ethics)** can be integrated into design reviews from Phase 0.
+- Within Phase 11: M5, M6, M7 can run in parallel after M3.
 
-**Total estimated duration:** ~124 weeks (~2.4 years) sequential. With parallel tracks and a larger team, calendar time can be reduced to 18–24 months for a full-featured release, or 9–12 months for a strong MVP.
+**Total estimated duration:** ~140 weeks (~2.7 years) sequential. With parallel tracks and a larger team, calendar time can be reduced to **20–26 months** for a full-featured release, or **10–14 months** for a strong MVP (including multiplayer foundation).
 
 ---
 
 ## Gantt Overview (Text)
 
 ```
-Phase 0  ████
-Phase 1      ██████
-Phase 2            ██████
-Phase 3                  ██████
-Phase 4                        ██████
-Phase 5                              ██████
-Phase 6                                    ████████
-Phase 7                                            ██████
-Phase 8                                                  ██████
-Phase 9                                                        ██████
-Phase 10                                                             ██████
-Phase 11                                                                   ██████
-Phase 12        ██████ (parallel with 7–11)
-Phase 13                                                                         ██████
-Phase 14                                                                               ██████
-Phase 15                                                                                     ██████
-Phase 16                                                                                           ██████
-Phase 17                              ██████ (parallel after 5)
-Phase 18                                    ██████ (parallel after 6)
-Phase 19                                                                                                 ████
-Phase 20      ████████████████████████████████████████████████████████████████████████████████████████████████
-Phase 21      ████████████████████████████████████████████████████████████████████████████████████████████████
+Phase 0   ████
+Phase 1       ██████
+Phase 2             ██████
+Phase 3                   ██████
+Phase 4                         ██████
+Phase 5                               ██████
+Phase 6                                     ████████
+Phase 7                                             ██████
+Phase 8                                                   ██████
+Phase 9                                                         ██████
+Phase 10                                                              ██████
+Phase 11 (new)                                                              ████████████████
+Phase 12 (old 11)                                                                               ██████
+Phase 13 (old 12)         ██████ (parallel with 11–12)
+Phase 14 (old 13)                                                                                     ██████
+Phase 15 (old 14)                                                                                           ██████
+Phase 16 (old 15)                                                                                                 ██████
+Phase 17 (old 16)                                                                                                       ██████
+Phase 18 (old 17)                              ██████ (parallel after Phase 5)
+Phase 19 (old 18)                                    ██████ (parallel after Phase 6)
+Phase 20 (old 19)                                                                                                             ████
+Phase 21 (old 20)  ████████████████████████████████████████████████████████████████████████████████████████████████████████████████
+Phase 22 (old 21)  ████████████████████████████████████████████████████████████████████████████████████████████████████████████████
 ```
 
-This timeline prioritizes the foundational systems first, then the core command-and-control loop, then the high-impact training features that differentiate the simulator, and finally the advanced realism and supporting systems that complete the experience.
+---
+
+## Summary of Phase Changes
+
+| Old Phase | New Phase | Title |
+|---|---|---|
+| 0–10 | 0–10 | Unchanged |
+| — | **11 (new)** | **Instructor Tools & Multiplayer: Foundation** |
+| 11 | 12 | Instructor Tools & Multiplayer: Completion |
+| 12 | 13 | Plume & Hazard Models |
+| 13 | 14 | Public, Media, Political & Legal |
+| 14 | 15 | Logistics & Resource Sustainment |
+| 15 | 16 | Medical, Mass Casualty & Public Health |
+| 16 | 17 | Evacuation, Shelter & Infrastructure |
+| 17 | 18 | Documentation & ICS Forms |
+| 18 | 19 | Scenario Design & Adaptive Training |
+| 19 | 20 | Data Standards & Integration |
+| 20 | 21 | UI/UX & Accessibility |
+| 21 | 22 | Ethical & Psychological Considerations |
+
+**Total phases:** 22 (was 21).  
+**Total sequential duration:** ~140 weeks (was ~124 weeks).  
+**New Phase 11 duration:** 16 weeks.
