@@ -64,6 +64,9 @@ public sealed class UnifiedCommandMember
 /// <summary>Command asked an agency to send its commander to the command post and share command.</summary>
 public sealed class UnifiedCommandInvitation
 {
+    /// <summary>Stable for the incident and agency (Phase 11 M5), so whoever answers for the agency can name it.</summary>
+    public Guid Id => Interagency.InvitationId(IncidentId, AgencyId);
+
     public Guid IncidentId { get; init; }
     public Guid AgencyId { get; init; }
     public required string Agency { get; init; }
@@ -353,6 +356,14 @@ public sealed class MediaEnquiry
 /// <summary>Shared rules for the Phase 10 friction model, used by C2, the simulation and the bot.</summary>
 public static class Interagency
 {
+    /// <summary>The id of an invitation to unified command: one per incident and agency (Phase 11 M4–M5).</summary>
+    public static Guid InvitationId(Guid incidentId, Guid agencyId)
+    {
+        var (x, y) = (incidentId.ToByteArray(), agencyId.ToByteArray());
+        for (var i = 0; i < 16; i++) x[i] ^= (byte)(y[(i + 5) % 16] + i);
+        return new Guid(x);
+    }
+
     /// <summary>Words that make a public statement a warning (tell people what to do).</summary>
     public static bool IsWarning(string text) =>
         new[] { "evacuat", "shelter", "stay indoors", "close windows", "keep windows", "avoid the area", "leave the area" }

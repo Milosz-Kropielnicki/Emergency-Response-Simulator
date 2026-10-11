@@ -78,6 +78,7 @@ public sealed class InteragencySystem : ISimulationSystem
 
     public void Update(SimulationContext context)
     {
+        ParticipantAnswers(context);
         Invitations(context);
         Assistance(context);
         Briefings(context);
@@ -90,6 +91,22 @@ public sealed class InteragencySystem : ISimulationSystem
         Media(context);
         Contradictions(context);
         Chase(context);
+    }
+
+    /// <summary>
+    /// What the participants running agencies decided (Phase 11 M5), carried out as the instructor's decisions are: for
+    /// units, or to join unified command, in their words.
+    /// </summary>
+    private static void ParticipantAnswers(SimulationContext context)
+    {
+        var world = context.World;
+        foreach (var answer in world.AgencyAnswers.ToList())
+        {
+            world.AgencyAnswers.Remove(answer);
+            var message = Guid.NewGuid();
+            if (!AnswerAssistanceByHand(context, answer.ItemId, answer.Approve, answer.Quantity, answer.Text, message))
+                AnswerInvitationByHand(context, answer.ItemId, answer.Approve, answer.Text, message);
+        }
     }
 
     // ---- Unified Command ----
@@ -105,7 +122,7 @@ public sealed class InteragencySystem : ISimulationSystem
                 ia.Invitations.Remove(invitation);
                 continue;
             }
-            if (world.PlayedByInstructor(Instructor.AiRoles.Agency(invitation.AgencyId))) continue; // the instructor answers (Phase 11 M4)
+            if (world.PlayedByHuman(Instructor.AiRoles.Agency(invitation.AgencyId))) continue; // the instructor answers (Phase 11 M4)
             var standing = ia.StandingOf(invitation.AgencyId);
             var delay = InvitationDelay * (LiaisonAt(world, invitation.IncidentId) ? 0.5 : 1) * (standing == AgencyStanding.Strained ? 1.5 : 1);
             if (context.SimTime - invitation.At < delay) continue;
@@ -200,7 +217,7 @@ public sealed class InteragencySystem : ISimulationSystem
         var ia = world.Interagency;
         foreach (var pending in ia.Assistance.ToList())
         {
-            if (world.PlayedByInstructor(Instructor.AiRoles.Agency(pending.Request.AgencyId))) continue; // the instructor answers (Phase 11 M4)
+            if (world.PlayedByHuman(Instructor.AiRoles.Agency(pending.Request.AgencyId))) continue; // the instructor answers (Phase 11 M4)
             if (context.SimTime - pending.At < AssistanceDelay) continue;
             ia.Assistance.Remove(pending);
             var request = pending.Request;
@@ -713,7 +730,7 @@ public sealed class InteragencySystem : ISimulationSystem
 
             var count = _enquiries.GetValueOrDefault(incidentId);
             // Taken over by the instructor (Phase 11 M4): journalists ring only when they play one.
-            if (context.SimTime >= next && count < 8 && !world.PlayedByInstructor(Instructor.AiRoles.Media))
+            if (context.SimTime >= next && count < 8 && !world.PlayedByHuman(Instructor.AiRoles.Media))
             {
                 _enquiries[incidentId] = count + 1;
                 _nextEnquiry[incidentId] = context.SimTime + facts.Priority switch

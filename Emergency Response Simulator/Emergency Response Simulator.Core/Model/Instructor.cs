@@ -45,6 +45,9 @@ public enum RolePlayKind
 
     /// <summary>An official asking command for a decision (e.g. authority to evacuate).</summary>
     Official,
+
+    /// <summary>A politician or their office ringing the IC or PIO (Phase 11 M5): the TD, the council chief executive, the minister's office.</summary>
+    Politician,
 }
 
 /// <summary>What the instructor says, and as whom.</summary>
@@ -57,7 +60,9 @@ public sealed record RolePlayRequest(RolePlayKind Kind, string As, string Text, 
 /// <summary>A role the simulation plays that the instructor can take over (the role-player registry).</summary>
 /// <param name="System">The simulation system that plays it when nobody has taken it over.</param>
 /// <param name="Waiting">Decisions waiting for the instructor while they have it.</param>
-public sealed record AiRoleInfo(string Key, string Name, string System, string Covers, bool TakenOver, int Waiting);
+/// <param name="PlayedBy">Who plays it when not the simulation: "you" (the instructor) or a participant's name (Phase 11 M5).</param>
+/// <param name="CanGive">An agency's control room, which a participant can run (Phase 11 M5).</param>
+public sealed record AiRoleInfo(string Key, string Name, string System, string Covers, bool TakenOver, int Waiting, string? PlayedBy = null, bool CanGive = false);
 
 public enum AiRoleItemKind
 {

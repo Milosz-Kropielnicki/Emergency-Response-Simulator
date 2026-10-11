@@ -146,7 +146,7 @@ public sealed class CommandResponseSystem : ISimulationSystem
             {
                 var terms = TermsOf(world, request);
                 // Taken over by the instructor (Phase 11 M4): the decision waits for them.
-                if (terms.Role is { } role && world.PlayedByInstructor(role)) continue;
+                if (terms.Role is { } role && world.PlayedByHuman(role)) continue;
                 if (context.SimTime - pending.RequestedAt < terms.Delay) continue;
 
                 var priority = world.ReportedIncidentPriorities.GetValueOrDefault(request.IncidentId, IncidentPriority.Medium);
@@ -370,7 +370,7 @@ public sealed class CommandResponseSystem : ISimulationSystem
 
     private static void AnswerNotifications(SimulationContext context)
     {
-        if (context.World.PlayedByInstructor(Instructor.AiRoles.OutsideOrganisations)) return; // the instructor answers (Phase 11 M4)
+        if (context.World.PlayedByHuman(Instructor.AiRoles.OutsideOrganisations)) return; // the instructor answers (Phase 11 M4)
         foreach (var pending in context.World.PendingNotifications.ToList())
         {
             var notification = pending.Notification;

@@ -45,6 +45,7 @@ public sealed class PerceivedState : ICopService
     private readonly EocStatus _eoc = new();
     private readonly List<PublicStatement> _statements = [];
     private readonly Dictionary<Guid, MediaEnquiry> _enquiries = [];
+    private readonly Dictionary<Guid, PoliticalCall> _politicalCalls = [];
     private readonly Dictionary<Guid, Participant> _participants = [];
 
     /// <summary>The comms log keeps this many messages; older ones are in the event stream.</summary>
@@ -139,6 +140,11 @@ public sealed class PerceivedState : ICopService
         get { lock (_lock) return _participants.Values.OrderBy(p => p.JoinedAt).ToList(); }
     }
 
+    public IReadOnlyList<PoliticalCall> PoliticalCalls
+    {
+        get { lock (_lock) return _politicalCalls.Values.OrderBy(c => c.ReceivedAt).ToList(); }
+    }
+
     public IReadOnlyList<MediaEnquiry> MediaEnquiries
     {
         get { lock (_lock) return _enquiries.Values.OrderBy(m => m.ReceivedAt).ToList(); }
@@ -195,6 +201,7 @@ public sealed class PerceivedState : ICopService
                 _agencies[e.AgencyId] = new Agency
                 {
                     Id = e.AgencyId, Name = e.Name, ShortName = e.ShortName, Type = e.Type, AiControlled = e.AiControlled,
+                    Controller = e.AiControlled ? AgencyController.Simulation : AgencyController.Command,
                     RadioChannel = e.RadioChannel, Jurisdiction = e.Jurisdiction, Priority = e.Priority, PriorityTerms = [.. e.PriorityTerms ?? []],
                 };
                 // Another service's radio system: known, but not monitored until patched.
@@ -409,6 +416,30 @@ public sealed class PerceivedState : ICopService
 
             case ParticipantLeft e when _participants.TryGetValue(e.ParticipantId, out var leaving):
                 leaving.LeftAt = at;
+                // An agency they ran goes back to the simulation (Phase 11 M5), as the world does.
+                foreach (var run in _agencies.Values.Where(a => a.ControlledBy == e.ParticipantId))
+                    (run.Controller, run.ControlledBy, run.ControllerName) = (AgencyController.Simulation, null, null);
+                break;
+
+            // ---- AI role players (Phase 11 M5) ----
+
+            case AgencyControlChanged e when _agencies.TryGetValue(e.AgencyId, out var controlled):
+                controlled.Controller = e.Controller;
+                controlled.ControlledBy = e.Controller == AgencyController.Participant ? e.ParticipantId : null;
+                controlled.ControllerName = e.Controller == AgencyController.Participant ? e.By : null;
+                break;
+
+            case PoliticalCallReceived e:
+                _politicalCalls[e.CallId] = new PoliticalCall
+                {
+                    Id = e.CallId, IncidentId = e.IncidentId, Office = e.Office, Caller = e.Caller, Message = e.Message, Pressure = e.Pressure,
+                    To = e.To, ReceivedAt = at,
+                };
+                break;
+
+            case PoliticalCallAnswered e when _politicalCalls.TryGetValue(e.CallId, out var answered):
+                answered.AnsweredAt = at;
+                answered.Answer = e.Answer;
                 break;
 
             case RoleAssigned e when _participants.TryGetValue(e.ParticipantId, out var assigned):

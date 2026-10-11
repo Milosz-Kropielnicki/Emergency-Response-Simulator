@@ -16,7 +16,7 @@ namespace Emergency_Response_Simulator.Simulation.Instructor;
 /// stamped with whoever the command context names (the instructor, on the server), so the review shows it and the
 /// trainees don't see it happen; what it says in the world travels through the usual comms, with their delays.
 /// </summary>
-public sealed class InstructorService(SimulationEngine engine, IEnumerable<ISimulationSystem> systems) : IInstructorService
+public sealed class InstructorService(SimulationEngine engine, IEnumerable<ISimulationSystem> systems, ICopService cop) : IInstructorService
 {
     private ScriptedInjectSystem? Script => systems.OfType<ScriptedInjectSystem>().FirstOrDefault();
 
@@ -124,6 +124,15 @@ public sealed class InstructorService(SimulationEngine engine, IEnumerable<ISimu
                     send = () => CommsNet.Chat(context, who, $"{who}: {text}", enquiry, null, message);
                     break;
 
+                case RolePlayKind.Politician:
+                    var incident = request.IncidentId ?? LatestIncident(world);
+                    var office = PoliticalPressureSystem.OfficeOf(who);
+                    var to = PoliticalPressureSystem.To(world, incident);
+                    var call = new PoliticalCallReceived(Guid.NewGuid(), incident, office, who, text, (int)office, to);
+                    refers.Add(call.CallId);
+                    send = () => CommsNet.Chat(context, who, $"{who} for the {to}: {text}", call, null, message);
+                    break;
+
                 case RolePlayKind.Official:
                     var subject = text.Split(['.', '?', '!'], 2)[0];
                     var approval = new ApprovalRequested(Guid.NewGuid(), request.IncidentId ?? LatestIncident(world),
@@ -157,17 +166,22 @@ public sealed class InstructorService(SimulationEngine engine, IEnumerable<ISimu
         (AiRoles.NationalDirectorate, "National Directorate", nameof(CommandResponseSystem), "Specialist teams, and mutual aid outside the agreements"),
         (AiRoles.OutsideOrganisations, "Outside organisations", nameof(CommandResponseSystem), "Replies to command's notifications: hospitals, utilities, the council…"),
         (AiRoles.Media, "The media", nameof(InteragencySystem), "Journalists ringing with questions (taken over: they ring only when you play one)"),
+        (AiRoles.Politicians, "Politicians", nameof(PoliticalPressureSystem),
+            "The local TD, the council chief executive and the minister's office ringing command (taken over: only when you play them)"),
         .. world.Agencies.Where(a => a.Value.AiControlled).OrderBy(a => a.Value.Name)
             .Select(a => (AiRoles.Agency(a.Key), $"{a.Value.Name} control room", $"{nameof(AgencyAiSystem)}, {nameof(InteragencySystem)}",
                 "Its own jobs and initiative; answers to invitations to unified command and requests for units")),
     ];
 
+    private string? Participant(Guid? id) => id is { } who ? cop.Participants.FirstOrDefault(p => p.Id == who)?.DisplayName ?? "a participant" : null;
+
     public Task<IReadOnlyList<AiRoleInfo>> ListAiRolesAsync(CancellationToken cancellationToken = default) =>
         engine.ApplyAsync<IReadOnlyList<AiRoleInfo>>(context =>
         {
-            var waiting = Waiting(context.World).GroupBy(i => i.RoleKey).ToDictionary(g => g.Key, g => g.Count());
-            return [.. Roles(context.World).Select(r => new AiRoleInfo(r.Key, r.Name, r.System, r.Covers, context.World.PlayedByInstructor(r.Key),
-                waiting.GetValueOrDefault(r.Key)))];
+            var world = context.World;
+            var waiting = Waiting(world).GroupBy(i => i.RoleKey).ToDictionary(g => g.Key, g => g.Count());
+            return [.. Roles(world).Select(r => new AiRoleInfo(r.Key, r.Name, r.System, r.Covers, world.PlayedByInstructor(r.Key), waiting.GetValueOrDefault(r.Key),
+                world.HumanRoles.TryGetValue(r.Key, out var by) ? by is null ? "you" : Participant(by) : null, AiRoles.AgencyOf(r.Key) is not null))];
         }, cancellationToken);
 
     public Task<CommandResult> TakeOverAsync(string roleKey, CancellationToken cancellationToken = default) =>
@@ -175,6 +189,7 @@ public sealed class InstructorService(SimulationEngine engine, IEnumerable<ISimu
         {
             if (Roles(context.World).FirstOrDefault(r => r.Key == roleKey) is not { Key: not null } role) return CommandResult.Fail("Unknown role.");
             if (context.World.PlayedByInstructor(roleKey)) return CommandResult.Fail($"You already play {role.Name}.");
+            if (context.World.HumanRoles.TryGetValue(roleKey, out var by)) return CommandResult.Fail($"{Participant(by)} runs {role.Name}: hand it back first.");
             context.EmitTruth(new AiRoleTakenOver(roleKey, role.Name), EventSources.Instructor);
             return new CommandResult(true, Detail: $"You play {role.Name}");
         }, cancellationToken);
@@ -183,9 +198,31 @@ public sealed class InstructorService(SimulationEngine engine, IEnumerable<ISimu
         engine.ApplyAsync(context =>
         {
             if (Roles(context.World).FirstOrDefault(r => r.Key == roleKey) is not { Key: not null } role) return CommandResult.Fail("Unknown role.");
-            if (!context.World.PlayedByInstructor(roleKey)) return CommandResult.Fail($"The simulation already plays {role.Name}.");
-            context.EmitTruth(new AiRoleHandedBack(roleKey, role.Name), EventSources.Instructor);
+            if (!context.World.HumanRoles.TryGetValue(roleKey, out var by)) return CommandResult.Fail($"The simulation already plays {role.Name}.");
+            if (by is not null && AiRoles.AgencyOf(roleKey) is { } agency)
+                // A participant's agency: everyone sees who runs it, so this is a session fact rather than ground truth.
+                context.EmitPerceived(new AgencyControlChanged(agency, AgencyController.Simulation), EventSources.Session);
+            else
+                context.EmitTruth(new AiRoleHandedBack(roleKey, role.Name), EventSources.Instructor);
             return new CommandResult(true, Detail: $"The simulation plays {role.Name} again");
+        }, cancellationToken);
+
+    public Task<CommandResult> GiveToParticipantAsync(string roleKey, Guid participantId, CancellationToken cancellationToken = default) =>
+        engine.ApplyAsync(context =>
+        {
+            var world = context.World;
+            if (Roles(world).FirstOrDefault(r => r.Key == roleKey) is not { Key: not null } role) return CommandResult.Fail("Unknown role.");
+            if (AiRoles.AgencyOf(roleKey) is not { } agency) return CommandResult.Fail($"Only an agency's control room can be given to a participant; you can take over {role.Name} yourself.");
+            if (cop.Participants.FirstOrDefault(p => p.Id == participantId && p.Present) is not { } participant)
+                return CommandResult.Fail("That person isn't in the session.");
+            if (participant.Role != UserRole.AgencyChief)
+                return CommandResult.Fail($"{participant.DisplayName} is {Core.Model.Roles.Name(participant.Role)}: make them an agency chief first.");
+            if (world.HumanRoles.TryGetValue(roleKey, out var by))
+                return CommandResult.Fail(by is null ? $"You play {role.Name}: hand it back first." : $"{Participant(by)} already runs {role.Name}.");
+            if (world.HumanRoles.Any(r => r.Value == participantId))
+                return CommandResult.Fail($"{participant.DisplayName} already runs an agency.");
+            context.EmitPerceived(new AgencyControlChanged(agency, AgencyController.Participant, participantId, participant.DisplayName), EventSources.Session);
+            return new CommandResult(true, Detail: $"{participant.DisplayName} runs {role.Name}");
         }, cancellationToken);
 
     public Task<IReadOnlyList<AiRoleItem>> ListWaitingAsync(CancellationToken cancellationToken = default) =>

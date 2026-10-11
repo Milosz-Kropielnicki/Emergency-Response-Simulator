@@ -127,6 +127,12 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(AiRoleTakenOver), nameof(AiRoleTakenOver))]
 [JsonDerivedType(typeof(AiRoleHandedBack), nameof(AiRoleHandedBack))]
 [JsonDerivedType(typeof(InstructorBookmarked), nameof(InstructorBookmarked))]
+// AI role players (Phase 11 M5)
+[JsonDerivedType(typeof(PoliticalCallReceived), nameof(PoliticalCallReceived))]
+[JsonDerivedType(typeof(PoliticalCallAnswered), nameof(PoliticalCallAnswered))]
+[JsonDerivedType(typeof(PoliticalFallout), nameof(PoliticalFallout))]
+[JsonDerivedType(typeof(AgencyControlChanged), nameof(AgencyControlChanged))]
+[JsonDerivedType(typeof(AgencyRequestAnswered), nameof(AgencyRequestAnswered))]
 // Truth: multi-agency (Phase 10)
 [JsonDerivedType(typeof(InformationHeld), nameof(InformationHeld))]
 // Truth: the world as it really is
@@ -829,3 +835,29 @@ public sealed record SimulationStarted(double TimeScale) : DomainEvent;
 public sealed record SimulationPaused : DomainEvent;
 
 public sealed record TimeScaleChanged(double TimeScale) : DomainEvent;
+
+// ---- AI role players (Phase 11 M5) ----
+
+/// <summary>
+/// A politician or their office rings command about an incident: the local TD, the council's chief executive, the
+/// minister's office. <paramref name="Pressure"/> 1–3 rises each time a call goes unanswered.
+/// </summary>
+/// <param name="To">Who they asked for: the Incident Commander, or the PIO once there is one.</param>
+public sealed record PoliticalCallReceived(Guid CallId, Guid? IncidentId, PoliticalOffice Office, string Caller, string Message, int Pressure, string To)
+    : DomainEvent;
+
+/// <summary>Command called a politician back (C2).</summary>
+public sealed record PoliticalCallAnswered(Guid CallId, string Answer) : DomainEvent;
+
+/// <summary>Ground truth: a call went unanswered too long and the pressure moved up, or (at the top) went public.</summary>
+public sealed record PoliticalFallout(Guid CallId, Guid? IncidentId, int Pressure, string What) : DomainEvent;
+
+/// <summary>
+/// Who runs an agency's control room changed (Phase 11 M5): the simulation, or a participant playing it (an agency
+/// chief). A participant may task its units and answers for it when command asks it for units or into unified command.
+/// </summary>
+public sealed record AgencyControlChanged(Guid AgencyId, AgencyController Controller, Guid? ParticipantId = null, string? By = null) : DomainEvent;
+
+/// <summary>The participant running an agency answered command's request to it: for units, or to join unified command (C2).</summary>
+/// <param name="ItemId">The assistance request's id, or the invitation's (<see cref="Model.Interagency.InvitationId"/>).</param>
+public sealed record AgencyRequestAnswered(Guid ItemId, Guid AgencyId, bool Approve, int? Quantity, string? Text) : DomainEvent;

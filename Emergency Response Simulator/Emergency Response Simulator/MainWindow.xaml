@@ -856,6 +856,62 @@
                         </TabItem.Header>
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel Margin="2">
+                                <!-- The agency this player runs (Phase 11 M5) -->
+                                <StackPanel Visibility="{Binding HasMyAgency, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,8">
+                                    <TextBlock Text="YOUR AGENCY" Style="{StaticResource PanelHeader}" />
+                                    <TextBlock Text="{Binding MyAgency}" TextWrapping="Wrap" FontSize="11" Margin="0,0,0,4" />
+                                    <ItemsControl ItemsSource="{Binding AgencyRequests}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:AgencyRequestRow}">
+                                                <Border Style="{StaticResource Panel}" Padding="6" Margin="0,0,0,4">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontWeight="SemiBold" />
+                                                        <DockPanel Margin="0,4,0,0" Visibility="{Binding HasQuantity, Converter={StaticResource BoolToVisibility}}">
+                                                            <TextBlock Text="How many" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" Width="64" />
+                                                            <TextBox Text="{Binding Quantity, UpdateSourceTrigger=PropertyChanged}" Width="40" HorizontalAlignment="Left" />
+                                                        </DockPanel>
+                                                        <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" Margin="0,4" ToolTip="What you tell command (optional)" />
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Button Content="{Binding ApproveLabel}" Padding="6,1"
+                                                                    Command="{Binding DataContext.AgreeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
+                                                            <Button Content="Decline" Padding="6,1" Margin="4,0,0,0"
+                                                                    Command="{Binding DataContext.RefuseCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+
+                                <!-- Politicians ringing (Phase 11 M5) -->
+                                <StackPanel Visibility="{Binding HasPoliticalCalls, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,8">
+                                    <TextBlock Text="POLITICAL CALLS" Style="{StaticResource PanelHeader}" />
+                                    <ItemsControl ItemsSource="{Binding PoliticalCalls}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:PoliticalCallRow}">
+                                                <Border Style="{StaticResource Panel}" Padding="6" Margin="0,0,0,4">
+                                                    <StackPanel>
+                                                        <TextBlock x:Name="Header" Text="{Binding Header}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="11" Margin="0,2" />
+                                                        <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                        <DockPanel Margin="0,4,0,0" Visibility="{Binding Waiting, Converter={StaticResource BoolToVisibility}}">
+                                                            <Button DockPanel.Dock="Right" Content="Call back" Padding="6,1" Margin="4,0,0,0"
+                                                                    Command="{Binding DataContext.AnswerPoliticalCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
+                                                            <TextBox Text="{Binding Reply, UpdateSourceTrigger=PropertyChanged}" ToolTip="What you tell them" />
+                                                        </DockPanel>
+                                                    </StackPanel>
+                                                </Border>
+                                                <DataTemplate.Triggers>
+                                                    <DataTrigger Binding="{Binding Pressing}" Value="True">
+                                                        <Setter TargetName="Header" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                    </DataTrigger>
+                                                </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+
                                 <!-- Authority disputes: the most urgent thing here -->
                                 <ItemsControl ItemsSource="{Binding Disputes}">
                                     <ItemsControl.ItemTemplate>

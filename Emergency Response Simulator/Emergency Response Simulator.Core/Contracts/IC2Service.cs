@@ -183,6 +183,21 @@ public interface IC2Service
     /// centre working, it goes out as every agency's agreed line.
     /// </summary>
     Task<CommandResult> IssuePublicStatementAsync(string text, Guid? incidentId = null, CancellationToken cancellationToken = default);
+
+    // ---- AI role players (Phase 11 M5) ----
+
+    /// <summary>
+    /// Call back a politician who rang (the local TD, the council chief executive, the minister's office). Left unanswered,
+    /// the pressure moves up to the next office, and at the top it goes public.
+    /// </summary>
+    Task<CommandResult> AnswerPoliticalCallAsync(Guid callId, string answer, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// For the participant running another agency (an agency chief): answer command's request to it, for units
+    /// (<paramref name="quantity"/> of its free units, nearest first) or to join unified command.
+    /// </summary>
+    Task<CommandResult> AnswerAgencyRequestAsync(Guid itemId, bool approve, int? quantity = null, string? text = null,
+        CancellationToken cancellationToken = default);
 }
 
 /// <param name="EntityId">Id of anything the command created, e.g. a new incident.</param>

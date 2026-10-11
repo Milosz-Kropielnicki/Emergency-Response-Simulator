@@ -92,6 +92,8 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<ISimulationSystem>(sp => new CommsSystem(sp.GetRequiredService<CommsOptions>(), sp.GetRequiredService<IRoutingService>()));
         if (configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.MultiAgency)}", true))
             services.AddSingleton<ISimulationSystem>(_ => new InteragencySystem());
+        if (configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.PoliticalPressure)}", true))
+            services.AddSingleton<ISimulationSystem>(_ => new PoliticalPressureSystem());
         services.AddSingleton<ISimulationSystem>(sp => new AttentionMonitor(
             sp.GetRequiredService<ICopService>(), sp.GetRequiredService<AttentionOptions>(), sp.GetRequiredService<IRoutingService>()));
         if (configuration[$"{SimulationOptions.SectionName}:Scenario"] == BarrowStreetScenario.Key)
@@ -99,7 +101,7 @@ public static class ServiceCollectionExtensions
                 configuration.GetValue<bool>($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.DemoAutoResponse)}")));
 
         services.AddSingleton<IC2Service, C2Service>();
-        services.AddSingleton<IInstructorService>(sp => new Instructor.InstructorService(sp.GetRequiredService<SimulationEngine>(), sp.GetServices<ISimulationSystem>()));
+        services.AddSingleton<IInstructorService>(sp => new Instructor.InstructorService(sp.GetRequiredService<SimulationEngine>(), sp.GetServices<ISimulationSystem>(), sp.GetRequiredService<ICopService>()));
         services.AddSingleton<ICommsService>(sp => new CommsService(sp.GetRequiredService<ICopService>(), sp.GetRequiredService<IC2Service>(),
             sp.GetRequiredService<IEventStore>(), sp.GetRequiredService<SimulationSession>().Id));
         // Branch re-runs need a scripted scenario; they share the (read-only) road network and terrain once loaded.

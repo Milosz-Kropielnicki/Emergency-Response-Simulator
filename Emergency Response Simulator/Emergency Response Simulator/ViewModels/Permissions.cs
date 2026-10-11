@@ -19,6 +19,9 @@ public sealed class Permissions(ICopService cop, SimulationConnection? connectio
 
     public bool Applies => connection is not null;
 
+    /// <summary>This player's participant id in a networked session.</summary>
+    public Guid? Me => connection?.Ticket?.ParticipantId;
+
     /// <summary>Raised when the role, who is present, or the session's stage changed what is allowed.</summary>
     public event EventHandler? Changed;
 

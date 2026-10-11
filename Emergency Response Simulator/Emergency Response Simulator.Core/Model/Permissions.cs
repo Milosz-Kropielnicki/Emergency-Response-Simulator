@@ -50,7 +50,8 @@ public static class PermissionMatrix
         if (role == UserRole.Instructor) return PermissionDecision.Yes;
         if (role == UserRole.Observer) return new(false, "Observers watch: they don't give commands.");
         if (command.Anyone || command.Owners.Contains(role)) return PermissionDecision.Yes;
-        if (role == IC && command.Owners.Any(owner => !filled(owner)))
+        // Another agency's chief answers for that agency: their functions don't fall to our IC.
+        if (role == IC && command.Owners.Any(owner => owner != Chief && !filled(owner)))
             return new(true, ByFallback: true);
         return new(false, $"{command.Function} is for the {Holders(command, filled)}, not the {Roles.Name(role)}.");
     }
@@ -66,7 +67,7 @@ public static class PermissionMatrix
     private static string Holders(CommandPermission command, Func<UserRole, bool> filled)
     {
         var names = command.Owners.Select(Roles.Name).ToList();
-        if (command.Owners.Contains(IC) || command.Owners.All(filled)) return string.Join(" or ", names);
+        if (command.Owners.Contains(IC) || command.Owners.Where(o => o != Chief).All(filled)) return string.Join(" or ", names);
         return string.Join(" or ", names.Append("Incident Commander while that's unfilled"));
     }
 
@@ -81,10 +82,11 @@ public static class PermissionMatrix
             table[(contract, method)] = new(contract, method, function, [], Anyone: true);
 
         // Resources: tasking units is the dispatchers' and Operations'; ordering more is Logistics'.
-        C2(nameof(IC2Service.DispatchAsync), "Tasking units", Dispatcher, Ops);
-        C2(nameof(IC2Service.CancelDispatchAsync), "Tasking units", Dispatcher, Ops);
-        C2(nameof(IC2Service.ReassignAsync), "Tasking units", Dispatcher, Ops);
-        C2(nameof(IC2Service.UpdateUnitStatusAsync), "Tasking units", Dispatcher, Ops);
+        // An agency chief tasks only the units of the agency they run (checked by C2, Phase 11 M5).
+        C2(nameof(IC2Service.DispatchAsync), "Tasking units", Dispatcher, Ops, Chief);
+        C2(nameof(IC2Service.CancelDispatchAsync), "Tasking units", Dispatcher, Ops, Chief);
+        C2(nameof(IC2Service.ReassignAsync), "Tasking units", Dispatcher, Ops, Chief);
+        C2(nameof(IC2Service.UpdateUnitStatusAsync), "Tasking units", Dispatcher, Ops, Chief);
         C2(nameof(IC2Service.RequestResourcesAsync), "Ordering resources", Logistics, Finance);
 
         // Incidents and information.
@@ -139,6 +141,10 @@ public static class PermissionMatrix
         C2(nameof(IC2Service.SetEocLevelAsync), "The EOC", IC);
         C2(nameof(IC2Service.SubmitSitrepAsync), "Situation reports", Planning, IC);
         C2(nameof(IC2Service.IssuePublicStatementAsync), "Public information", Pio);
+
+        // AI role players (Phase 11 M5): politicians ring the IC or the PIO; an agency chief answers for the agency they run.
+        C2(nameof(IC2Service.AnswerPoliticalCallAsync), "Political calls", IC, Pio);
+        C2(nameof(IC2Service.AnswerAgencyRequestAsync), "Answering for your agency", Chief);
 
         // The Incident Action Plan: Planning writes it, the IC approves it, Operations carries it out.
         Iap(nameof(IIapService.StartOperationalPeriodAsync), "Planning", Planning);

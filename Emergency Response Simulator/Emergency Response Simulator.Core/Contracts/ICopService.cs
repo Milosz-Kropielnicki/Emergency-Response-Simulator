@@ -90,6 +90,9 @@ public interface ICopService
 
     IReadOnlyList<MediaEnquiry> MediaEnquiries { get; }
 
+    /// <summary>Politicians' calls to command (Phase 11 M5), oldest first.</summary>
+    IReadOnlyList<PoliticalCall> PoliticalCalls { get; }
+
     // Networked sessions (Phase 11)
 
     /// <summary>Everyone who has joined the session, present or not, in the order they joined.</summary>

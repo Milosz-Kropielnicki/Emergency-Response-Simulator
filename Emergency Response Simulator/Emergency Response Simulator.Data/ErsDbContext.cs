@@ -48,6 +48,9 @@ public class ErsDbContext(DbContextOptions<ErsDbContext> options) : DbContext(op
             b.Property(a => a.Name).HasMaxLength(200);
             b.Property(a => a.ShortName).HasMaxLength(40);
             b.Ignore(a => a.AiControlled); // set by AgencyRegistered events
+            b.Ignore(a => a.Controller); // who runs the control room: COP state (Phase 11 M5)
+            b.Ignore(a => a.ControlledBy);
+            b.Ignore(a => a.ControllerName);
             b.Ignore(a => a.RadioChannel);
             b.Ignore(a => a.Priority); // Phase 10: joint-command stance, from AgencyRegistered events
             b.Ignore(a => a.PriorityTerms);

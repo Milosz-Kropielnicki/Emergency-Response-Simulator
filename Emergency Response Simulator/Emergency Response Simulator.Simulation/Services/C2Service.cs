@@ -17,9 +17,63 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2S
     /// them, and ask for them through a request or notification, but not dispatch them. Phase 10: unless the agency has
     /// released them to command, or shares command of the incident (Unified Command).
     /// </summary>
-    private CommandResult? NotUnderCommand(Unit unit, Guid? incidentId = null) => unit.Agency is { AiControlled: true } agency && !cop.UnderCommand(unit, incidentId)
-        ? CommandResult.Fail($"{unit.Callsign} belongs to {agency.Name}, which is not under your command. Ask them for units, or invite them into unified command.")
-        : null;
+    /// <summary>
+    /// Whether whoever is giving the command may task this unit. Another agency's units take orders from their own
+    /// control room: command tasks them only in unified command. A participant running that agency (Phase 11 M5) tasks
+    /// its units, and only those.
+    /// </summary>
+    private CommandResult? NotUnderCommand(Unit unit, Guid? incidentId = null)
+    {
+        var actor = CommandContext.Ambient.Actor;
+        var runsIt = actor is not null && unit.Agency is { Controller: AgencyController.Participant } own && own.ControlledBy == actor.ParticipantId;
+        if (runsIt) return null;
+        if (actor?.Role == UserRole.AgencyChief)
+            return CommandResult.Fail(cop.Agencies.FirstOrDefault(a => a.ControlledBy == actor.ParticipantId) is { } mine
+                ? $"You run {mine.Name}: {unit.Callsign} isn't one of its units."
+                : "You don't run an agency yet: the instructor gives you one.");
+        return unit.Agency is { AiControlled: true } agency && !cop.UnderCommand(unit, incidentId)
+            ? CommandResult.Fail($"{unit.Callsign} belongs to {agency.Name}, which is not under your command. Ask them for units, or invite them into unified command.")
+            : null;
+    }
+
+    // ---- AI role players (Phase 11 M5) ----
+
+    public async Task<CommandResult> AnswerPoliticalCallAsync(Guid callId, string answer, CancellationToken cancellationToken = default)
+    {
+        if (cop.PoliticalCalls.FirstOrDefault(c => c.Id == callId) is not { } call)
+            return CommandResult.Fail("Unknown call.");
+        if (!call.Waiting)
+            return CommandResult.Fail($"{call.Caller} has already been called back.");
+        if (string.IsNullOrWhiteSpace(answer))
+            return CommandResult.Fail("Say what you tell them.");
+        return await PublishAsync(new PoliticalCallAnswered(callId, answer.Trim()), cancellationToken);
+    }
+
+    public async Task<CommandResult> AnswerAgencyRequestAsync(Guid itemId, bool approve, int? quantity = null, string? text = null,
+        CancellationToken cancellationToken = default)
+    {
+        var actor = CommandContext.Ambient.Actor;
+        var mine = cop.Agencies.Where(a => a.Controller == AgencyController.Participant && actor is not null && a.ControlledBy == actor.ParticipantId)
+            .Select(a => a.Id).ToHashSet();
+        if (mine.Count == 0)
+            return CommandResult.Fail("Only the participant running an agency answers for it.");
+
+        if (cop.AssistanceRequests.FirstOrDefault(r => r.Id == itemId) is { } request)
+        {
+            if (!mine.Contains(request.AgencyId)) return CommandResult.Fail($"That request went to {request.Agency}, not your agency.");
+            if (request.DecidedAt is not null) return CommandResult.Fail("You have already answered that request.");
+            if (approve && quantity is { } asked && (asked < 1 || asked > request.Quantity))
+                return CommandResult.Fail($"Send between 1 and {request.Quantity}, or decline.");
+            return await PublishAsync(new AgencyRequestAnswered(itemId, request.AgencyId, approve, quantity, text), cancellationToken);
+        }
+        if (cop.UnifiedCommandInvitations.FirstOrDefault(i => i.Id == itemId) is { } invitation)
+        {
+            if (!mine.Contains(invitation.AgencyId)) return CommandResult.Fail($"That invitation went to {invitation.Agency}, not your agency.");
+            if (invitation.Accepted is not null) return CommandResult.Fail("You have already answered that invitation.");
+            return await PublishAsync(new AgencyRequestAnswered(itemId, invitation.AgencyId, approve, null, text), cancellationToken);
+        }
+        return CommandResult.Fail("Nothing like that is waiting for your agency.");
+    }
 
     public async Task<CommandResult> DispatchAsync(
         Guid unitId, Guid incidentId, Guid? orderedBy = null, CancellationToken cancellationToken = default)

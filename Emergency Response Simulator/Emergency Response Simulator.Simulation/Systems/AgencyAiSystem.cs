@@ -48,7 +48,7 @@ public sealed class AgencyAiSystem(RoutingService? routing = null) : ISimulation
     public void Update(SimulationContext context)
     {
         // An agency the instructor has taken over (Phase 11 M4) takes no routine jobs or initiative of its own.
-        var ai = context.World.Agencies.Where(a => a.Value.AiControlled && !context.World.PlayedByInstructor(Instructor.AiRoles.Agency(a.Key))).ToList();
+        var ai = context.World.Agencies.Where(a => a.Value.AiControlled && !context.World.PlayedByHuman(Instructor.AiRoles.Agency(a.Key))).ToList();
         if (ai.Count == 0) return;
 
         ClearFinishedTasks(context);

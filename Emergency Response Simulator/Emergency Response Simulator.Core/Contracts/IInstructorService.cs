@@ -44,7 +44,14 @@ public interface IInstructorService
 
     Task<CommandResult> TakeOverAsync(string roleKey, CancellationToken cancellationToken = default);
 
+    /// <summary>Gives the role back to the simulation, from the instructor or from the participant playing it.</summary>
     Task<CommandResult> HandBackAsync(string roleKey, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Puts a participant (an agency chief) in charge of an agency's control room (Phase 11 M5): they task its units and
+    /// answer for it. It goes back to the simulation if they leave.
+    /// </summary>
+    Task<CommandResult> GiveToParticipantAsync(string roleKey, Guid participantId, CancellationToken cancellationToken = default);
 
     /// <summary>Decisions waiting in the roles the instructor has taken over.</summary>
     Task<IReadOnlyList<AiRoleItem>> ListWaitingAsync(CancellationToken cancellationToken = default);

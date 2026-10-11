@@ -27,9 +27,11 @@ public sealed partial class ParameterField(InjectParameter parameter) : Observab
     [ObservableProperty] private string _value = parameter.Default;
 }
 
-public sealed record AiRoleRow(string Key, string Name, string System, string Covers, bool TakenOver, int Waiting)
+public sealed record AiRoleRow(string Key, string Name, string System, string Covers, bool TakenOver, int Waiting, string? PlayedBy, bool CanGive)
 {
-    public string State => TakenOver ? Waiting > 0 ? $"YOU · {Waiting} waiting" : "YOU" : "Simulation";
+    public string State => TakenOver ? Waiting > 0 ? $"YOU · {Waiting} waiting" : "YOU" : PlayedBy is { } who ? $"run by {who}" : "Simulation";
+    public bool Human => PlayedBy is not null;
+    public bool Givable => CanGive && PlayedBy is null;
 }
 
 /// <summary>Something waiting for the instructor in a role they play, with their answer.</summary>
@@ -159,6 +161,7 @@ public partial class InstructorConsoleViewModel : ObservableObject
             RolePlayKind.Agency => "Dublin City Council",
             RolePlayKind.Caller => "999 caller (mobile)",
             RolePlayKind.Journalist => "RTÉ News",
+            RolePlayKind.Politician => "Deputy Ciara Nolan TD",
             _ => "Garda Inspector, Pearse Street",
         };
     }
@@ -179,6 +182,15 @@ public partial class InstructorConsoleViewModel : ObservableObject
 
     [RelayCommand] private Task TakeOverAsync(string key) => Run(() => _console.TakeOverAsync(key));
     [RelayCommand] private Task HandBackAsync(string key) => Run(() => _console.HandBackAsync(key));
+
+    /// <summary>Agency chiefs present, who can be given an agency's control room to run (Phase 11 M5).</summary>
+    public ObservableCollection<ParticipantChoice> Chiefs { get; } = [];
+    [ObservableProperty] private ParticipantChoice? _chief;
+
+    [RelayCommand]
+    private Task GiveAsync(string key) => Chief?.Id is { } who
+        ? Run(() => _console.GiveToParticipantAsync(key, who))
+        : Run(() => Task.FromResult(CommandResult.Fail("Choose an agency chief to give it to (someone who joined as one, or whom you made one).")));
 
     [RelayCommand]
     private Task ApproveAsync(WaitingRow row) => Run(() => _console.DecideAsync(new AiRoleDecision(row.Item.Id, true,
@@ -236,7 +248,9 @@ public partial class InstructorConsoleViewModel : ObservableObject
                 Template ??= Templates.FirstOrDefault();
             }
 
-            Sync(AiRoles, (await _console.ListAiRolesAsync()).Select(r => new AiRoleRow(r.Key, r.Name, r.System, r.Covers, r.TakenOver, r.Waiting)).ToList());
+            Sync(AiRoles, (await _console.ListAiRolesAsync()).Select(r => new AiRoleRow(r.Key, r.Name, r.System, r.Covers, r.TakenOver, r.Waiting, r.PlayedBy, r.CanGive)).ToList());
+            Sync(Chiefs, _cop.Participants.Where(p => p.Present && p.Role == UserRole.AgencyChief).Select(p => new ParticipantChoice(p.Id, p.DisplayName)).ToList());
+            Chief ??= Chiefs.FirstOrDefault();
             var waiting = await _console.ListWaitingAsync();
             // Keep the rows (and what the instructor has typed) for items still waiting.
             foreach (var gone in Waiting.Where(w => waiting.All(i => i.Id != w.Item.Id)).ToList()) Waiting.Remove(gone);

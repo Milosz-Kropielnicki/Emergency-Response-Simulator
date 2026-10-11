@@ -60,7 +60,8 @@ public class PermissionTests
                     {
                         UserRole.Instructor => true,
                         UserRole.Observer => false,
-                        UserRole.IncidentCommander => command.Anyone || command.Owners.Contains(role) || command.Owners.Any(o => !Filled(o)),
+                        UserRole.IncidentCommander => command.Anyone || command.Owners.Contains(role)
+                                                      || command.Owners.Any(o => o != UserRole.AgencyChief && !Filled(o)), // another agency's functions stay its own
                         _ => command.Anyone || command.Owners.Contains(role),
                     };
                     Assert.True(expected == decision.Allowed, $"{role} · {command.Method} · everyone here {everyoneHere}: {decision.Reason}");

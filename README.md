@@ -608,7 +608,7 @@ The other agencies are now joint partners with priorities and knowledge of their
   - **Mutual-aid agreements**.
   - For the instructor, the truth comparison lists everything agencies know and haven't shared.
 
-## Server & clients (Phase 11, M1–M4)
+## Server & clients (Phase 11, M1–M5)
 
 The engine, event store and live COP can now run once, on a **simulation server**, with any number of WPF clients connected over SignalR. Standalone (everything in one process, as before) is still the default.
 
@@ -745,7 +745,24 @@ dotnet run --project "Emergency Response Simulator.Server" -- --ConnectionString
   - In the timeline, whatever the role-play produced in the world (the message, call, enquiry, report, approval request or decision) shows as "Instructor role-play as …". The trainee's own commands are never marked.
   - The HTML and CSV exports include both.
 
-**Not yet** (later milestones): AI role players for unfilled positions (M5), observers (M6) and voice (M7).
+### AI role players: filling the gaps (M5)
+
+- **Political pressure** (`PoliticalPressureSystem`, `Simulation:PoliticalPressure`, on by default):
+  - **Who rings:** the local TD, the council's chief executive and the minister's office ring command about a serious incident (`PoliticalCallReceived`), asking for the Incident Commander, or the PIO once that position is staffed.
+  - **How often:** by what command has reported. First call after about 4 minutes for a Critical incident, 7 for High, 12 for Medium; then every 10 / 15 / 25 minutes, sooner with five or more casualties or a protective action (evacuation or shelter) in force. Low-priority incidents don't make the news.
+  - **Calling back:** the IC or PIO calls back from the AGENCIES tab (`AnswerPoliticalCallAsync`). The pressure eases a step and the next call comes a full interval later.
+  - **Ignored:** a call not returned within 5 minutes moves the pressure up (`PoliticalFallout`, ground truth). The council chief executive rings, then the minister's office, each knowing the last call wasn't returned. Ignore the minister's office and the minister goes public: an RTÉ report ("not been briefed") and an alert, then quiet for 20 minutes.
+  - **Played by the instructor:** the instructor can take the politicians over in the console. Then nobody rings unless the instructor plays one (role-play kind "Politician"; the office is read from who they say they are), and silence costs nothing the instructor doesn't choose.
+  - **In the review:** returning a call is a decision timed from the call (good within 3 minutes, fair within 5). The findings say how many calls were returned and how quickly, and what each ignored call cost. Instructor-played calls are marked as role-play.
+- **Agencies run by participants** (the stretch goal). "Who runs this agency's control room?" is now the registry's answer, not the bare flag: `Agency.Controller` (Command, Simulation or Participant) alongside `AiControlled`, which still means "independent of command". A participant runs it via `AgencyControlChanged`, recorded in the stream so everyone sees who runs which agency:
+  - **Giving it:** the instructor gives an agency's control room to a participant who joined as an **agency chief** (console → AI ROLES → Give). One agency per chief; the instructor can't take over one a participant runs.
+  - **Their units:** the chief tasks the agency's own units (dispatch, stand down, reassign, status, orders) and nobody else's; the server refuses any other unit. Command still can't task them outside unified command. The resource board marks them "yours" for the chief and "run by …" for everyone else.
+  - **Answering for the agency:** command's requests for units and invitations to unified command wait for the chief, who answers in the AGENCIES tab's YOUR AGENCY section (`AnswerAgencyRequestAsync`). The answer is carried out exactly as the simulation's or the instructor's would be.
+  - **The simulation steps back:** `AgencyAiSystem` stops the agency's routine jobs and initiative, and `InteragencySystem` stops answering for it.
+  - **Getting it back:** the instructor can hand the agency back, and it returns to the simulation automatically if the chief leaves the session.
+  - **The permission matrix:** agency chiefs can now task units, checked by C2 against the agency they run. An agency chief's functions never fall to the IC: they belong to another agency.
+
+**Not yet** (later milestones): observers (M6) and voice (M7).
 
 ## Local setup
 

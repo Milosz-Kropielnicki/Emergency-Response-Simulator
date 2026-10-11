@@ -59,6 +59,7 @@ public sealed partial class AarAnalyzer
         CommsLogged e => e.MessageId,
         CallReceived e => e.CallId,
         MediaEnquiryReceived e => e.EnquiryId,
+        PoliticalCallReceived e => e.CallId,
         ReportReceived e => e.ReportId,
         ApprovalRequested e => e.ApprovalId,
         ResourceRequestDecided e => e.RequestId,

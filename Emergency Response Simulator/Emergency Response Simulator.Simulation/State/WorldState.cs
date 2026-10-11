@@ -105,12 +105,20 @@ public sealed class WorldState
     public WorldInteragency Interagency { get; } = new();
 
     /// <summary>
-    /// Roles the instructor has taken over from the simulation (Phase 11 M4), by role key: the systems that play them
-    /// leave their decisions waiting for the instructor.
+    /// Roles people play instead of the simulation, by role key (Phase 11 M4–M5): the instructor (null) or a participant
+    /// (their id, for an agency they run). The systems that play those roles leave their decisions to them.
     /// </summary>
-    public HashSet<string> HumanRoles { get; } = [];
+    public Dictionary<string, Guid?> HumanRoles { get; } = [];
 
-    public bool PlayedByInstructor(string roleKey) => HumanRoles.Contains(roleKey);
+    public bool PlayedByHuman(string roleKey) => HumanRoles.ContainsKey(roleKey);
+
+    public bool PlayedByInstructor(string roleKey) => HumanRoles.TryGetValue(roleKey, out var who) && who is null;
+
+    /// <summary>Answers from the participants running agencies, for the systems to carry out at the next tick (Phase 11 M5).</summary>
+    public List<AgencyRequestAnswered> AgencyAnswers { get; } = [];
+
+    /// <summary>Politicians' calls and whether command has answered (Phase 11 M5).</summary>
+    public Dictionary<Guid, PoliticalCallState> PoliticalCalls { get; } = [];
 
     /// <summary>Units committed to an incident (as ordered), for span-of-control counts.</summary>
     public IReadOnlyCollection<Guid> UnitsAt(Guid incidentId) =>
@@ -445,10 +453,30 @@ public sealed class WorldState
                 PendingRequests.Add(new PendingRequest(e, simEvent.SimTime));
                 break;
             case AiRoleTakenOver e:
-                HumanRoles.Add(e.RoleKey);
+                HumanRoles[e.RoleKey] = null;
                 break;
             case AiRoleHandedBack e:
                 HumanRoles.Remove(e.RoleKey);
+                break;
+            case AgencyControlChanged e when e.Controller == AgencyController.Participant && e.ParticipantId is { } runner:
+                HumanRoles[Instructor.AiRoles.Agency(e.AgencyId)] = runner;
+                break;
+            case AgencyControlChanged e:
+                HumanRoles.Remove(Instructor.AiRoles.Agency(e.AgencyId));
+                break;
+            case ParticipantLeft e:
+                // Whatever they ran goes back to the simulation.
+                foreach (var key in HumanRoles.Where(r => r.Value == e.ParticipantId).Select(r => r.Key).ToList())
+                    HumanRoles.Remove(key);
+                break;
+            case AgencyRequestAnswered e:
+                AgencyAnswers.Add(e);
+                break;
+            case PoliticalCallReceived e:
+                PoliticalCalls[e.CallId] = new PoliticalCallState(e, simEvent.SimTime);
+                break;
+            case PoliticalCallAnswered e when PoliticalCalls.TryGetValue(e.CallId, out var answered):
+                answered.AnsweredAt = simEvent.SimTime;
                 break;
             case ApprovalRequested e:
                 ApprovalRequesters[e.ApprovalId] = e.RequestedBy;
@@ -713,3 +741,14 @@ public sealed record PendingNotification(NotificationSent Notification, DateTime
 public sealed record PendingApprovalReply(ApprovalDecided Decision, string Requester, DateTimeOffset DecidedAt);
 
 public sealed record WorldWeather(double WindFromDegrees, double WindSpeedMps, double TemperatureC, double RelativeHumidity);
+
+/// <summary>A politician's call as the world tracks it (Phase 11 M5): answered or not, and whether its silence has been acted on.</summary>
+public sealed class PoliticalCallState(PoliticalCallReceived call, DateTimeOffset receivedAt)
+{
+    public PoliticalCallReceived Call { get; } = call;
+    public DateTimeOffset ReceivedAt { get; } = receivedAt;
+    public DateTimeOffset? AnsweredAt { get; set; }
+
+    /// <summary>Its going unanswered has already moved the pressure up.</summary>
+    public bool Escalated { get; set; }
+}

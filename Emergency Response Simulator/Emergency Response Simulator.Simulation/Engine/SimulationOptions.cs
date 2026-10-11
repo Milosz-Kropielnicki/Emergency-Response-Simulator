@@ -53,4 +53,10 @@ public sealed class SimulationOptions
     /// authority disputes, EOC staffing, the media and conflicting messages. Off, agencies only do their own work.
     /// </summary>
     public bool MultiAgency { get; set; } = true;
+
+    /// <summary>
+    /// Politicians ring command about a serious incident (Phase 11 M5): the local TD, the council's chief executive, the
+    /// minister's office, more often the worse it is, and higher up when nobody calls them back.
+    /// </summary>
+    public bool PoliticalPressure { get; set; } = true;
 }

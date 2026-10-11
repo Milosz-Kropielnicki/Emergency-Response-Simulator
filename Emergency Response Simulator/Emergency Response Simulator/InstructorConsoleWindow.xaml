@@ -250,7 +250,11 @@
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Text="ROLE-PLAYER REGISTRY" Style="{StaticResource PanelHeader}" />
                         <TextBlock DockPanel.Dock="Top" Style="{StaticResource Muted}" Margin="0,0,0,6"
-                                   Text="Take a role over and its decisions wait for you; hand it back and the simulation plays it again." />
+                                   Text="Take a role over and its decisions wait for you; hand it back and the simulation plays it again. An agency's control room can also be given to a participant who joined as an agency chief." />
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                            <TextBlock Text="Give agencies to" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                            <ComboBox ItemsSource="{Binding Chiefs}" SelectedItem="{Binding Chief}" DisplayMemberPath="Label" />
+                        </DockPanel>
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <ItemsControl ItemsSource="{Binding AiRoles}">
                                 <ItemsControl.ItemTemplate>
@@ -258,6 +262,9 @@
                                         <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="2,4">
                                             <DockPanel>
                                                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Button x:Name="Give" Content="Give" Style="{StaticResource Small}" Visibility="{Binding Givable, Converter={StaticResource BoolToVisibility}}"
+                                                            ToolTip="Give this agency's control room to the chosen agency chief"
+                                                            Command="{Binding DataContext.GiveCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding Key}" />
                                                     <Button x:Name="Take" Content="Take over" Style="{StaticResource Small}"
                                                             Command="{Binding DataContext.TakeOverCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding Key}" />
                                                     <Button x:Name="Back" Content="Hand back" Style="{StaticResource Small}" Visibility="Collapsed"
@@ -274,7 +281,7 @@
                                             </DockPanel>
                                         </Border>
                                         <DataTemplate.Triggers>
-                                            <DataTrigger Binding="{Binding TakenOver}" Value="True">
+                                            <DataTrigger Binding="{Binding Human}" Value="True">
                                                 <Setter TargetName="Take" Property="Visibility" Value="Collapsed" />
                                                 <Setter TargetName="Back" Property="Visibility" Value="Visible" />
                                                 <Setter TargetName="State" Property="Foreground" Value="{StaticResource AccentBrush}" />

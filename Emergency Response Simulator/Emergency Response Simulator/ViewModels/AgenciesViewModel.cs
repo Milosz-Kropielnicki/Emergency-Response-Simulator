@@ -44,6 +44,31 @@ public sealed record AgreementRow(string Provider, string Covers, string Terms);
 
 public sealed record SeatRow(string Function, bool Staffed);
 
+/// <summary>A politician's call (Phase 11 M5), with the reply being written.</summary>
+public sealed partial class PoliticalCallRow(PoliticalCall call, DateTimeOffset now) : ObservableObject
+{
+    public Guid Id { get; } = call.Id;
+    public string Header { get; } = $"{MainViewModel.Time(call.ReceivedAt)} · {call.Caller} for the {call.To}" + (call.Pressure >= 2 ? (call.Pressure == 3 ? " · URGENT" : " · CHASING") : "");
+    public string Message { get; } = call.Message;
+    public bool Waiting { get; } = call.Waiting;
+    public bool Pressing { get; } = call.Pressure >= 2;
+    public string Status { get; } = call.Waiting ? $"Waiting {(now - call.ReceivedAt).TotalMinutes:F0} min for a call back" : $"Called back {MainViewModel.Time(call.AnsweredAt!.Value)}: \"{call.Answer}\"";
+
+    [ObservableProperty] private string _reply = "";
+}
+
+/// <summary>Command's request to the agency this player runs (Phase 11 M5), with their answer.</summary>
+public sealed partial class AgencyRequestRow(Guid id, string summary, int? quantity) : ObservableObject
+{
+    public Guid Id { get; } = id;
+    public string Summary { get; } = summary;
+    public bool HasQuantity { get; } = quantity is not null;
+    public string ApproveLabel { get; } = quantity is null ? "Join" : "Send units";
+
+    [ObservableProperty] private string _quantity = quantity?.ToString() ?? "";
+    [ObservableProperty] private string _text = "";
+}
+
 /// <summary>
 /// Multi-agency command in the right panel (Design Document §14): the EOC and its activation level, unified command of the
 /// selected incident, authority disputes, the other agencies (their priorities, standing and units), public information
@@ -73,6 +98,16 @@ public partial class AgenciesViewModel : ObservableObject
     public ObservableCollection<EnquiryRow> Enquiries { get; } = [];
     public ObservableCollection<StatementRow> Statements { get; } = [];
     public ObservableCollection<AgreementRow> Agreements { get; } = [];
+
+    /// <summary>Politicians' calls (Phase 11 M5), waiting ones first.</summary>
+    public ObservableCollection<PoliticalCallRow> PoliticalCalls { get; } = [];
+
+    /// <summary>For an agency chief: command's requests to the agency they run (Phase 11 M5).</summary>
+    public ObservableCollection<AgencyRequestRow> AgencyRequests { get; } = [];
+
+    [ObservableProperty] private string _myAgency = "";
+    [ObservableProperty] private bool _hasMyAgency;
+    [ObservableProperty] private bool _hasPoliticalCalls;
 
     [ObservableProperty] private string _tabHeader = "AGENCIES";
     [ObservableProperty] private EocLevel _selectedEocLevel;
@@ -202,6 +237,61 @@ public partial class AgenciesViewModel : ObservableObject
 
     // ---- Refresh ----
 
+    // ---- Politicians (Phase 11 M5) ----
+
+    private bool CanAnswerPolitical => _owner.Permissions.C2(nameof(IC2Service.AnswerPoliticalCallAsync));
+
+    [RelayCommand(CanExecute = nameof(CanAnswerPolitical))]
+    private async Task AnswerPoliticalAsync(PoliticalCallRow row)
+    {
+        var result = await _owner.RunCommandAsync(() => _c2.AnswerPoliticalCallAsync(row.Id, row.Reply), "Called back");
+        if (result?.Succeeded == true) row.Reply = "";
+    }
+
+    // ---- The agency this player runs (Phase 11 M5) ----
+
+    private bool CanAnswerAgency => _owner.Permissions.C2(nameof(IC2Service.AnswerAgencyRequestAsync));
+
+    [RelayCommand(CanExecute = nameof(CanAnswerAgency))]
+    private Task AgreeAsync(AgencyRequestRow row) => _owner.RunCommandAsync(() => _c2.AnswerAgencyRequestAsync(row.Id, true,
+        int.TryParse(row.Quantity, out var quantity) ? quantity : null, string.IsNullOrWhiteSpace(row.Text) ? null : row.Text), "Answered");
+
+    [RelayCommand(CanExecute = nameof(CanAnswerAgency))]
+    private Task RefuseAsync(AgencyRequestRow row) => _owner.RunCommandAsync(() => _c2.AnswerAgencyRequestAsync(row.Id, false, null,
+        string.IsNullOrWhiteSpace(row.Text) ? null : row.Text), "Answered");
+
+    private void RefreshRolePlayers(DateTimeOffset now)
+    {
+        // Rows are kept while their content stands, so a half-written reply survives a refresh.
+        var calls = _cop.PoliticalCalls.OrderByDescending(c => c.Waiting).ThenByDescending(c => c.ReceivedAt).Take(12)
+            .Select(c => new PoliticalCallRow(c, now)).ToList();
+        if (!calls.Select(c => (c.Id, c.Status)).SequenceEqual(PoliticalCalls.Select(c => (c.Id, c.Status))))
+        {
+            var replies = PoliticalCalls.ToDictionary(c => c.Id, c => c.Reply);
+            PoliticalCalls.Clear();
+            foreach (var call in calls)
+            {
+                call.Reply = replies.GetValueOrDefault(call.Id, "");
+                PoliticalCalls.Add(call);
+            }
+        }
+        HasPoliticalCalls = calls.Count > 0;
+
+        var me = _owner.Permissions.Me;
+        var mine = me is null ? null : _cop.Agencies.FirstOrDefault(a => a.Controller == AgencyController.Participant && a.ControlledBy == me);
+        HasMyAgency = mine is not null;
+        MyAgency = mine is null ? "" : $"You run {mine.Name}'s control room: task its units, and answer command's requests to it.";
+        var requests = mine is null ? [] :
+            _cop.AssistanceRequests.Where(r => r.AgencyId == mine.Id && r.DecidedAt is null)
+                .Select(r => (r.Id, Summary: $"Command asks for {r.Quantity} unit(s) at {_cop.FindIncident(r.IncidentId)?.Number}: {r.Task}", Quantity: (int?)r.Quantity))
+                .Concat(_cop.UnifiedCommandInvitations.Where(i => i.AgencyId == mine.Id && i.Accepted is null)
+                    .Select(i => (i.Id, Summary: $"Command invites you into unified command of {_cop.FindIncident(i.IncidentId)?.Number}", Quantity: (int?)null)))
+                .ToList();
+        foreach (var gone in AgencyRequests.Where(r => requests.All(q => q.Id != r.Id)).ToList()) AgencyRequests.Remove(gone);
+        foreach (var request in requests.Where(q => AgencyRequests.All(r => r.Id != q.Id)))
+            AgencyRequests.Add(new AgencyRequestRow(request.Id, request.Summary, request.Quantity));
+    }
+
     public void Refresh()
     {
         var now = _owner.Now;
@@ -209,10 +299,12 @@ public partial class AgenciesViewModel : ObservableObject
 
         RefreshEoc(now);
         RefreshCommand(incident);
+        RefreshRolePlayers(now);
 
         var disputes = _cop.Disputes;
         OpenDisputes = disputes.Count(d => d.IsOpen);
-        TabHeader = OpenDisputes > 0 ? $"AGENCIES · {OpenDisputes} DISPUTE{(OpenDisputes > 1 ? "S" : "")}" : "AGENCIES";
+        var calling = _cop.PoliticalCalls.Count(c => c.Waiting);
+        TabHeader = "AGENCIES" + (OpenDisputes > 0 ? $" · {OpenDisputes} DISPUTE{(OpenDisputes > 1 ? "S" : "")}" : "") + (calling > 0 ? $" · {calling} CALL{(calling > 1 ? "S" : "")}" : "");
         Replace(Disputes, disputes.Where(d => d.IsOpen || now - (d.ResolvedAt ?? now) < TimeSpan.FromMinutes(15))
             .OrderByDescending(d => d.IsOpen).ThenByDescending(d => d.RaisedAt).Select(d => new DisputeRow(
                 d.Id, $"{MainViewModel.Humanize(d.Kind).ToUpperInvariant()}: {d.Subject}", d.Agency, d.Position, d.Basis,

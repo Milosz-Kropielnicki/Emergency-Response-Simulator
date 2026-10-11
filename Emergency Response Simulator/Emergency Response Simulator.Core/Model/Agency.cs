@@ -16,6 +16,17 @@ public class Agency
     /// </summary>
     public bool AiControlled { get; set; }
 
+    /// <summary>
+    /// Who runs the control room (Phase 11 M5): ours, the simulation, or a participant. <see cref="AiControlled"/> still
+    /// says the agency is independent of command; this says who plays it. COP state.
+    /// </summary>
+    public AgencyController Controller { get; set; }
+
+    /// <summary>The participant running it, when <see cref="Controller"/> is <see cref="AgencyController.Participant"/>.</summary>
+    public Guid? ControlledBy { get; set; }
+
+    public string? ControllerName { get; set; }
+
     /// <summary>The agency's own radio system when it is not on ours (COP state, not stored in the database).</summary>
     public string? RadioChannel { get; set; }
 

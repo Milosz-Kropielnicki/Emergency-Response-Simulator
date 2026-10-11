@@ -79,7 +79,7 @@ public sealed partial class AarAnalyzer
             Metrics = metrics,
             Branches = branches,
             Outcomes = [SessionOutcome()],
-            Findings = [.. Findings(metrics, branches), .. HandoverFindings()],
+            Findings = [.. Findings(metrics, branches), .. HandoverFindings(), .. PoliticalFindings()],
             Participants = Participants(),
             Instructor = _instructor,
         };
@@ -117,6 +117,9 @@ public sealed partial class AarAnalyzer
                 break;
             case ReportReceived e when !truth:
                 _reports.Add((simEvent.SimTime, e.Location, e.SourceName, e.Claim, e.Source));
+                break;
+            case PoliticalCallReceived or PoliticalCallAnswered or PoliticalFallout:
+                TrackPolitical(simEvent);
                 break;
             case InjectFired or InjectHeld or InjectReleased or InjectSkipped or InstructorRolePlay or AiRoleTakenOver or AiRoleHandedBack or InstructorBookmarked:
                 TrackInstructor(simEvent);
@@ -199,6 +202,10 @@ public sealed partial class AarAnalyzer
                                                                         && GeoMath.DistanceMeters(i.Value.Location, e.Location) <= ReportMatchMeters))
                     .OrderBy(r => r.At).Select(r => (DateTimeOffset?)r.At).FirstOrDefault();
                 From(first, "First report nearby", TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(4));
+                break;
+
+            case PoliticalCallAnswered e when _politicalCalls.TryGetValue(e.CallId, out var rang):
+                From(rang.At, $"{rang.Call.Caller} rang", TimeSpan.FromMinutes(3), Systems.PoliticalPressureSystem.AnswerWindow);
                 break;
 
             // Only the first dispatch to an incident is timed: the rest build on it.
@@ -353,7 +360,8 @@ public sealed partial class AarAnalyzer
             ParRequested or EvacuationSignalled or EmergencyTrafficDeclared or MaydayDeclared or RescueTeamDeployed => "Safety",
             CrewRehabOrdered or CrewReliefRequested or PeerSupportArranged => "Crews",
             UnifiedCommandInvited or AgencyAssistanceRequested or AgencyBriefingRequested or DisputeResolutionChosen or EocActivationRequested
-                or SitrepSubmitted or PublicStatementIssued => "Multi-agency",
+                or SitrepSubmitted or PublicStatementIssued or AgencyRequestAnswered => "Multi-agency",
+            PoliticalCallAnswered => "Political",
             IcsPositionAssigned { Role: IcsRole.Liaison or IcsRole.PublicInformation } => "Multi-agency",
             IcsPositionAssigned or IcsGroupFormed or IcsGroupDisbanded or UnitAssignedToGroup => "Command",
             _ when simEvent.Source == EventSources.Iap => "Planning",

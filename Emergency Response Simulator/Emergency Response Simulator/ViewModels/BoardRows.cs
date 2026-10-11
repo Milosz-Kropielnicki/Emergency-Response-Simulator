@@ -26,10 +26,19 @@ public sealed partial class UnitRow(MainViewModel owner, Unit unit, DateTimeOffs
     public Guid Id { get; } = unit.Id;
     public string Callsign { get; } = unit.Callsign;
     public string Type { get; } = ResourceGroups.Label(unit.Type);
-    public string Agency { get; } = (unit.Agency?.ShortName ?? "—") + (unit.Agency?.AiControlled == true ? " (own control)" : "");
+    public string Agency { get; } = (unit.Agency?.ShortName ?? "—") + unit.Agency switch
+    {
+        { Controller: AgencyController.Participant, ControlledBy: var runner } when runner == owner.Permissions.Me => " (yours)",
+        { Controller: AgencyController.Participant, ControllerName: var name } => $" (run by {name})",
+        { AiControlled: true } => " (own control)",
+        _ => "",
+    };
 
-    /// <summary>Run by another agency's control room: visible, but not command's to dispatch.</summary>
-    public bool IsAiControlled { get; } = unit.Agency?.AiControlled == true;
+    /// <summary>
+    /// Run by another agency's control room: visible, but not command's to dispatch, unless this player runs that agency
+    /// (Phase 11 M5).
+    /// </summary>
+    public bool IsAiControlled { get; } = unit.Agency?.AiControlled == true && !(unit.Agency.Controller == AgencyController.Participant && unit.Agency.ControlledBy == owner.Permissions.Me);
     public UnitStatus Status { get; } = unit.Status;
     public string StatusText { get; } = EventDescriber.Humanize(unit.Status);
     public string Assignment { get; } = unit.AssignedIncident?.Number ?? unit.Tasking ?? "—";
@@ -57,7 +66,7 @@ public sealed partial class UnitRow(MainViewModel owner, Unit unit, DateTimeOffs
     public bool CanReassign => !IsAiControlled && owner.SelectedIncidentId is { } selected && unit.AssignedIncidentId is { } current
                                && current != selected && Status != UnitStatus.OutOfService;
 
-    public IReadOnlyList<StatusOption> NextStatuses { get; } = unit.Agency?.AiControlled == true ? [] :
+    public IReadOnlyList<StatusOption> NextStatuses { get; } = unit.Agency?.AiControlled == true && !(unit.Agency.Controller == AgencyController.Participant && unit.Agency.ControlledBy == owner.Permissions.Me) ? [] :
         UnitStatusRules.NextStatuses(unit.Status)
             // Dispatch and cancellation go through their own commands so the assignment is recorded.
             .Where(s => s is not (UnitStatus.Dispatched or UnitStatus.Cancelled))

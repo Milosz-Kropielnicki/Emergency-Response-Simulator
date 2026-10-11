@@ -18,6 +18,9 @@ public static class AiRoles
     /// <summary>Journalists ringing with questions (<c>InteragencySystem</c>).</summary>
     public const string Media = "media";
 
+    /// <summary>The local TD, the council chief executive and the minister's office ringing command (<c>PoliticalPressureSystem</c>, Phase 11 M5).</summary>
+    public const string Politicians = "politicians";
+
     /// <summary>
     /// Another agency's control room: its routine jobs and initiative (<c>AgencyAiSystem</c>), and its answers to
     /// invitations to unified command and requests for units (<c>InteragencySystem</c>).

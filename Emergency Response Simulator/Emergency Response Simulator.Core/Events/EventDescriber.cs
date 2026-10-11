@@ -208,6 +208,15 @@ public static class EventDescriber
             InjectSkipped e => Entry("INSTRUCTOR", $"Inject {e.Number} skipped: {e.Description}", important: true),
             InstructorRolePlay e => Entry("INSTRUCTOR", e.Kind == "Decision" ? $"Instructor as {e.As}: {e.Text}"
                 : $"Instructor role-play as {e.As}{(e.Channel is { } channel ? $" on {channel}" : "")}: \"{e.Text}\"", important: true),
+            // AI role players (Phase 11 M5)
+            PoliticalCallReceived e => Entry("POLITICAL", $"{e.Caller} rang for the {e.To}: \"{e.Message}\"", e.IncidentId, important: e.Pressure >= 2),
+            PoliticalCallAnswered e => Entry("POLITICAL", $"Political call returned: \"{e.Answer}\""),
+            PoliticalFallout e => Entry("TRUTH", $"Political pressure: {e.What}", e.IncidentId, important: true),
+            AgencyControlChanged e => Entry("SESSION", e.Controller == AgencyController.Participant
+                ? $"{e.By ?? Participant(e.ParticipantId ?? Guid.Empty)} runs {Agency(e.AgencyId)}'s control room"
+                : $"{Agency(e.AgencyId)}'s control room is run by the simulation again", important: true),
+            AgencyRequestAnswered e => Entry("MULTI-AGENCY", $"{Agency(e.AgencyId)} answers: {(e.Approve ? "yes" : "no")}" +
+                (e.Quantity is { } n ? $", {n} unit(s)" : "") + (string.IsNullOrWhiteSpace(e.Text) ? "" : $" — \"{e.Text}\"")),
             AiRoleTakenOver e => Entry("INSTRUCTOR", $"Instructor takes over {e.Name}"),
             AiRoleHandedBack e => Entry("INSTRUCTOR", $"{e.Name} handed back to the simulation"),
             InstructorBookmarked e => Entry("INSTRUCTOR", $"Bookmark{(e.ParticipantId is { } who ? $" ({Participant(who)})" : "")}: {e.Note}", important: true),

@@ -148,7 +148,7 @@ public class ServerClientTests
             Assert.Equal(remotable.Count, callable.Count);
             Assert.All(remotable, m => Assert.Contains(m, callable));
         }
-        Assert.Equal(44, typeof(IC2Service).GetMethods().Length);
+        Assert.Equal(46, typeof(IC2Service).GetMethods().Length);
         Assert.Contains(CommandDispatcher.Callable, c => c.Method.Name == nameof(IIapService.PullFromCopAsync));
         Assert.DoesNotContain(CommandDispatcher.Callable, c => c.Method.Name == nameof(IAarService.ReplayToAsync)); // runs on the client
 
