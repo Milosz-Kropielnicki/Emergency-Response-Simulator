@@ -77,12 +77,16 @@ public partial class CrewsViewModel : ObservableObject
 
     // ---- Safety ----
 
-    [RelayCommand]
+    private bool CanPar => _owner.Permissions.C2(nameof(IC2Service.RequestParAsync));
+
+    [RelayCommand(CanExecute = nameof(CanPar))]
     private Task RequestParAsync() => _owner.SelectedIncidentId is { } incident
         ? _owner.RunCommandAsync(() => _c2.RequestParAsync(incident), "PAR called")
         : Fail("Select an incident first.");
 
-    [RelayCommand]
+    private bool CanEvacuate => _owner.Permissions.C2(nameof(IC2Service.SignalEvacuationAsync));
+
+    [RelayCommand(CanExecute = nameof(CanEvacuate))]
     private Task EvacuateAsync()
     {
         if (_owner.SelectedIncidentId is not { } incident) return Fail("Select an incident first.");
@@ -93,7 +97,9 @@ public partial class CrewsViewModel : ObservableObject
             : Task.CompletedTask;
     }
 
-    [RelayCommand]
+    private bool CanEmergencyTraffic => _owner.Permissions.C2(nameof(IC2Service.DeclareEmergencyTrafficAsync));
+
+    [RelayCommand(CanExecute = nameof(CanEmergencyTraffic))]
     private Task ToggleEmergencyTrafficAsync()
     {
         if (TrafficChannel is not { } channel) return Task.CompletedTask;
@@ -102,12 +108,16 @@ public partial class CrewsViewModel : ObservableObject
             active ? $"Emergency traffic lifted on {channel}" : $"Emergency traffic declared on {channel}");
     }
 
-    [RelayCommand]
+    private bool CanRescue => _owner.Permissions.C2(nameof(IC2Service.DeployRescueTeamAsync));
+
+    [RelayCommand(CanExecute = nameof(CanRescue))]
     private Task DeployRescueAsync(Guid maydayId) => RescueTeam is { Id: { } unit } team
         ? _owner.RunCommandAsync(() => _c2.DeployRescueTeamAsync(maydayId, unit), $"{team.Label} sent in as the rescue team")
         : Fail("Choose a crew at the scene to send in.");
 
-    [RelayCommand]
+    private bool CanMayday => _owner.Permissions.C2(nameof(IC2Service.DeclareMaydayAsync));
+
+    [RelayCommand(CanExecute = nameof(CanMayday))]
     private Task DeclareMaydayAsync(ParLine line) =>
         _owner.RunCommandAsync(() => _c2.DeclareMaydayAsync(line.UnitId, line.MissingMember,
             line.Outstanding
@@ -116,18 +126,24 @@ public partial class CrewsViewModel : ObservableObject
 
     // ---- Welfare ----
 
-    [RelayCommand]
+    private bool CanRehab => _owner.Permissions.C2(nameof(IC2Service.SendToRehabAsync));
+
+    [RelayCommand(CanExecute = nameof(CanRehab))]
     private Task RehabAsync(Guid unitId) => _owner.RunCommandAsync(() => _c2.SendToRehabAsync(unitId), $"{Callsign(unitId)} sent to rehab");
 
-    [RelayCommand]
+    private bool CanRelieve => _owner.Permissions.C2(nameof(IC2Service.RequestReliefAsync));
+
+    [RelayCommand(CanExecute = nameof(CanRelieve))]
     private Task RelieveAsync(Guid unitId) =>
         _owner.RunCommandAsync(() => _c2.RequestReliefAsync(unitId, fullBriefing: true), $"Relief crew requested for {Callsign(unitId)} (full briefing)");
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanRelieve))]
     private Task QuickRelieveAsync(Guid unitId) =>
         _owner.RunCommandAsync(() => _c2.RequestReliefAsync(unitId, fullBriefing: false), $"Relief crew requested for {Callsign(unitId)} (quick changeover)");
 
-    [RelayCommand]
+    private bool CanPeerSupport => _owner.Permissions.C2(nameof(IC2Service.ArrangePeerSupportAsync));
+
+    [RelayCommand(CanExecute = nameof(CanPeerSupport))]
     private Task PeerSupportAsync(Guid unitId) =>
         _owner.RunCommandAsync(() => _c2.ArrangePeerSupportAsync(unitId), $"Peer support arranged for {Callsign(unitId)}");
 

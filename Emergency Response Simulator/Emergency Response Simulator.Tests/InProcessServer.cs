@@ -33,6 +33,7 @@ internal sealed class InProcessServer : IAsyncDisposable
     public SimulationConnection Instructor { get; private set; } = null!;
     public SessionRuntime Session { get; private set; } = null!;
     public SessionManager Sessions => _app.Services.GetRequiredService<SessionManager>();
+    public CommandDispatcher Dispatcher => _app.Services.GetRequiredService<CommandDispatcher>();
     public SimulationEngine Engine => Session.Engine;
     public ICopService Cop => Session.Services.GetRequiredService<ICopService>();
     public StoreView Store => new(_app.Services.GetRequiredService<IEventStore>(), Session.Id);

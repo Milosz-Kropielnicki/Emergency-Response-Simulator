@@ -82,7 +82,9 @@ public sealed partial class IncidentDetailViewModel(MainViewModel owner, IC2Serv
         Replace(Zones, incident.Zones.Select(z => $"{z.Name}"));
     }
 
-    [RelayCommand]
+    private bool CanUpdateIncident => owner.Permissions.C2(nameof(IC2Service.UpdateIncidentAsync));
+
+    [RelayCommand(CanExecute = nameof(CanUpdateIncident))]
     private async Task ApplyAsync()
     {
         if (_incidentId is not { } id) return;
@@ -101,7 +103,9 @@ public sealed partial class IncidentDetailViewModel(MainViewModel owner, IC2Serv
             EvacuationRequired, threats), "Incident updated", quietIfUnchanged: true);
     }
 
-    [RelayCommand]
+    private bool CanHazardZones => owner.Permissions.C2(nameof(IC2Service.EstablishHazardZonesAsync));
+
+    [RelayCommand(CanExecute = nameof(CanHazardZones))]
     private async Task EstablishHazardZonesAsync()
     {
         if (_incidentId is not { } id) return;

@@ -156,7 +156,8 @@ public class ServerClientTests
         var client = await server.JoinAsync("Pat", UserRole.Planning);
         var c2 = RemoteProxy.Create<IC2Service>(client, SimulationHubProtocol.Services.C2);
         var iap = RemoteProxy.Create<IIapService>(client, SimulationHubProtocol.Services.Iap);
-        var incident = (await c2.CreateIncidentAsync(IncidentType.Explosion, IncidentPriority.High, BarrowStreetScenario.FireLocation)).EntityId!.Value;
+        var opened = RemoteProxy.Create<IC2Service>(server.Instructor, SimulationHubProtocol.Services.C2); // opening incidents isn't Planning's
+        var incident = (await opened.CreateIncidentAsync(IncidentType.Explosion, IncidentPriority.High, BarrowStreetScenario.FireLocation)).EntityId!.Value;
         DateTimeOffset clockNow() => server.Engine.SimTime;
 
         // A method returning a document, one with a complex argument, and the clock.

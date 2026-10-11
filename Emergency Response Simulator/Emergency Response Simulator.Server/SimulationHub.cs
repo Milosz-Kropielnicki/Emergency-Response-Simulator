@@ -107,8 +107,12 @@ public sealed class SimulationHub(SessionManager sessions, CommandDispatcher dis
 
     public Task AssignRole(Guid participantId, UserRole role) => Session.AssignRoleAsync(Instructor(), participantId, role);
 
-    /// <summary>Hands this participant's role to another, who takes it; this participant takes <paramref name="newRole"/>.</summary>
-    public Task HandOverRole(Guid toParticipantId, UserRole newRole) => Session.HandOverAsync(Participant, toParticipantId, newRole);
+    /// <summary>
+    /// Hands this participant's role to another, who takes it; this participant takes <paramref name="newRole"/>. Once the
+    /// exercise runs, a full briefing takes longer than a quick changeover but passes the role's open business on (M3).
+    /// </summary>
+    public Task HandOverRole(Guid toParticipantId, UserRole newRole, bool fullBriefing) =>
+        Session.HandOverAsync(Participant, toParticipantId, newRole, fullBriefing);
 
     private ParticipantRecord Instructor() =>
         Participant is { Role: UserRole.Instructor } instructor ? instructor : throw new HubException("Only the instructor can do that.");

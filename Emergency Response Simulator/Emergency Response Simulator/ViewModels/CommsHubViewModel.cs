@@ -130,7 +130,9 @@ public partial class CommsHubViewModel : ObservableObject
     }
 
     /// <summary>Send without push-to-talk timing (keyboard users).</summary>
-    [RelayCommand]
+    private bool CanTransmit => _owner.Permissions.C2(nameof(IC2Service.TransmitAsync));
+
+    [RelayCommand(CanExecute = nameof(CanTransmit))]
     private async Task SendAsync()
     {
         if (TalkChannel is not { } channel) return;
@@ -140,27 +142,35 @@ public partial class CommsHubViewModel : ObservableObject
 
     // ---- Actions ----
 
-    [RelayCommand]
+    private bool CanRequestRepeat => _owner.Permissions.C2(nameof(IC2Service.RequestRepeatAsync));
+
+    [RelayCommand(CanExecute = nameof(CanRequestRepeat))]
     private Task RequestRepeatAsync(Guid messageId) => _owner.RunCommandAsync(() => _c2.RequestRepeatAsync(messageId), "Asked to say again");
 
-    [RelayCommand]
+    private bool CanCallBack => _owner.Permissions.C2(nameof(IC2Service.CallBackAsync));
+
+    [RelayCommand(CanExecute = nameof(CanCallBack))]
     private Task CallBackAsync(Guid callId) => _owner.RunCommandAsync(() => _c2.CallBackAsync(callId), "Calling back");
 
     [ObservableProperty] private string? _patchA;
     [ObservableProperty] private string? _patchB = RadioPlan.FireCommand;
 
-    [RelayCommand]
+    private bool CanPatch => _owner.Permissions.C2(nameof(IC2Service.PatchChannelsAsync));
+
+    [RelayCommand(CanExecute = nameof(CanPatch))]
     private Task PatchAsync() => PatchA is { } a && PatchB is { } b
         ? _owner.RunCommandAsync(() => _c2.PatchChannelsAsync(a, b), $"Patch requested: {a} ↔ {b} (a few minutes to set up)")
         : Task.CompletedTask;
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanPatch))]
     private Task RemovePatchAsync(Guid patchId) => _owner.RunCommandAsync(() => _c2.RemovePatchAsync(patchId), "Patch removed");
 
     [ObservableProperty] private OrderTarget? _moveUnit;
     [ObservableProperty] private string? _moveChannel = RadioPlan.FireTac2;
 
-    [RelayCommand]
+    private bool CanMoveChannel => _owner.Permissions.C2(nameof(IC2Service.AssignChannelAsync));
+
+    [RelayCommand(CanExecute = nameof(CanMoveChannel))]
     private Task MoveUnitAsync() => MoveUnit is { Id: { } unit } target && MoveChannel is { } channel
         ? _owner.RunCommandAsync(() => _c2.AssignChannelAsync(unit, channel), $"{target.Label} moved to {channel}")
         : Task.CompletedTask;

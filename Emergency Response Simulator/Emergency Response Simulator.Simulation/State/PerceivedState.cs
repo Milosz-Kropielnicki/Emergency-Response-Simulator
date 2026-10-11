@@ -418,7 +418,19 @@ public sealed class PerceivedState : ICopService
             case RoleHandedOver e when _participants.TryGetValue(e.ToParticipantId, out var taking):
                 taking.Role = e.Role;
                 if (_participants.TryGetValue(e.FromParticipantId, out var giving))
+                {
                     giving.Role = e.FromNewRole;
+                    giving.HandingOver = null;
+                }
+                break;
+
+            case RoleHandoverBegun e when _participants.TryGetValue(e.FromParticipantId, out var handing):
+                handing.HandingOver = new PendingHandover(e.HandoverId, e.ToParticipantId, e.FromNewRole, e.FullBriefing, e.CompletesAt);
+                break;
+
+            case RoleHandoverCancelled e:
+                foreach (var participant in _participants.Values.Where(p => p.HandingOver?.HandoverId == e.HandoverId))
+                    participant.HandingOver = null;
                 break;
 
             // ---- Multi-agency (Phase 10) ----

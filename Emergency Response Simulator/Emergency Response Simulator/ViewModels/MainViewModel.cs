@@ -29,9 +29,10 @@ public partial class MainViewModel : ObservableObject
     private DateTimeOffset _messageExpires;
 
     public MainViewModel(CopView cop, ISimulationControl simulation, IC2Service c2, IIapService iap, TimelineViewModel timeline,
-        IRoutingService routing, DataSourceInfo dataSource, InstructorViewModel instructor, SessionViewModel session)
+        IRoutingService routing, DataSourceInfo dataSource, InstructorViewModel instructor, SessionViewModel session, Permissions permissions)
     {
         Instructor = instructor;
+        Permissions = permissions;
         Session = session;
         session.ReportTo((result, done) => ShowCommandResult(result, done));
         _cop = cop;
@@ -50,6 +51,9 @@ public partial class MainViewModel : ObservableObject
         ZoneDrawing = new ZoneDrawingViewModel(c2, this);
         IncidentDetail = new IncidentDetailViewModel(this, c2);
         LayerGroups = BuildLayerGroups();
+        Workspaces = RoleWorkspaces.Choices();
+        permissions.Changed += (_, _) => OnPermissionsChanged();
+        SelectedWorkspace = RoleWorkspaces.Full;
         _dispatcher = Application.Current.Dispatcher;
         EventStoreLabel = $"Event store: {dataSource.EventStore}";
 
@@ -70,6 +74,66 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>The networked session: participants, code, lifecycle and roles (Phase 11). Hidden standalone.</summary>
     public SessionViewModel Session { get; }
+
+    /// <summary>What this player's role may do (Phase 11 M3); commands their role can't give are disabled.</summary>
+    public Permissions Permissions { get; }
+
+    private UserRole? _workspaceRole;
+
+    /// <summary>
+    /// The role changed, someone joined or left (which moves functions to or from the IC), or the session started: ask
+    /// every command again, and switch to the new role's workspace.
+    /// </summary>
+    private void OnPermissionsChanged()
+    {
+        foreach (var viewModel in new object[] { this, Command, CommsHub, Crews, Agencies, Ics, Iap, ZoneDrawing, IncidentDetail })
+            Permissions.Requery(viewModel);
+        Ics.Requery();
+        if (Permissions.Role is { } role && role != _workspaceRole)
+        {
+            _workspaceRole = role;
+            SelectedWorkspace = Workspaces.FirstOrDefault(w => w.Role == role) ?? SelectedWorkspace;
+        }
+    }
+
+    // ---- Role workspaces (Phase 11 M3) ----
+
+    /// <summary>Default layouts per role over the same COP; a player can pick another at any time.</summary>
+    public IReadOnlyList<RoleWorkspace> Workspaces { get; }
+
+    [ObservableProperty] private RoleWorkspace? _selectedWorkspace;
+
+    /// <summary>0 = status boards, 1 = command (orders, requests, approvals), 2 = history, 3 = instructor.</summary>
+    [ObservableProperty] private int _bottomPanelTab;
+
+    [ObservableProperty] private bool _showComms = true;
+    [ObservableProperty] private bool _showIncident = true;
+    [ObservableProperty] private bool _showUnit = true;
+    [ObservableProperty] private bool _showIcs = true;
+    [ObservableProperty] private bool _showCrews = true;
+    [ObservableProperty] private bool _showAgencies = true;
+    [ObservableProperty] private bool _showCommandBoard = true;
+    [ObservableProperty] private bool _showInstructorBoard = true;
+
+    partial void OnSelectedWorkspaceChanged(RoleWorkspace? value)
+    {
+        if (value is null) return;
+        bool Shows(WorkspacePanel panel) => value.Panels.Contains(panel);
+        ShowComms = Shows(WorkspacePanel.Comms);
+        ShowIncident = Shows(WorkspacePanel.Incident);
+        ShowUnit = Shows(WorkspacePanel.Unit);
+        ShowIcs = Shows(WorkspacePanel.Ics);
+        ShowCrews = Shows(WorkspacePanel.Crews);
+        ShowAgencies = Shows(WorkspacePanel.Agencies);
+        ShowCommandBoard = value.Boards.Contains(WorkspaceBoard.Command);
+        ShowInstructorBoard = value.Boards.Contains(WorkspaceBoard.Instructor);
+        RightPanelTab = (int)value.Focus;
+        BottomPanelTab = (int)value.Board;
+        IsRightPanelOpen = true;
+        IsLeftPanelOpen = value.LayerPanel;
+        foreach (var (key, on) in value.Layers)
+            if (FindLayerToggle(key) is { } toggle) toggle.IsOn = on;
+    }
 
     /// <summary>Receiving hospitals as they last reported themselves.</summary>
     public ObservableCollection<HospitalRow> Hospitals { get; } = [];
@@ -352,6 +416,8 @@ public partial class MainViewModel : ObservableObject
 
     public Incident? FindIncident(Guid id) => _cop.FindIncident(id);
 
+    internal IReadOnlyList<Participant> Participants => _cop.Participants;
+
     // ---- Commands (all through C2; refused while replaying) ----
 
     /// <summary>Runs a C2 command and reports the outcome in the header.</summary>
@@ -377,10 +443,14 @@ public partial class MainViewModel : ObservableObject
         _messageExpires = DateTimeOffset.Now.AddSeconds(6);
     }
 
-    [RelayCommand]
+    private bool CanZones => Permissions.C2(nameof(IC2Service.LiftZoneAsync));
+
+    [RelayCommand(CanExecute = nameof(CanZones))]
     private async Task LiftZoneAsync(Guid zoneId) => await RunCommandAsync(() => _c2.LiftZoneAsync(zoneId), "Zone lifted");
 
-    [RelayCommand]
+    private bool CanTaskUnits => Permissions.C2(nameof(IC2Service.DispatchAsync));
+
+    [RelayCommand(CanExecute = nameof(CanTaskUnits))]
     private async Task DispatchUnitAsync(Guid unitId)
     {
         if (SelectedIncidentId is not { } incidentId)
@@ -392,7 +462,7 @@ public partial class MainViewModel : ObservableObject
         await RunCommandAsync(() => _c2.DispatchAsync(unitId, incidentId), $"{callsign} dispatched");
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanTaskUnits))]
     private async Task ReassignUnitAsync(Guid unitId)
     {
         if (SelectedIncidentId is not { } incidentId) return;
@@ -400,7 +470,7 @@ public partial class MainViewModel : ObservableObject
             $"{_cop.FindUnit(unitId)?.Callsign} reassigned to {_cop.FindIncident(incidentId)?.Number}");
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanTaskUnits))]
     private async Task CancelUnitAsync(Guid unitId) =>
         await RunCommandAsync(() => _c2.CancelDispatchAsync(unitId, "Stood down by dispatcher"),
             $"{_cop.FindUnit(unitId)?.Callsign} stood down");
@@ -409,7 +479,9 @@ public partial class MainViewModel : ObservableObject
         await RunCommandAsync(() => _c2.UpdateUnitStatusAsync(unitId, status),
             $"{_cop.FindUnit(unitId)?.Callsign} → {EventDescriber.Humanize(status)}");
 
-    [RelayCommand]
+    private bool CanAcknowledge => Permissions.C2(nameof(IC2Service.AcknowledgeAlertAsync));
+
+    [RelayCommand(CanExecute = nameof(CanAcknowledge))]
     private async Task AcknowledgeAlertAsync(Guid alertId) =>
         await RunCommandAsync(() => _c2.AcknowledgeAlertAsync(alertId), "Alert acknowledged");
 
@@ -427,7 +499,9 @@ public partial class MainViewModel : ObservableObject
         await RunCommandAsync(() => _c2.AssessReportAsync(reportId, verification, confidence), $"Report marked {verification}");
     }
 
-    [RelayCommand]
+    private bool CanOpenIncident => Permissions.C2(nameof(IC2Service.CreateIncidentAsync));
+
+    [RelayCommand(CanExecute = nameof(CanOpenIncident))]
     private async Task CreateIncidentFromReportAsync(Guid reportId)
     {
         var report = _cop.Reports.FirstOrDefault(r => r.Id == reportId);
@@ -445,7 +519,9 @@ public partial class MainViewModel : ObservableObject
             SelectedIncidentId = incidentId;
     }
 
-    [RelayCommand]
+    private bool CanAssessReports => Permissions.C2(nameof(IC2Service.LinkReportAsync));
+
+    [RelayCommand(CanExecute = nameof(CanAssessReports))]
     private async Task LinkReportAsync(Guid reportId)
     {
         if (SelectedIncidentId is not { } incidentId) return;
@@ -548,6 +624,7 @@ public partial class MainViewModel : ObservableObject
         Crews.Refresh();
         Agencies.Refresh();
         Session.Refresh();
+        Permissions.Refresh();
         RefreshZones();
         RefreshWeather();
         RefreshHospitals();

@@ -64,7 +64,7 @@ public class SessionTests
         await C2Of(ops).DispatchAsync(engine.Id, incident);
         await C2Of(ops).IssueOrderAsync(incident, OrderTargetKind.Unit, engine.Id, "Interior attack, ground floor");
         await C2Of(ic).DeclareZoneAsync(ZoneType.PoliceCordon, "Cordon", Wgs84Square(), incident);
-        var iap = RemoteProxy.Create<IIapService>(ops, SimulationHubProtocol.Services.Iap);
+        var iap = RemoteProxy.Create<IIapService>(ic, SimulationHubProtocol.Services.Iap); // Planning is unfilled, so it falls to the IC
         await iap.StartOperationalPeriodAsync(incident, server.Engine.SimTime, server.Engine.SimTime.AddHours(2));
         await server.StepAsync(TimeSpan.FromMinutes(1)); // the world answers: those events are nobody's command
 
@@ -76,7 +76,7 @@ public class SessionTests
         Assert.Equal(UserRole.IncidentCommander, commands.Single(e => e.Payload is IncidentCreated).ActorRole);
         Assert.Equal(opsId, commands.Single(e => e.Payload is UnitDispatched).ActorId);
         Assert.Equal(UserRole.Operations, commands.Single(e => e.Payload is OrderIssued).ActorRole);
-        Assert.Equal(opsId, commands.Single(e => e.Payload is OperationalPeriodStarted).ActorId);
+        Assert.Equal(icId, commands.Single(e => e.Payload is OperationalPeriodStarted).ActorId);
         Assert.Equal(icId, commands.Single(e => e.Payload is ZoneDeclared).ActorId);
         // What the world does in reply is nobody's command (starting the clock was the instructor's, and says so).
         Assert.All(stored.Where(e => e.Source == EventSources.Engine && e.Payload is not (SimulationStarted or SimulationPaused or TimeScaleChanged)
@@ -122,7 +122,10 @@ public class SessionTests
         await server.JoinAsync("Eve", UserRole.Dispatcher); // dispatchers can be several
 
         // Alex hands command to Bea and takes Operations; the instructor makes Cal the Safety Officer.
+        // Once the exercise runs a handover takes (simulation) time: Alex keeps command until the briefing is done.
         await a.HandOverRoleAsync(b.Ticket!.ParticipantId, UserRole.Operations);
+        await server.StepAsync(TimeSpan.FromMinutes(6));
+        await Until(() => server.Store.All().Any(e => e.Payload is RoleHandedOver), TimeSpan.FromSeconds(10));
         await server.Instructor.AssignRoleAsync(c.Ticket!.ParticipantId, UserRole.Safety);
         await Assert.ThrowsAsync<HubException>(() => c.AssignRoleAsync(a.Ticket!.ParticipantId, UserRole.Logistics));
         await Assert.ThrowsAsync<HubException>(() => server.Instructor.AssignRoleAsync(c.Ticket.ParticipantId, UserRole.IncidentCommander)); // Bea has it

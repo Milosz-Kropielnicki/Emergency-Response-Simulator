@@ -67,7 +67,9 @@ namespace Emergency_Response_Simulator
                 builder.Services.AddSingleton(new DataSourceInfo(usingDatabase ? "PostgreSQL" : "In-memory"));
             }
 
-            builder.Services.AddSingleton(sp => new SessionViewModel(sp.GetRequiredService<CopView>(), sp.GetService<SimulationConnection>()));
+            builder.Services.AddSingleton(sp => new Permissions(sp.GetRequiredService<CopView>(), sp.GetService<SimulationConnection>()));
+            builder.Services.AddSingleton(sp => new SessionViewModel(sp.GetRequiredService<CopView>(), sp.GetService<SimulationConnection>(),
+                sp.GetRequiredService<Permissions>()));
             builder.Services.AddSingleton<TimelineViewModel>();
             builder.Services.AddSingleton<InstructorViewModel>();
             builder.Services.AddSingleton<AarViewModel>();

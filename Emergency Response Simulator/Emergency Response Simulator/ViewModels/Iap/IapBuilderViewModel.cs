@@ -666,7 +666,9 @@ public sealed partial class IapBuilderViewModel : ObservableObject
         Load(_incidentId is { } id ? _cop.FindIncident(id) : null);
     }
 
-    [RelayCommand]
+    private bool CanPlan => _main.Permissions.Iap(nameof(IIapService.StartOperationalPeriodAsync));
+
+    [RelayCommand(CanExecute = nameof(CanPlan))]
     private async Task StartPeriodAsync()
     {
         if (_incidentId is not { } incidentId) return;
@@ -698,7 +700,7 @@ public sealed partial class IapBuilderViewModel : ObservableObject
         SelectedSection = 1;
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanPlan))]
     private async Task NewVersionAsync()
     {
         if (SelectedPeriod is not { } period) return;
@@ -707,7 +709,7 @@ public sealed partial class IapBuilderViewModel : ObservableObject
         Reload();
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanPlan))]
     private async Task SaveAsync() => await SaveIfDirtyAsync();
 
     private async Task<bool> SaveIfDirtyAsync()
@@ -732,7 +734,7 @@ public sealed partial class IapBuilderViewModel : ObservableObject
         SyncPlan();
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanPlan))]
     private async Task SubmitAsync()
     {
         if (_plan is not { } plan || !await SaveIfDirtyAsync()) return;
@@ -740,7 +742,9 @@ public sealed partial class IapBuilderViewModel : ObservableObject
         Reload();
     }
 
-    [RelayCommand]
+    private bool CanApprovePlan => _main.Permissions.Iap(nameof(IIapService.ApproveAsync));
+
+    [RelayCommand(CanExecute = nameof(CanApprovePlan))]
     private async Task ApproveAsync()
     {
         if (_plan is not { } plan) return;
@@ -749,7 +753,7 @@ public sealed partial class IapBuilderViewModel : ObservableObject
         Reload();
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanApprovePlan))]
     private async Task ReturnPlanAsync()
     {
         if (_plan is not { } plan) return;
@@ -758,7 +762,9 @@ public sealed partial class IapBuilderViewModel : ObservableObject
         Reload();
     }
 
-    [RelayCommand]
+    private bool CanBriefPlan => _main.Permissions.Iap(nameof(IIapService.BriefAsync));
+
+    [RelayCommand(CanExecute = nameof(CanBriefPlan))]
     private async Task BriefAsync()
     {
         if (_plan is not { } plan) return;

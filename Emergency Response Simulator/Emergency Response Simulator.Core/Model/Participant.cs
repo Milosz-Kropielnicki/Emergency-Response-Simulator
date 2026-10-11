@@ -13,8 +13,13 @@ public sealed class Participant
 
     public bool Present => LeftAt is null;
 
+    /// <summary>A handover of their role under way (Phase 11 M3): they hold it until it completes.</summary>
+    public PendingHandover? HandingOver { get; set; }
+
     public string Label => $"{DisplayName} ({Roles.Name(Role)})";
 }
+
+public sealed record PendingHandover(Guid HandoverId, Guid ToParticipantId, UserRole FromNewRole, bool FullBriefing, DateTimeOffset CompletesAt);
 
 /// <summary>Rules about who may hold which role.</summary>
 public static class Roles
@@ -25,6 +30,20 @@ public static class Roles
     /// </summary>
     public static bool IsExclusive(UserRole role) => role is UserRole.IncidentCommander or UserRole.Operations or UserRole.Planning
         or UserRole.Logistics or UserRole.FinanceAdmin or UserRole.Safety or UserRole.Liaison or UserRole.PublicInformation;
+
+    /// <summary>The session role of the person in an ICS position (Phase 11 M3).</summary>
+    public static UserRole Of(IcsRole position) => position switch
+    {
+        IcsRole.IncidentCommander => UserRole.IncidentCommander,
+        IcsRole.Safety => UserRole.Safety,
+        IcsRole.Liaison => UserRole.Liaison,
+        IcsRole.PublicInformation => UserRole.PublicInformation,
+        IcsRole.Operations => UserRole.Operations,
+        IcsRole.Planning => UserRole.Planning,
+        IcsRole.Logistics => UserRole.Logistics,
+        IcsRole.FinanceAdmin => UserRole.FinanceAdmin,
+        _ => throw new ArgumentOutOfRangeException(nameof(position)),
+    };
 
     /// <summary>Roles that see ground truth (until observers can be granted it, Phase 11 M6).</summary>
     public static bool SeesTruth(UserRole role) => role == UserRole.Instructor;

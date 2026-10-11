@@ -39,6 +39,10 @@ public sealed class IcsGroup
 public sealed class IncidentCommand
 {
     public Dictionary<IcsRole, string> Positions { get; } = [];
+
+    /// <summary>Positions filled by a session participant (Phase 11 M3), by their participant id.</summary>
+    public Dictionary<IcsRole, Guid> Holders { get; } = [];
+
     public List<IcsGroup> Groups { get; } = [];
 
     /// <summary>
@@ -63,9 +67,13 @@ public sealed class IncidentCommand
         {
             case Events.IcsPositionAssigned e:
                 Positions[e.Role] = e.Name;
+                if (e.UserId is { } holder) Holders[e.Role] = holder;
+                else Holders.Remove(e.Role);
                 break;
             case Events.IncidentCommanderAssigned e:
                 Positions[IcsRole.IncidentCommander] = e.Name;
+                if (e.UserId is { } commander) Holders[IcsRole.IncidentCommander] = commander;
+                else Holders.Remove(IcsRole.IncidentCommander);
                 break;
             case Events.IcsGroupFormed e:
                 Groups.Add(new IcsGroup { Id = e.GroupId, Name = e.Name, Kind = e.Kind, Supervisor = e.Supervisor });

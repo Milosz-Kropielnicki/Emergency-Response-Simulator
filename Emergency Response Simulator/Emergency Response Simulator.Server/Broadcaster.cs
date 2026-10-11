@@ -38,6 +38,7 @@ public sealed class Broadcaster(IHubContext<SimulationHub, ISimulationClient> hu
                     if (!sent.TryGetValue(session.Id, out var last)) sent[session.Id] = last = new Sent();
                     await PushAsync(session, last, settings);
                     await session.ExpireDroppedAsync(settings.DropGrace);
+                    await session.CompleteHandoversAsync();
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

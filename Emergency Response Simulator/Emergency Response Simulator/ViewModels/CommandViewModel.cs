@@ -20,7 +20,9 @@ public sealed partial class CommandViewModel(MainViewModel owner, IC2Service c2,
     [ObservableProperty] private string _orderText = "";
     public ObservableCollection<OrderRow> Orders { get; } = [];
 
-    [RelayCommand]
+    private bool CanOrder => owner.Permissions.C2(nameof(IC2Service.IssueOrderAsync));
+
+    [RelayCommand(CanExecute = nameof(CanOrder))]
     private async Task IssueOrderAsync()
     {
         if (OrderTarget is not { } target)
@@ -33,18 +35,22 @@ public sealed partial class CommandViewModel(MainViewModel owner, IC2Service c2,
         if (result?.Succeeded == true) OrderText = "";
     }
 
-    [RelayCommand]
+    private bool CanCloseOrder => owner.Permissions.C2(nameof(IC2Service.CloseOrderAsync));
+
+    [RelayCommand(CanExecute = nameof(CanCloseOrder))]
     private Task CompleteOrderAsync(Guid orderId) => owner.RunCommandAsync(() => c2.CloseOrderAsync(orderId, completed: true), "Order completed");
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanCloseOrder))]
     private Task CancelOrderAsync(Guid orderId) => owner.RunCommandAsync(() => c2.CloseOrderAsync(orderId, completed: false), "Order cancelled");
 
     /// <summary>Closed loop: the read-back matched the order.</summary>
-    [RelayCommand]
+    private bool CanConfirmReadBack => owner.Permissions.C2(nameof(IC2Service.ConfirmReadBackAsync));
+
+    [RelayCommand(CanExecute = nameof(CanConfirmReadBack))]
     private Task ConfirmReadBackAsync(Guid orderId) => owner.RunCommandAsync(() => c2.ConfirmReadBackAsync(orderId, correct: true), "Read-back confirmed");
 
     /// <summary>Closed loop: the read-back was wrong or unclear; the order goes out again.</summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanConfirmReadBack))]
     private Task RepeatOrderAsync(Guid orderId) => owner.RunCommandAsync(() => c2.ConfirmReadBackAsync(orderId, correct: false), "Order repeated");
 
     // ---- Resource requests ----
@@ -69,7 +75,9 @@ public sealed partial class CommandViewModel(MainViewModel owner, IC2Service c2,
     /// <summary>Starts the request form on the first resource type.</summary>
     public void InitialiseDefaults() => RequestType ??= RequestableTypes[0];
 
-    [RelayCommand]
+    private bool CanRequestResources => owner.Permissions.C2(nameof(IC2Service.RequestResourcesAsync));
+
+    [RelayCommand(CanExecute = nameof(CanRequestResources))]
     private async Task RequestResourcesAsync()
     {
         if (owner.SelectedIncidentId is not { } incidentId)
@@ -92,10 +100,12 @@ public sealed partial class CommandViewModel(MainViewModel owner, IC2Service c2,
     public ObservableCollection<ApprovalRow> Approvals { get; } = [];
     [ObservableProperty] private string _decisionNote = "";
 
-    [RelayCommand]
+    private bool CanDecide => owner.Permissions.C2(nameof(IC2Service.DecideApprovalAsync));
+
+    [RelayCommand(CanExecute = nameof(CanDecide))]
     private Task ApproveAsync(Guid approvalId) => DecideAsync(approvalId, true);
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanDecide))]
     private Task DenyAsync(Guid approvalId) => DecideAsync(approvalId, false);
 
     private async Task DecideAsync(Guid approvalId, bool approve)
@@ -119,7 +129,9 @@ public sealed partial class CommandViewModel(MainViewModel owner, IC2Service c2,
     [ObservableProperty] private string _notificationText = "";
     public ObservableCollection<NotificationRow> Notifications { get; } = [];
 
-    [RelayCommand]
+    private bool CanNotify => owner.Permissions.C2(nameof(IC2Service.NotifyAsync));
+
+    [RelayCommand(CanExecute = nameof(CanNotify))]
     private async Task NotifyAsync()
     {
         var result = await owner.RunCommandAsync(() => c2.NotifyAsync(Recipient, NotificationText, owner.SelectedIncidentId),

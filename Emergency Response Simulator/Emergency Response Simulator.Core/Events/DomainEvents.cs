@@ -116,6 +116,8 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(ParticipantLeft), nameof(ParticipantLeft))]
 [JsonDerivedType(typeof(RoleAssigned), nameof(RoleAssigned))]
 [JsonDerivedType(typeof(RoleHandedOver), nameof(RoleHandedOver))]
+[JsonDerivedType(typeof(RoleHandoverBegun), nameof(RoleHandoverBegun))]
+[JsonDerivedType(typeof(RoleHandoverCancelled), nameof(RoleHandoverCancelled))]
 // Truth: multi-agency (Phase 10)
 [JsonDerivedType(typeof(InformationHeld), nameof(InformationHeld))]
 // Truth: the world as it really is
@@ -291,7 +293,8 @@ public sealed record ResourceRequested(
 // ---- Command and control (Phase 4) ----
 
 /// <summary>Someone takes an ICS position for an incident (§8.1).</summary>
-public sealed record IcsPositionAssigned(Guid IncidentId, IcsRole Role, string Name) : DomainEvent;
+/// <param name="UserId">The session participant who fills it, when it is one (Phase 11 M3).</param>
+public sealed record IcsPositionAssigned(Guid IncidentId, IcsRole Role, string Name, Guid? UserId = null) : DomainEvent;
 
 public sealed record IcsGroupFormed(Guid IncidentId, Guid GroupId, string Name, IcsGroupKind Kind, string? Supervisor) : DomainEvent;
 
@@ -620,7 +623,21 @@ public sealed record ParticipantLeft(Guid ParticipantId, string Reason) : Domain
 public sealed record RoleAssigned(Guid ParticipantId, UserRole Role) : DomainEvent;
 
 /// <summary>The holder of a role handed it to someone else, and took <paramref name="FromNewRole"/> themselves.</summary>
-public sealed record RoleHandedOver(Guid FromParticipantId, Guid ToParticipantId, UserRole Role, UserRole FromNewRole) : DomainEvent;
+/// <param name="HandoverId">The handover begun earlier (Phase 11 M3); none for an immediate one in the lobby.</param>
+/// <param name="Briefed">A full briefing was given. Otherwise it was a quick changeover and <paramref name="Items"/> were never passed on.</param>
+/// <param name="Items">The role's open business at the time: what the briefing covered, or what a quick changeover left out.</param>
+public sealed record RoleHandedOver(Guid FromParticipantId, Guid ToParticipantId, UserRole Role, UserRole FromNewRole,
+    Guid? HandoverId = null, bool Briefed = true, IReadOnlyList<string>? Items = null) : DomainEvent;
+
+/// <summary>
+/// A role holder began handing over (Phase 11 M3, the Phase 8 handover model): they keep the role until
+/// <paramref name="CompletesAt"/> (simulation time), longer with a full briefing than with a quick changeover.
+/// </summary>
+public sealed record RoleHandoverBegun(Guid HandoverId, Guid FromParticipantId, Guid ToParticipantId, UserRole Role, UserRole FromNewRole,
+    bool FullBriefing, DateTimeOffset CompletesAt) : DomainEvent;
+
+/// <summary>A handover that didn't finish: one of the two left, or their roles changed meanwhile.</summary>
+public sealed record RoleHandoverCancelled(Guid HandoverId, string Reason) : DomainEvent;
 
 /// <summary>Truth: something an agency knows, which command only learns if the agency shares it (information silos).</summary>
 /// <param name="Urgent">Matters to life safety: shared first, even by an agency that is not cooperating well.</param>

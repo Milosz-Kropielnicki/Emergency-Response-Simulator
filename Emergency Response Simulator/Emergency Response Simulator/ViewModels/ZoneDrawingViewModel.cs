@@ -77,7 +77,9 @@ public partial class ZoneDrawingViewModel(IC2Service c2, MainViewModel owner) : 
         }
     }
 
-    [RelayCommand]
+    private bool CanDraw => owner.Permissions.C2(nameof(IC2Service.DeclareZoneAsync));
+
+    [RelayCommand(CanExecute = nameof(CanDraw))]
     private void Start()
     {
         SelectedType ??= ZoneTypes[0];
@@ -105,7 +107,7 @@ public partial class ZoneDrawingViewModel(IC2Service c2, MainViewModel owner) : 
         Changed();
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanDraw))]
     public async Task FinishAsync()
     {
         if (!IsActive || SelectedType is not { } option) return;

@@ -74,8 +74,12 @@ public interface IC2Service
 
     // ---- ICS structure (Design Document §8.1) ----
 
+    /// <summary>
+    /// Staffs a position. With <paramref name="userId"/> a session participant fills it (Phase 11 M3): they take that role
+    /// in the session (the function stops falling to the IC), and a blank <paramref name="name"/> means theirs.
+    /// </summary>
     Task<CommandResult> AssignIcsPositionAsync(
-        Guid incidentId, IcsRole role, string name, CancellationToken cancellationToken = default);
+        Guid incidentId, IcsRole role, string name, Guid? userId = null, CancellationToken cancellationToken = default);
 
     /// <summary>Forms a group or division under Operations; <see cref="CommandResult.EntityId"/> is its id.</summary>
     Task<CommandResult> FormGroupAsync(

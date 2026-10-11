@@ -73,14 +73,32 @@ public sealed partial class IcsViewModel(MainViewModel owner, IC2Service c2) : O
                 span.IsOverloaded ? "Over" : span.IsUnderUsed ? "Under" : span.DirectReports == 0 ? "Idle" : "OK"));
     }
 
-    public Task AssignAsync(IcsRole role, string name) => _incidentId is { } id
-        ? owner.RunCommandAsync(() => c2.AssignIcsPositionAsync(id, role, name), $"{name} is {EventDescriber.Humanize(role)}")
+    /// <summary>With a participant, they also take the role in the session (Phase 11 M3).</summary>
+    public Task AssignAsync(IcsRole role, string name, Guid? userId = null) => _incidentId is { } id
+        ? owner.RunCommandAsync(() => c2.AssignIcsPositionAsync(id, role, name, userId),
+            $"{name} is {EventDescriber.Humanize(role)}" + (userId is null ? "" : $" and takes {Roles.Name(Roles.Of(role))} in the session"))
         : Task.CompletedTask;
+
+    internal bool CanStaff => owner.Permissions.C2(nameof(IC2Service.AssignIcsPositionAsync));
+
+    /// <summary>Networked: "a name only", then everyone present who could take a position.</summary>
+    public IReadOnlyList<PersonOption> People { get; private set; } = [new(null, "(name only)")];
+
+    /// <summary>Re-asks whether positions can be staffed, and refreshes who could fill them.</summary>
+    public void Requery()
+    {
+        var people = owner.Participants.Where(p => p.Present && p.Role != UserRole.Instructor)
+            .Select(p => new PersonOption(p.Id, p.DisplayName)).Prepend(new PersonOption(null, "(name only)")).ToList();
+        if (!people.SequenceEqual(People)) People = people;
+        foreach (var row in Positions) row.PeopleChanged();
+    }
 
     public Task PlaceAsync(Guid unitId, Guid? groupId) =>
         owner.RunCommandAsync(() => c2.AssignUnitToGroupAsync(unitId, groupId), "Unit placed");
 
-    [RelayCommand]
+    private bool CanOrganise => owner.Permissions.C2(nameof(IC2Service.FormGroupAsync));
+
+    [RelayCommand(CanExecute = nameof(CanOrganise))]
     private async Task FormGroupAsync()
     {
         if (_incidentId is not { } id) return;
@@ -93,7 +111,7 @@ public sealed partial class IcsViewModel(MainViewModel owner, IC2Service c2) : O
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanOrganise))]
     private Task DisbandGroupAsync(Guid groupId) => _incidentId is { } id
         ? owner.RunCommandAsync(() => c2.DisbandGroupAsync(id, groupId), "Group disbanded; its units report to command")
         : Task.CompletedTask;
@@ -116,9 +134,36 @@ public sealed partial class PositionRow(IcsViewModel owner, Guid incidentId, Ics
     [ObservableProperty] private string? _holder = holder;
     [ObservableProperty] private string _newHolder = holder ?? "";
 
-    [RelayCommand]
-    private Task AssignAsync() => owner.AssignAsync(Role, NewHolder);
+    /// <summary>Networked: the participants who could fill it (Phase 11 M3); the first entry is "a name only".</summary>
+    public IReadOnlyList<PersonOption> People => owner.People;
+
+    public bool HasPeople => People.Count > 1;
+
+    [ObservableProperty] private PersonOption? _person;
+
+    partial void OnPersonChanged(PersonOption? value)
+    {
+        if (value?.Id is not null) NewHolder = value.Name;
+    }
+
+    /// <summary>Refreshes the participant list after someone joined or left.</summary>
+    public void PeopleChanged()
+    {
+        var chosen = Person?.Id;
+        OnPropertyChanged(nameof(People));
+        OnPropertyChanged(nameof(HasPeople));
+        Person = People.FirstOrDefault(p => p.Id == chosen) ?? People.FirstOrDefault();
+        AssignCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanAssign))]
+    private Task AssignAsync() => owner.AssignAsync(Role, NewHolder, Person?.Id);
+
+    private bool CanAssign => owner.CanStaff;
 }
+
+/// <summary>A session participant who can fill a position, or nobody in particular (a name only).</summary>
+public sealed record PersonOption(Guid? Id, string Name);
 
 public sealed record GroupOption(Guid? Id, string Name);
 

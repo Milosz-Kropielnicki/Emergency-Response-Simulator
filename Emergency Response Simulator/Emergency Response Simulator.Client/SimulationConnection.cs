@@ -150,7 +150,9 @@ public sealed class SimulationConnection : IAsyncDisposable, IWorldSnapshotSourc
 
     public Task AssignRoleAsync(Guid participantId, UserRole role) => _hub.InvokeAsync("AssignRole", participantId, role);
 
-    public Task HandOverRoleAsync(Guid toParticipantId, UserRole newRole) => _hub.InvokeAsync("HandOverRole", toParticipantId, newRole);
+    /// <summary>Hands your role over; once the exercise runs it completes after a briefing (or a quicker changeover).</summary>
+    public Task HandOverRoleAsync(Guid toParticipantId, UserRole newRole, bool fullBriefing = true) =>
+        _hub.InvokeAsync("HandOverRole", toParticipantId, newRole, fullBriefing);
 
     public Task LeaveAsync() => _hub.InvokeAsync("Leave");
 

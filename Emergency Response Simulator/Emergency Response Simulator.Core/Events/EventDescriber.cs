@@ -193,7 +193,12 @@ public static class EventDescriber
             ParticipantJoined e => Entry("SESSION", $"{e.DisplayName} joined as {Roles.Name(e.Role)}"),
             ParticipantLeft e => Entry("SESSION", $"{Participant(e.ParticipantId)} left ({e.Reason})"),
             RoleAssigned e => Entry("SESSION", $"{Participant(e.ParticipantId)} is now {Roles.Name(e.Role)}", important: true),
-            RoleHandedOver e => Entry("SESSION", $"{Participant(e.FromParticipantId)} handed {Roles.Name(e.Role)} to {Participant(e.ToParticipantId)}", important: true),
+            RoleHandedOver e => Entry("SESSION", $"{Participant(e.FromParticipantId)} handed {Roles.Name(e.Role)} to {Participant(e.ToParticipantId)}" + (e.HandoverId is null ? ""
+                : e.Briefed ? $" after a full briefing" + (e.Items is { Count: > 0 } told ? $": {string.Join("; ", told)}" : "")
+                : " in a quick changeover" + (e.Items is { Count: > 0 } lost ? $", never told: {string.Join("; ", lost)}" : "")), important: true),
+            RoleHandoverBegun e => Entry("SESSION", $"{Participant(e.FromParticipantId)} is handing {Roles.Name(e.Role)} to {Participant(e.ToParticipantId)} " +
+                (e.FullBriefing ? "with a full briefing" : "in a quick changeover") + $" (until {e.CompletesAt:HH:mm:ss})"),
+            RoleHandoverCancelled e => Entry("SESSION", $"Role handover called off: {e.Reason}"),
             UnitPositionReported => null, // dozens per minute; shown on the map instead
             _ => Entry(simEvent.Type.ToUpperInvariant(), simEvent.Type),
         };

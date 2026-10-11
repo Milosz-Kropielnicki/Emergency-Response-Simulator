@@ -20,6 +20,24 @@ public sealed partial class AarAnalyzer
     }
 
     private readonly Dictionary<Guid, Person> _people = [];
+    private readonly List<(SimEvent Event, RoleHandedOver Handover)> _roleHandovers = [];
+
+    /// <summary>
+    /// Role handovers during the exercise (Phase 11 M3), judged as crew handovers are (Phase 8): a full briefing is a
+    /// strength; a quick changeover that left the new holder without the role's open business is not.
+    /// </summary>
+    private IEnumerable<AarFinding> HandoverFindings() => _roleHandovers.Select(h =>
+    {
+        var (from, to) = (Name(h.Handover.FromParticipantId), Name(h.Handover.ToParticipantId));
+        var at = h.Event.SimTime.ToString("HH:mm");
+        var items = h.Handover.Items ?? [];
+        return h.Handover.Briefed
+            ? new AarFinding(true, $"{at} {from} briefed {to} fully on taking over {Roles.Name(h.Handover.Role)}.")
+            : new AarFinding(items.Count == 0, $"{at} {from} handed {Roles.Name(h.Handover.Role)} to {to} in a quick changeover" +
+                (items.Count == 0 ? ", with nothing open to pass on." : $"; {to} was never told: {string.Join("; ", items)}."));
+    });
+
+    private string Name(Guid participantId) => _people.GetValueOrDefault(participantId)?.Name ?? "A participant";
 
     private void TrackParticipant(SimEvent simEvent)
     {
@@ -45,6 +63,7 @@ public sealed partial class AarAnalyzer
             case RoleHandedOver e:
                 if (_people.TryGetValue(e.ToParticipantId, out var taking)) AddRole(taking, e.Role);
                 if (_people.TryGetValue(e.FromParticipantId, out var giving)) AddRole(giving, e.FromNewRole);
+                if (e.HandoverId is not null) _roleHandovers.Add((simEvent, e));
                 break;
         }
 

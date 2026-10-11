@@ -6,6 +6,8 @@ using Emergency_Response_Simulator.Simulation;
 using Emergency_Response_Simulator.Simulation.Engine;
 using Emergency_Response_Simulator.Simulation.Remote;
 using Emergency_Response_Simulator.Simulation.Scenarios;
+using Emergency_Response_Simulator.Simulation.State;
+using Emergency_Response_Simulator.Simulation.Systems;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Emergency_Response_Simulator.Server;
@@ -40,6 +42,7 @@ public sealed class SessionRuntime : IAsyncDisposable
 
     private readonly object _lock = new();
     private readonly Dictionary<Guid, ParticipantRecord> _participants = [];
+    private readonly Dictionary<Guid, Handover> _handovers = [];
     private readonly ServiceProvider _services;
     private readonly IReadOnlyList<IHostedService> _hosted;
     private readonly IHubContext<SimulationHub, ISimulationClient> _hub;
@@ -236,8 +239,14 @@ public sealed class SessionRuntime : IAsyncDisposable
         await PublishAsync(new RoleAssigned(target.Id, role), instructor);
     }
 
-    /// <summary>The holder of a role hands it to another participant, and takes another role themselves.</summary>
-    public async Task HandOverAsync(ParticipantRecord from, Guid toParticipantId, UserRole fromNewRole)
+    /// <summary>
+    /// The holder of a role hands it to another participant, and takes another role themselves. Once the exercise is
+    /// running this follows the Phase 8 handover model: the outgoing holder keeps the role while they hand over, for
+    /// <see cref="CrewOptions.BriefedHandover"/> with a full briefing (the incoming one is told the role's open business)
+    /// or <see cref="CrewOptions.QuickHandover"/> for a quick changeover (which passes none of it on; the review says so).
+    /// In the lobby there is nothing to brief, so it happens at once.
+    /// </summary>
+    public async Task HandOverAsync(ParticipantRecord from, Guid toParticipantId, UserRole fromNewRole, bool fullBriefing = true)
     {
         ParticipantRecord to;
         UserRole role;
@@ -251,10 +260,90 @@ public sealed class SessionRuntime : IAsyncDisposable
                 throw new HubException("The instructor role can't be handed over.");
             if (fromNewRole != to.Role && HolderOf(fromNewRole, except: from.Id) is { } holder)
                 throw new HubException($"{Roles.Name(fromNewRole)} is held by {holder.Name}.");
-            from.Role = fromNewRole;
-            to.Role = role;
+            if (_handovers.Values.Any(h => h.From == from || h.To == from || h.From == to || h.To == to))
+                throw new HubException("One of you is already in a handover.");
+            if (State == SessionState.Lobby)
+            {
+                from.Role = fromNewRole;
+                to.Role = role;
+            }
         }
-        await PublishAsync(new RoleHandedOver(from.Id, to.Id, role, fromNewRole), from);
+
+        if (State == SessionState.Lobby)
+        {
+            await PublishAsync(new RoleHandedOver(from.Id, to.Id, role, fromNewRole), from);
+            return;
+        }
+
+        var crews = _services.GetRequiredService<CrewOptions>();
+        var handover = new Handover(Guid.NewGuid(), from, to, role, to.Role, fromNewRole, fullBriefing,
+            Engine.SimTime + (fullBriefing ? crews.BriefedHandover : crews.QuickHandover));
+        lock (_lock) _handovers[handover.Id] = handover;
+        await PublishAsync(new RoleHandoverBegun(handover.Id, from.Id, to.Id, role, fromNewRole, fullBriefing, handover.CompletesAt), from);
+    }
+
+    private sealed record Handover(Guid Id, ParticipantRecord From, ParticipantRecord To, UserRole Role, UserRole ToRole, UserRole FromNewRole,
+        bool FullBriefing, DateTimeOffset CompletesAt);
+
+    /// <summary>
+    /// Completes handovers whose time has come (simulation time, so a paused clock pauses them too), and cancels any whose
+    /// people left or whose roles changed meanwhile. The briefing is the role's open business as the COP shows it then.
+    /// </summary>
+    public async Task CompleteHandoversAsync()
+    {
+        List<(Handover Handover, string? Cancelled)> due;
+        lock (_lock)
+        {
+            due = _handovers.Values
+                .Select(h => (h, Cancelled: !h.From.Present || !h.To.Present ? "one of them left"
+                    : h.From.Role != h.Role || h.To.Role != h.ToRole ? "their roles changed"
+                    : State == SessionState.Ended ? "the session ended" : null))
+                .Where(x => x.Cancelled is not null || Engine.SimTime >= x.h.CompletesAt)
+                .ToList();
+            foreach (var (handover, _) in due) _handovers.Remove(handover.Id);
+        }
+
+        foreach (var (handover, cancelled) in due)
+        {
+            if (cancelled is not null)
+            {
+                await PublishAsync(new RoleHandoverCancelled(handover.Id, cancelled), handover.From);
+                continue;
+            }
+            var cop = _services.GetRequiredService<ICopService>();
+            var filled = Participants.Where(p => p.Present).Select(p => p.Role).ToHashSet();
+            await Gate.RunAsync(async () =>
+            {
+                var items = RoleBriefing.For(handover.Role, cop, filled.Contains);
+                lock (_lock)
+                {
+                    handover.From.Role = handover.FromNewRole;
+                    handover.To.Role = handover.Role;
+                }
+                await PublishAsync(new RoleHandedOver(handover.From.Id, handover.To.Id, handover.Role, handover.FromNewRole,
+                    handover.Id, handover.FullBriefing, items), handover.From);
+                return true;
+            });
+        }
+    }
+
+    /// <summary>
+    /// Someone put in an ICS position takes that role in the session (Phase 11 M3), recorded as an assignment by whoever
+    /// staffed it. A role someone else holds has to be handed over instead.
+    /// </summary>
+    public async Task TakePositionAsync(ParticipantRecord by, Guid participantId, UserRole role)
+    {
+        ParticipantRecord target;
+        lock (_lock)
+        {
+            target = _participants.GetValueOrDefault(participantId) ?? throw new HubException("Unknown participant.");
+            if (target.Role == role) return;
+            if (target.Role == UserRole.Instructor) throw new HubException("The instructor can't take an ICS position.");
+            if (HolderOf(role, except: target.Id) is { } holder)
+                throw new HubException($"{Roles.Name(role)} is held by {holder.Name}: have them hand it over.");
+            target.Role = role;
+        }
+        await PublishAsync(new RoleAssigned(target.Id, role), by);
     }
 
     private ParticipantRecord? HolderOf(UserRole role, Guid? except = null) =>

@@ -96,7 +96,9 @@ public partial class AgenciesViewModel : ObservableObject
 
     // ---- EOC ----
 
-    [RelayCommand]
+    private bool CanSetEoc => _owner.Permissions.C2(nameof(IC2Service.SetEocLevelAsync));
+
+    [RelayCommand(CanExecute = nameof(CanSetEoc))]
     private Task SetEocLevelAsync() =>
         _owner.RunCommandAsync(() => _c2.SetEocLevelAsync(SelectedEocLevel, _owner.SelectedIncidentId is { } id ? _cop.FindIncident(id)?.Number : null),
             $"EOC to {EocLevels.Label(SelectedEocLevel).ToLowerInvariant()}");
@@ -117,7 +119,9 @@ public partial class AgenciesViewModel : ObservableObject
             (i.Command.IsUnified ? $"; unified command with {string.Join(", ", i.Command.Unified.Select(m => m.Agency))}" : "") + "."));
     }
 
-    [RelayCommand]
+    private bool CanSitrep => _owner.Permissions.C2(nameof(IC2Service.SubmitSitrepAsync));
+
+    [RelayCommand(CanExecute = nameof(CanSitrep))]
     private async Task SendSitrepAsync()
     {
         if (string.IsNullOrWhiteSpace(SitrepText)) DraftSitrep();
@@ -127,7 +131,9 @@ public partial class AgenciesViewModel : ObservableObject
 
     // ---- Unified command ----
 
-    [RelayCommand]
+    private bool CanInvite => _owner.Permissions.C2(nameof(IC2Service.InviteToUnifiedCommandAsync));
+
+    [RelayCommand(CanExecute = nameof(CanInvite))]
     private Task InviteAsync()
     {
         if (_owner.SelectedIncidentId is not { } incident) return Fail("Select an incident first.");
@@ -137,16 +143,18 @@ public partial class AgenciesViewModel : ObservableObject
 
     // ---- Disputes ----
 
-    [RelayCommand]
+    private bool CanResolve => _owner.Permissions.C2(nameof(IC2Service.ResolveDisputeAsync));
+
+    [RelayCommand(CanExecute = nameof(CanResolve))]
     private Task ConcedeAsync(Guid disputeId) => Resolve(disputeId, DisputeResolution.Concede, "Conceded");
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanResolve))]
     private Task NegotiateAsync(Guid disputeId) => Resolve(disputeId, DisputeResolution.Negotiate, "Talks started");
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanResolve))]
     private Task AssertAsync(Guid disputeId) => Resolve(disputeId, DisputeResolution.Assert, "Authority asserted");
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanResolve))]
     private Task EscalateAsync(Guid disputeId) => Resolve(disputeId, DisputeResolution.Escalate, "Referred to the EOC");
 
     private Task Resolve(Guid disputeId, DisputeResolution resolution, string done) =>
@@ -154,7 +162,9 @@ public partial class AgenciesViewModel : ObservableObject
 
     // ---- Other agencies ----
 
-    [RelayCommand]
+    private bool CanAskAgency => _owner.Permissions.C2(nameof(IC2Service.RequestAgencyAssistanceAsync));
+
+    [RelayCommand(CanExecute = nameof(CanAskAgency))]
     private Task AskForUnitsAsync(Guid agencyId)
     {
         if (_owner.SelectedIncidentId is not { } incident) return Fail("Select the incident the units are for.");
@@ -163,7 +173,9 @@ public partial class AgenciesViewModel : ObservableObject
             $"Asked {name} for {AskQuantity} unit(s)");
     }
 
-    [RelayCommand]
+    private bool CanAskBriefing => _owner.Permissions.C2(nameof(IC2Service.RequestAgencyBriefingAsync));
+
+    [RelayCommand(CanExecute = nameof(CanAskBriefing))]
     private Task BriefingAsync(Guid agencyId)
     {
         var name = _cop.Agencies.FirstOrDefault(a => a.Id == agencyId)?.Name ?? "Agency";
@@ -172,7 +184,9 @@ public partial class AgenciesViewModel : ObservableObject
 
     // ---- Public information ----
 
-    [RelayCommand]
+    private bool CanIssueStatement => _owner.Permissions.C2(nameof(IC2Service.IssuePublicStatementAsync));
+
+    [RelayCommand(CanExecute = nameof(CanIssueStatement))]
     private async Task IssueStatementAsync()
     {
         var result = await _owner.RunCommandAsync(() => _c2.IssuePublicStatementAsync(StatementText, _owner.SelectedIncidentId),

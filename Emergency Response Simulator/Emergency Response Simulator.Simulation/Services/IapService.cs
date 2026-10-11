@@ -249,7 +249,7 @@ public sealed class IapService(
         foreach (var position in content.Organization.Where(p => !string.IsNullOrWhiteSpace(p.Name)))
         {
             if (incident.Command.Positions.GetValueOrDefault(position.Role) != position.Name.Trim()
-                && (await c2.AssignIcsPositionAsync(incident.Id, position.Role, position.Name, cancellationToken)).Succeeded)
+                && (await c2.AssignIcsPositionAsync(incident.Id, position.Role, position.Name, cancellationToken: cancellationToken)).Succeeded)
                 staffed++;
         }
 

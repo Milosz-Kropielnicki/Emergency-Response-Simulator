@@ -67,6 +67,9 @@
                     </TextBlock>
                     <TextBlock Text="{Binding EventStoreLabel}" Foreground="{StaticResource MutedTextBrush}"
                                VerticalAlignment="Center" Margin="0,0,16,0" />
+                    <!-- Role workspaces (Phase 11 M3): a default layout per role over the same COP. -->
+                    <ComboBox ItemsSource="{Binding Workspaces}" SelectedItem="{Binding SelectedWorkspace}" Width="170" Margin="0,0,8,0"
+                              VerticalAlignment="Center" ToolTip="{Binding SelectedWorkspace.Purpose}" />
                     <Button Content="📊 AAR" Command="{Binding OpenAarCommand}" Margin="0,0,8,0"
                             ToolTip="After-action review: decision timeline, metrics, heatmaps, branch comparison and exportable reports" />
                     <Button Content="📋 IAP Builder" Command="{Binding OpenIapCommand}" Margin="0,0,12,0"
@@ -273,7 +276,7 @@
             <Border Grid.Column="2" Width="360" Style="{StaticResource Panel}" BorderThickness="1,0,0,0" Padding="8"
                     Visibility="{Binding IsRightPanelOpen, Converter={StaticResource BoolToVisibility}}">
                 <TabControl SelectedIndex="{Binding RightPanelTab}">
-                    <TabItem Header="COMMS HUB">
+                    <TabItem Header="COMMS HUB" Visibility="{Binding ShowComms, Converter={StaticResource BoolToVisibility}}">
                         <DockPanel DataContext="{Binding CommsHub}">
                             <!-- Which traffic to show -->
                             <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding Filters}" Margin="0,0,0,6">
@@ -468,7 +471,7 @@
                             </Grid>
                         </DockPanel>
                     </TabItem>
-                    <TabItem Header="INCIDENT">
+                    <TabItem Header="INCIDENT" Visibility="{Binding ShowIncident, Converter={StaticResource BoolToVisibility}}">
                         <Grid DataContext="{Binding IncidentDetail}">
                             <TextBlock Style="{StaticResource EmptyHint}" Margin="4,8"
                                        Text="Select an incident on the board or the map, or open one from a report in the intelligence feed."
@@ -575,7 +578,7 @@
                             </ScrollViewer>
                         </Grid>
                     </TabItem>
-                    <TabItem Header="UNIT">
+                    <TabItem Header="UNIT" Visibility="{Binding ShowUnit, Converter={StaticResource BoolToVisibility}}">
                         <Grid DataContext="{Binding UnitDetail}">
                             <TextBlock Style="{StaticResource EmptyHint}" Margin="4,8"
                                        Text="Click a unit on the map or in the resource board to see its live AVL data."
@@ -601,7 +604,7 @@
                             </StackPanel>
                         </Grid>
                     </TabItem>
-                    <TabItem Header="ICS">
+                    <TabItem Header="ICS" Visibility="{Binding ShowIcs, Converter={StaticResource BoolToVisibility}}">
                         <Grid DataContext="{Binding Ics}">
                             <TextBlock Style="{StaticResource EmptyHint}" Margin="4,8"
                                        Text="Select an incident to build its command structure."
@@ -620,6 +623,11 @@
                                                         <TextBlock Text="{Binding Label}" />
                                                         <TextBlock Text="{Binding Staff}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
                                                     </StackPanel>
+                                                    <!-- Networked: pick a participant to fill it (they take the role in the session). -->
+                                                    <ComboBox DockPanel.Dock="Right" Width="96" Margin="4,0,0,0" FontSize="11"
+                                                              ItemsSource="{Binding People}" SelectedItem="{Binding Person}" DisplayMemberPath="Name"
+                                                              ToolTip="A participant to fill the position: they take this role in the session"
+                                                              Visibility="{Binding HasPeople, Converter={StaticResource BoolToVisibility}}" />
                                                     <TextBox Text="{Binding NewHolder, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"
                                                              ToolTip="{Binding Holder, TargetNullValue='Vacant'}" />
                                                 </DockPanel>
@@ -690,7 +698,7 @@
                             </ScrollViewer>
                         </Grid>
                     </TabItem>
-                    <TabItem DataContext="{Binding Crews}">
+                    <TabItem DataContext="{Binding Crews}" Visibility="{Binding DataContext.ShowCrews, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
                         <TabItem.Header>
                             <TextBlock x:Name="CrewsHeader" Text="{Binding TabHeader}" />
                         </TabItem.Header>
@@ -839,7 +847,7 @@
                         </ScrollViewer>
                     </TabItem>
                     <!-- Multi-agency command (Phase 10, Design Document §14) -->
-                    <TabItem DataContext="{Binding Agencies}">
+                    <TabItem DataContext="{Binding Agencies}" Visibility="{Binding DataContext.ShowAgencies, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
                         <TabItem.Header>
                             <TextBlock x:Name="AgenciesHeader" Text="{Binding TabHeader}" />
                         </TabItem.Header>
@@ -1037,7 +1045,14 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel Margin="2">
                                 <TextBlock Text="{Binding Summary}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding You}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,2,0,8" />
+                                <TextBlock Text="{Binding You}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,2,0,2" />
+                                <!-- What this role may do now (Phase 11 M3), including functions that fall to the IC. -->
+                                <TextBlock Text="{Binding Functions}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,2" />
+                                <TextBlock Text="{Binding Inherited}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource WarningBrush}" Margin="0,0,0,2"
+                                           Visibility="{Binding HasInherited, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Text="{Binding Handover}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource AccentBrush}" Margin="0,0,0,2"
+                                           Visibility="{Binding HasHandover, Converter={StaticResource BoolToVisibility}}" />
+                                <Border Height="6" />
 
                                 <!-- The instructor's controls -->
                                 <StackPanel Visibility="{Binding IsInstructor, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,8">
@@ -1083,8 +1098,10 @@
                                 </ListBox>
 
                                 <TextBlock Text="HAND OVER YOUR ROLE" Style="{StaticResource PanelHeader}" />
-                                <TextBlock Text="Select who takes your role above, then the role you take on instead." FontSize="11" TextWrapping="Wrap"
-                                           Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,2" />
+                                <TextBlock Text="Select who takes your role above, then the role you take on instead. You keep the role until the handover is done: a full briefing takes longer, a quick changeover passes nothing on."
+                                           FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,2" />
+                                <CheckBox Content="Full briefing" IsChecked="{Binding FullBriefing}" Margin="0,0,0,4"
+                                          ToolTip="Brief the incoming holder on the role's open business (takes longer than a quick changeover)" />
                                 <DockPanel>
                                     <Button DockPanel.Dock="Right" Content="Hand over" Command="{Binding HandOverCommand}" Margin="4,0,0,0" Padding="6,0" />
                                     <ComboBox ItemsSource="{Binding RoleChoices}" SelectedItem="{Binding MyNewRole}" ToolTip="The role you take on" />
@@ -1100,7 +1117,7 @@
                       ResizeDirection="Rows" ToolTip="Drag to resize" />
 
         <!-- ===== Bottom: status boards and history (Appendix D, §6.6) ===== -->
-        <TabControl Grid.Row="4" Margin="0" Padding="0">
+        <TabControl Grid.Row="4" Margin="0" Padding="0" SelectedIndex="{Binding BottomPanelTab}">
             <TabItem Header="STATUS BOARDS">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -1339,7 +1356,7 @@
                 </Grid>
             </TabItem>
 
-            <TabItem>
+            <TabItem Visibility="{Binding ShowCommandBoard, Converter={StaticResource BoolToVisibility}}">
                 <TabItem.Header>
                     <TextBlock>
                         <Run Text="COMMAND &amp; CONTROL" />
@@ -1621,7 +1638,7 @@
             </TabItem>
 
             <!-- Instructor: ground truth the trainee never sees (Design Document §10.1, §21) -->
-            <TabItem DataContext="{Binding Instructor}">
+            <TabItem DataContext="{Binding Instructor}" Visibility="{Binding DataContext.ShowInstructorBoard, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
                 <TabItem.Header>
                     <TextBlock>
                         <Run Text="INSTRUCTOR · GROUND TRUTH" Foreground="#C792EA" />

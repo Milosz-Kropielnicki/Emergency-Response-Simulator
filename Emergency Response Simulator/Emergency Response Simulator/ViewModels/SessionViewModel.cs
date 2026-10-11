@@ -26,10 +26,13 @@ public partial class SessionViewModel : ObservableObject
     private readonly SimulationConnection? _connection;
     private Action<CommandResult, string?>? _report;
 
-    public SessionViewModel(ICopService cop, SimulationConnection? connection)
+    private readonly Permissions? _permissions;
+
+    public SessionViewModel(ICopService cop, SimulationConnection? connection, Permissions? permissions = null)
     {
         _cop = cop;
         _connection = connection;
+        _permissions = permissions;
         if (connection is not null)
             connection.StateChanged += (_, _) => Application.Current?.Dispatcher.BeginInvoke(Refresh);
     }
@@ -50,6 +53,12 @@ public partial class SessionViewModel : ObservableObject
     [ObservableProperty] private UserRole _assignRole = UserRole.Operations;
     [ObservableProperty] private UserRole _myNewRole = UserRole.Observer;
     [ObservableProperty] private string _endReason = "Exercise complete";
+    [ObservableProperty] private bool _fullBriefing = true;
+    [ObservableProperty] private string _functions = "";
+    [ObservableProperty] private string _inherited = "";
+    [ObservableProperty] private bool _hasInherited;
+    [ObservableProperty] private string _handover = "";
+    [ObservableProperty] private bool _hasHandover;
 
     /// <summary>Where the main window reports what happened to a session action.</summary>
     public void ReportTo(Action<CommandResult, string?> report) => _report = report;
@@ -72,7 +81,8 @@ public partial class SessionViewModel : ObservableObject
 
     [RelayCommand]
     private Task HandOverAsync() => Selected is { IsMe: false } who
-        ? Run(() => _connection!.HandOverRoleAsync(who.Id, MyNewRole), $"Your role handed to {who.Name}")
+        ? Run(() => _connection!.HandOverRoleAsync(who.Id, MyNewRole, FullBriefing),
+            InLobby ? $"Your role handed to {who.Name}" : $"Handing your role to {who.Name}" + (FullBriefing ? " with a full briefing" : " (quick changeover)"))
         : Fail("Choose someone else to hand your role to.");
 
     private async Task Run(Func<Task> action, string done)
@@ -112,6 +122,22 @@ public partial class SessionViewModel : ObservableObject
         };
         You = $"You: {me?.DisplayName ?? ticket.DisplayName}, {Roles.Name(me?.Role ?? ticket.Role)}";
         TabHeader = $"SESSION · {present}" + (InLobby ? " · LOBBY" : Ended ? " · ENDED" : "");
+
+        // What the role may do (Phase 11 M3), and any handover under way.
+        _permissions?.Refresh();
+        var functions = _permissions?.Functions ?? [];
+        Functions = IsInstructor ? "You may give any command (recorded as the instructor)."
+            : functions.Count == 0 ? "Your role gives no commands." : $"Your functions: {string.Join(", ", functions)}.";
+        var inherited = _permissions?.Inherited ?? [];
+        HasInherited = inherited.Count > 0;
+        Inherited = HasInherited ? $"Unfilled, so yours as IC: {string.Join(", ", inherited)}." : "";
+        string Name(Guid id) => people.FirstOrDefault(p => p.Id == id)?.DisplayName ?? "someone";
+        var handing = people.FirstOrDefault(p => p.HandingOver is not null && (p.Id == ticket.ParticipantId || p.HandingOver.ToParticipantId == ticket.ParticipantId));
+        HasHandover = handing is not null;
+        Handover = handing?.HandingOver is { } h
+            ? (handing.Id == ticket.ParticipantId ? $"Handing {Roles.Name(handing.Role)} to {Name(h.ToParticipantId)}" : $"Taking over {Roles.Name(handing.Role)} from {handing.DisplayName}")
+              + (h.FullBriefing ? " with a full briefing" : " in a quick changeover") + $", done at {MainViewModel.Time(h.CompletesAt)}."
+            : "";
 
         var rows = people.Select(p => new ParticipantRow(p.Id, p.DisplayName, Roles.Name(p.Role), p.Present, p.Id == ticket.ParticipantId,
             p.Present ? $"since {MainViewModel.Time(p.JoinedAt)}" : $"away since {MainViewModel.Time(p.LeftAt!.Value)}")).ToList();

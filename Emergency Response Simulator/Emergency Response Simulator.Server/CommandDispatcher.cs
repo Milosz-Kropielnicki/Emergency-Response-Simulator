@@ -70,7 +70,7 @@ public sealed class CommandDispatcher
             ?? throw new HubException($"Unknown call {service}.{method} with {args.Length} argument(s).");
 
         var truth = participant.Truth;
-        Authorise(session, participant, service, method);
+        CommandAuthorizer.Authorise(session, participant, service, method);
 
         // Starting the clock for the first time is the instructor starting the exercise.
         if (service == SimulationHubProtocol.Services.Control && method == nameof(ISimulationControl.StartAsync))
@@ -99,6 +99,7 @@ public sealed class CommandDispatcher
                 {
                     var task = (Task)target.Invoke(instance, [.. values])!;
                     await task;
+                    await TakePositionAsync(session, participant, target, values, task);
                     return task;
                 }
                 catch (TargetInvocationException ex) when (ex.InnerException is not null)
@@ -119,27 +120,16 @@ public sealed class CommandDispatcher
     }
 
     /// <summary>
-    /// What the session's stage and the participant's role allow, until the full permission matrix (Phase 11 M3):
-    /// commands only while the exercise runs; the clock is the instructor's; the review, which reveals ground truth, is
-    /// the instructor's while the session is live.
+    /// A participant put in an ICS position (Phase 11 M3) takes that role in the session, so the function stops falling to
+    /// the IC. The service has already checked they are present and the role is free; this runs inside the command gate.
     /// </summary>
-    private static void Authorise(SessionRuntime session, ParticipantRecord participant, string service, string method)
+    private static async Task TakePositionAsync(SessionRuntime session, ParticipantRecord actor, MethodInfo target, List<object?> values, Task done)
     {
-        var instructor = participant.Role == UserRole.Instructor;
-        switch (service)
-        {
-            case SimulationHubProtocol.Services.Control when !instructor:
-                throw new HubException("Only the instructor controls the clock.");
-            case SimulationHubProtocol.Services.Control when session.State == SessionState.Ended:
-                throw new HubException("The session has ended.");
-            case SimulationHubProtocol.Services.C2 or SimulationHubProtocol.Services.Iap when session.State == SessionState.Lobby:
-                throw new HubException("The exercise hasn't started yet: wait for the instructor.");
-            case SimulationHubProtocol.Services.C2 or SimulationHubProtocol.Services.Iap when session.State == SessionState.Ended:
-                throw new HubException("The session has ended.");
-            case SimulationHubProtocol.Services.Aar when !participant.Truth && session.State != SessionState.Ended
-                                                         && method is nameof(IAarService.BuildReportAsync) or nameof(IAarService.CompareBranchesAsync):
-                throw new HubException("Only the instructor can open the after-action review until the session has ended.");
-        }
+        if (target.Name != nameof(IC2Service.AssignIcsPositionAsync) || done is not Task<CommandResult> { Result.Succeeded: true }) return;
+        var parameters = target.GetParameters();
+        var position = (IcsRole)values[Array.FindIndex(parameters, p => p.Name == "role")]!;
+        if (values[Array.FindIndex(parameters, p => p.Name == "userId")] is Guid userId)
+            await session.TakePositionAsync(actor, userId, Roles.Of(position));
     }
 
     /// <summary>A trainee connection never gets truth events, even by asking for the timeline with them.</summary>

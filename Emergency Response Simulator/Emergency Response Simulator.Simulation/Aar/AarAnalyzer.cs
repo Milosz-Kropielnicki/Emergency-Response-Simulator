@@ -79,7 +79,7 @@ public sealed partial class AarAnalyzer
             Metrics = metrics,
             Branches = branches,
             Outcomes = [SessionOutcome()],
-            Findings = Findings(metrics, branches),
+            Findings = [.. Findings(metrics, branches), .. HandoverFindings()],
             Participants = Participants(),
         };
     }

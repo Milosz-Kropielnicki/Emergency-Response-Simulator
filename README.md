@@ -608,7 +608,7 @@ The other agencies are now joint partners with priorities and knowledge of their
   - **Mutual-aid agreements**.
   - For the instructor, the truth comparison lists everything agencies know and haven't shared.
 
-## Server & clients (Phase 11, M1–M2)
+## Server & clients (Phase 11, M1–M3)
 
 The engine, event store and live COP can now run once, on a **simulation server**, with any number of WPF clients connected over SignalR. Standalone (everything in one process, as before) is still the default.
 
@@ -667,7 +667,45 @@ dotnet run --project "Emergency Response Simulator.Server" -- --ConnectionString
 - A client with a GIS database configured still loads the static map layers and road network from it; its events always come from the server.
 - Without a database, routing falls back to straight lines on both sides.
 
-**Not yet** (later milestones): the permission matrix (M3), the instructor console (M4), observers (M6) and voice (M7).
+### Roles, permissions, workspaces (M3)
+
+- **Permission matrix** (`Core/Model/Permissions.cs`, `PermissionMatrix`): every C2 and IAP command belongs to the roles whose function it is. Examples:
+  - **Dispatchers and Operations:** tasking units.
+  - **Logistics (and Finance):** ordering resources and the comms plan.
+  - **Safety and Operations:** zones and responder safety.
+  - **Planning:** the IAP; the IC approves it and the IC or Operations briefs it.
+  - **The Liaison Officer:** other agencies.
+  - **The PIO:** public statements.
+
+  A few commands are anyone's (the radio, acknowledging alerts). Observers give none. The instructor may give any, and is recorded doing so. A command not in the matrix is refused, so a new one has to be placed in it.
+- **Unfilled roles fall to the IC** (decision D5): the IC may give any command whose function nobody present holds. With no PIO, the IC speaks to the public; once a PIO joins, only the PIO does. If the PIO leaves, the function returns to the IC.
+- **Enforcement:** the server's **`CommandAuthorizer`** checks every call before it reaches a service.
+  - It uses the role the server holds for the connection and the roles of the people present. Nothing the client sends counts.
+  - A refusal comes back as a failed command naming who the function belongs to, e.g. "Public information is for the Public Information Officer, not the Operations Section Chief."
+  - It also holds the M2 stage rules: the lobby, the clock, and the live review.
+- **Clients mirror it** (`ViewModels/Permissions.cs`): the role's own `CanExecute` disables every command button the role can't use.
+  - It reads the same matrix, the role the event stream says you hold now, and who is present, so buttons change as roles move.
+  - The SESSION tab lists your functions, and for the IC, which unfilled ones are theirs for now.
+  - Standalone, one person holds every role.
+- **ICS staffing:** `AssignIcsPositionAsync` takes an optional participant (`userId`).
+  - Staffing a position with someone in the session gives them that role, recorded as a `RoleAssigned` by the IC, and the function stops falling to the IC. A blank name means theirs.
+  - A position someone else holds has to be handed over instead.
+  - The ICS panel has a participant picker per position in client mode.
+- **Role handover** follows the Phase 8 crew handover model (`Crews:BriefedHandover` / `QuickHandover`):
+  - **Holding on:** once the exercise runs, the outgoing holder keeps the role for 5 minutes of simulation time with a full briefing, or 1.5 with a quick changeover (`RoleHandoverBegun`). A paused clock pauses it too.
+  - **Handing over:** `RoleHandedOver` then records the role's open business from the COP (live incidents, open orders and read-backs, pending approvals and IAPs, requests, disputes, Maydays, media enquiries): what the briefing covered, or what a quick changeover never passed on.
+  - **In the review:** the AAR lists each role handover as a strength or a weakness.
+  - **Calling off:** a handover is called off if either person leaves or their roles change (`RoleHandoverCancelled`).
+  - **In the lobby:** there is nothing to brief, so a handover happens at once.
+- **Workspaces** (`ViewModels/RoleWorkspaces.cs`): a default layout per role over the same COP.
+  - Each layout sets the right-panel tabs the role works from, the one in front, the bottom board, and the map layers it cares about. For example:
+    - **Safety:** crews, hazard zones and wind.
+    - **Liaison:** agencies and jurisdictions.
+    - **PIO:** public information and evacuation areas.
+  - The client switches to the new role's layout when the role changes; the header's picker offers every layout, including the full one.
+  - Workspaces only arrange; permissions are separate.
+
+**Not yet** (later milestones): the instructor console (M4), AI role players (M5), observers (M6) and voice (M7).
 
 ## Local setup
 

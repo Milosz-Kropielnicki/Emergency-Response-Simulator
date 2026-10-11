@@ -234,16 +234,30 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2S
     }
 
     public async Task<CommandResult> AssignIcsPositionAsync(
-        Guid incidentId, IcsRole role, string name, CancellationToken cancellationToken = default)
+        Guid incidentId, IcsRole role, string name, Guid? userId = null, CancellationToken cancellationToken = default)
     {
         if (cop.FindIncident(incidentId) is not { } incident)
             return CommandResult.Fail("Unknown incident.");
+        if (userId is { } id)
+        {
+            // A participant fills the position: they take that role in the session (the server moves them).
+            if (cop.Participants.FirstOrDefault(p => p.Id == id && p.Present) is not { } participant)
+                return CommandResult.Fail("That person isn't in the session.");
+            if (participant.Role is UserRole.Instructor)
+                return CommandResult.Fail("The instructor can't take an ICS position.");
+            var sessionRole = Roles.Of(role);
+            if (cop.Participants.FirstOrDefault(p => p.Present && p.Role == sessionRole && p.Id != id) is { } holder)
+                return CommandResult.Fail($"{holder.DisplayName} already holds {Roles.Name(sessionRole)}: they hand it over first.");
+            if (participant.HandingOver is not null)
+                return CommandResult.Fail($"{participant.DisplayName} is in the middle of a handover.");
+            if (string.IsNullOrWhiteSpace(name)) name = participant.DisplayName;
+        }
         if (string.IsNullOrWhiteSpace(name))
             return CommandResult.Fail("Name the person taking the position.");
-        if (incident.Command.Positions.GetValueOrDefault(role) == name.Trim())
+        if (incident.Command.Positions.GetValueOrDefault(role) == name.Trim() && incident.Command.Holders.GetValueOrDefault(role) == (userId ?? default))
             return CommandResult.Fail("Nothing changed.");
 
-        return await PublishAsync(new IcsPositionAssigned(incidentId, role, name.Trim()), cancellationToken);
+        return await PublishAsync(new IcsPositionAssigned(incidentId, role, name.Trim(), userId), cancellationToken);
     }
 
     public async Task<CommandResult> FormGroupAsync(
