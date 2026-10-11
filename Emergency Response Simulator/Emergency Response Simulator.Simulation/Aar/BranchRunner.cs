@@ -86,7 +86,7 @@ public sealed class BranchRunner(Func<RoadNetwork?>? network = null, IHazardTerr
             BarrowStreetScenario.Create(), new WeatherSystem(), new HazardSystem(ground), new InfrastructureSystem(routing),
             new UnitResponseSystem(routing, live), new MedicalSystem(routing), new CivilianSystem(ground, routing: routing),
             new AgencyAiSystem(routing), new CommandResponseSystem(), new TrafficSystem(routing, live, feed),
-            new HazardReportingSystem(routing), new CrewSystem(), new CommsSystem(routing: routing),
+            new HazardReportingSystem(routing), new CrewSystem(), new CommsSystem(routing: routing), new InteragencySystem(),
             new AttentionMonitor(cop, new AttentionOptions(), routing),
         };
         if (policy == BranchPolicy.Recommended) systems.Add(new ExpertPolicy(cop));

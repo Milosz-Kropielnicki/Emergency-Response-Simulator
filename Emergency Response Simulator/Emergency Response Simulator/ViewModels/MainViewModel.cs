@@ -40,6 +40,7 @@ public partial class MainViewModel : ObservableObject
         Command = new CommandViewModel(this, c2, cop);
         CommsHub = new CommsHubViewModel(this, c2, cop);
         Crews = new CrewsViewModel(this, c2, cop);
+        Agencies = new AgenciesViewModel(this, c2, cop);
         Command.InitialiseDefaults();
         Ics = new IcsViewModel(this, c2);
         Iap = new IapBuilderViewModel(this, iap, cop, simulation);
@@ -82,6 +83,9 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>Crew welfare and responder safety: Maydays, PARs, rehab, relief (right panel).</summary>
     public CrewsViewModel Crews { get; }
+
+    /// <summary>Multi-agency command: EOC, unified command, disputes, other agencies, public information (Phase 10).</summary>
+    public AgenciesViewModel Agencies { get; }
 
     /// <summary>The selected incident's ICS organisation and span of control.</summary>
     public IcsViewModel Ics { get; }
@@ -164,6 +168,7 @@ public partial class MainViewModel : ObservableObject
                 new(MapLayerKeys.TrafficZones, "Road closures & traffic", true),
                 new(MapLayerKeys.SearchZones, "Search areas & cordons", true),
                 new(MapLayerKeys.PerimeterZones, "Incident perimeters", true),
+                new(MapLayerKeys.Jurisdictions, "Jurisdictions & estates", true),
             ]),
         };
 
@@ -333,6 +338,7 @@ public partial class MainViewModel : ObservableObject
         RefreshResourceBoard();
         RefreshIntelligence();
         Command.Refresh();
+        Agencies.Refresh();
         Ics.Load(incident);
         Iap.Load(incident);
         RefreshPlanSummary();
@@ -525,6 +531,7 @@ public partial class MainViewModel : ObservableObject
         RefreshIntelligence();
         CommsHub.Refresh();
         Crews.Refresh();
+        Agencies.Refresh();
         RefreshZones();
         RefreshWeather();
         RefreshHospitals();

@@ -70,6 +70,26 @@ public interface ICopService
     /// <summary>Progress on operational objectives, by objective id; missing means open.</summary>
     IReadOnlyDictionary<Guid, ObjectiveStatus> ObjectiveProgress { get; }
 
+    // Multi-agency (Design Document §14)
+
+    /// <summary>City, county, regional and national areas and the authorities that answer for them.</summary>
+    IReadOnlyList<Jurisdiction> Jurisdictions { get; }
+
+    IReadOnlyList<MutualAidAgreement> MutualAidAgreements { get; }
+    IReadOnlyList<UnifiedCommandInvitation> UnifiedCommandInvitations { get; }
+    IReadOnlyList<AssistanceRequest> AssistanceRequests { get; }
+
+    /// <summary>Authority disputes, oldest first.</summary>
+    IReadOnlyList<AuthorityDispute> Disputes { get; }
+
+    /// <summary>The Emergency Operations Centre as command knows it (a copy).</summary>
+    EocStatus Eoc { get; }
+
+    /// <summary>Public statements, ours and other agencies', oldest first.</summary>
+    IReadOnlyList<PublicStatement> PublicStatements { get; }
+
+    IReadOnlyList<MediaEnquiry> MediaEnquiries { get; }
+
     Incident? FindIncident(Guid incidentId);
     Unit? FindUnit(Guid unitId);
 }
@@ -130,6 +150,41 @@ public static class CopComms
         foreach (var own in cop.Channels.Where(c => c.Info.Monitored))
             heard.UnionWith(cop.Linked(own.Info.Id));
         return heard;
+    }
+}
+
+/// <summary>Multi-agency queries shared by C2, the agencies panel and the recommended-response bot (Design Document §14).</summary>
+public static class CopInteragency
+{
+    /// <summary>Every jurisdiction covering a point, from the most local up.</summary>
+    public static IReadOnlyList<Jurisdiction> JurisdictionsAt(this ICopService cop, GeoPoint point)
+    {
+        var p = point.ToPoint();
+        return cop.Jurisdictions.Where(j => j.Boundary.Covers(p)).OrderBy(j => j.Level).ToList();
+    }
+
+    /// <summary>
+    /// A joint information centre is working for the incident: a PIO is appointed, and the agencies agree their messages
+    /// through unified command or the EOC (partial activation or above).
+    /// </summary>
+    public static bool JointInformationCentre(this ICopService cop, Guid? incidentId)
+    {
+        var incident = incidentId is { } id ? cop.FindIncident(id) : null;
+        var pio = incident?.Command.IsStaffed(IcsRole.PublicInformation) ?? cop.Incidents.Any(i => i.Command.IsStaffed(IcsRole.PublicInformation));
+        var shared = cop.Eoc.Level >= EocLevel.Partial || (incident?.Command.IsUnified ?? cop.Incidents.Any(i => i.Command.IsUnified));
+        return pio && shared;
+    }
+
+    /// <summary>
+    /// Command can task the unit: one of ours, one its agency released to us, or (at the incident) one whose agency
+    /// shares command of it.
+    /// </summary>
+    public static bool UnderCommand(this ICopService cop, Unit unit, Guid? incidentId = null)
+    {
+        if (unit.Agency is not { AiControlled: true }) return true;
+        if (unit.AttachedToCommand) return true;
+        var incident = (incidentId ?? unit.AssignedIncidentId) is { } id ? cop.FindIncident(id) : null;
+        return incident?.Command.InUnifiedCommand(unit.AgencyId) == true;
     }
 }
 

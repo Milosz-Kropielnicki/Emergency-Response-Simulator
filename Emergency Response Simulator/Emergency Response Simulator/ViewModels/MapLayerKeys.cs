@@ -21,6 +21,9 @@ public static class MapLayerKeys
     public const string SearchZones = "zones:search";
     public const string PerimeterZones = "zones:perimeter";
 
+    // Multi-agency (Phase 10): city, county, regional and national areas, and estates needing their authority's consent.
+    public const string Jurisdictions = "zones:jurisdictions";
+
     // Instructor only: ground truth the trainee never sees (Design Document §10.1, §21).
     public const string TruthHazards = "truth:hazards";
     public const string TruthPeople = "truth:people";

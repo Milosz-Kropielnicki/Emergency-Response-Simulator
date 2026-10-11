@@ -21,6 +21,8 @@ public sealed partial class AarAnalyzer
         AuthorityToEvacuateBranch(branches);
         HazardZoneBranch(branches);
         HospitalBranch(branches);
+        InformationSiloBranch(branches);
+        LeadAgencyBranch(branches);
         return branches;
     }
 

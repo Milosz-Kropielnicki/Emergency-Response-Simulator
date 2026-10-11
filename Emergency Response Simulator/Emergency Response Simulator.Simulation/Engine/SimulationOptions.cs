@@ -47,4 +47,10 @@ public sealed class SimulationOptions
     /// qualifications. Off, crews never tire and nothing happens to them.
     /// </summary>
     public bool HumanFactors { get; set; } = true;
+
+    /// <summary>
+    /// Simulate the other agencies as joint partners (Phase 10): unified command, hoarding, information silos,
+    /// authority disputes, EOC staffing, the media and conflicting messages. Off, agencies only do their own work.
+    /// </summary>
+    public bool MultiAgency { get; set; } = true;
 }

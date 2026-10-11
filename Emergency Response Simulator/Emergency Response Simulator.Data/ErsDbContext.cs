@@ -49,6 +49,9 @@ public class ErsDbContext(DbContextOptions<ErsDbContext> options) : DbContext(op
             b.Property(a => a.ShortName).HasMaxLength(40);
             b.Ignore(a => a.AiControlled); // set by AgencyRegistered events
             b.Ignore(a => a.RadioChannel);
+            b.Ignore(a => a.Priority); // Phase 10: joint-command stance, from AgencyRegistered events
+            b.Ignore(a => a.PriorityTerms);
+            b.Ignore(a => a.Standing);
         });
 
         modelBuilder.Entity<User>(b =>
@@ -80,6 +83,7 @@ public class ErsDbContext(DbContextOptions<ErsDbContext> options) : DbContext(op
             b.Ignore(u => u.Tasking);
             b.Ignore(u => u.Channel);
             b.Ignore(u => u.Crew);
+            b.Ignore(u => u.AttachedToCommand);
             b.HasOne(u => u.AssignedIncident).WithMany(i => i.AssignedUnits)
                 .HasForeignKey(u => u.AssignedIncidentId).OnDelete(DeleteBehavior.SetNull);
         });

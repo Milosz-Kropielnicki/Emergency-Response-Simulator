@@ -42,10 +42,22 @@ public sealed class IncidentCommand
     public List<IcsGroup> Groups { get; } = [];
 
     /// <summary>
+    /// Other agencies' commanders sharing command (Design Document §14). Empty: single command by our own IC.
+    /// </summary>
+    public List<UnifiedCommandMember> Unified { get; } = [];
+
+    /// <summary>The agency leading the response, once one has been named; otherwise ours.</summary>
+    public string? LeadAgency { get; set; }
+
+    public bool IsUnified => Unified.Count > 0;
+
+    public bool InUnifiedCommand(Guid? agencyId) => agencyId is { } id && Unified.Any(m => m.AgencyId == id);
+
+    /// <summary>
     /// Applies an ICS event to this structure. Shared by the COP and ground truth so that both see the same
     /// organisation (the structure is a fact of how command set itself up, not something to be discovered).
     /// </summary>
-    public void Apply(Events.DomainEvent payload)
+    public void Apply(Events.DomainEvent payload, DateTimeOffset at = default)
     {
         switch (payload)
         {
@@ -70,6 +82,13 @@ public sealed class IncidentCommand
             case Events.UnitDispatchCancelled e:
                 foreach (var group in Groups)
                     group.UnitIds.Remove(e.UnitId);
+                break;
+            case Events.UnifiedCommandJoined e:
+                Unified.RemoveAll(m => m.Agency == e.Agency);
+                Unified.Add(new UnifiedCommandMember { AgencyId = e.AgencyId, Agency = e.Agency, Commander = e.Commander, JoinedAt = at, Priority = e.Priority });
+                break;
+            case Events.LeadAgencyChanged e:
+                LeadAgency = e.Agency;
                 break;
         }
     }
@@ -159,6 +178,9 @@ public sealed class ResourceRequest
     public string? DecidedBy { get; set; }
     public string? DecisionReason { get; set; }
     public DateTimeOffset? DecidedAt { get; set; }
+
+    /// <summary>How many the provider will send, when fewer than asked (an agreement's cap, cover kept back).</summary>
+    public int? Granted { get; set; }
 
     /// <summary>When the resources are expected on scene, as promised by the provider.</summary>
     public DateTimeOffset? ExpectedAt { get; set; }

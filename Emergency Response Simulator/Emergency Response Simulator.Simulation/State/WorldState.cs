@@ -100,6 +100,10 @@ public sealed class WorldState
     public List<PendingApprovalReply> PendingApprovalReplies { get; } = [];
     public Dictionary<Guid, string> ApprovalRequesters { get; } = [];
 
+    // ---- Phase 10: multi-agency (Design Document §14) ----
+
+    public WorldInteragency Interagency { get; } = new();
+
     /// <summary>Units committed to an incident (as ordered), for span-of-control counts.</summary>
     public IReadOnlyCollection<Guid> UnitsAt(Guid incidentId) =>
         Units.Values.Where(u => u.OrderedIncidentId == incidentId).Select(u => u.Id).ToList();
@@ -111,6 +115,8 @@ public sealed class WorldState
     /// </summary>
     public void Apply(SimEvent simEvent)
     {
+        Interagency.Apply(simEvent.Payload, simEvent.SimTime);
+
         switch (simEvent.Payload)
         {
             case WorldIncidentStarted e:
@@ -391,7 +397,7 @@ public sealed class WorldState
                 break;
 
             case AgencyRegistered e:
-                Agencies[e.AgencyId] = new WorldAgency(e.Name, e.Type, e.AiControlled, e.RadioChannel);
+                Agencies[e.AgencyId] = new WorldAgency(e.Name, e.Type, e.AiControlled, e.RadioChannel, e.Jurisdiction, e.Priority, e.PriorityTerms ?? []);
                 break;
 
             case IncidentCommanderAssigned e when Commands.TryGetValue(e.IncidentId, out var c1):
@@ -408,6 +414,18 @@ public sealed class WorldState
                 break;
             case UnitAssignedToGroup e when Commands.TryGetValue(e.IncidentId, out var c5):
                 c5.Apply(e);
+                break;
+            case UnifiedCommandJoined e when Commands.TryGetValue(e.IncidentId, out var c6):
+                c6.Apply(e, simEvent.SimTime);
+                break;
+            case LeadAgencyChanged e when Commands.TryGetValue(e.IncidentId, out var c7):
+                c7.Apply(e, simEvent.SimTime);
+                break;
+            // Handing the lead to the investigators while the fire still burns: firefighting goes defensive to keep the scene.
+            case DisputeResolved { Resolution: DisputeResolution.Concede } e
+                when Interagency.Disputes.TryGetValue(e.DisputeId, out var conceded) && conceded.Raised.Kind == DisputeKind.LeadAgency
+                     && conceded.Raised.IncidentId is { } handedOver:
+                DefensiveIncidents.Add(handedOver);
                 break;
 
             case OrderIssued e:
@@ -668,6 +686,12 @@ public sealed class PendingRequest(ResourceRequested request, DateTimeOffset req
     public DateTimeOffset RequestedAt { get; } = requestedAt;
     public bool Decided { get; set; }
     public DateTimeOffset? ArriveAt { get; set; }
+
+    /// <summary>The mutual-aid agreement it was made under (Phase 10), if any.</summary>
+    public MutualAidAgreementRegistered? Agreement { get; set; }
+
+    /// <summary>How many the provider agreed to send.</summary>
+    public int? Granted { get; set; }
 }
 
 public sealed record PendingNotification(NotificationSent Notification, DateTimeOffset SentAt);

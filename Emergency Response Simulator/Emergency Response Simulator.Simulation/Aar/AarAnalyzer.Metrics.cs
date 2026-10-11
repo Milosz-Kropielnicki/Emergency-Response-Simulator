@@ -207,6 +207,8 @@ public sealed partial class AarAnalyzer
                 "More than 7 direct reports slows orders and loses some. Form groups or staff Operations.");
         }
 
+        InteragencyMetrics(Add, opened);
+
         // ---- Safety ----
         if (ParGap() is { } gap)
         {

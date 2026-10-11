@@ -47,6 +47,12 @@ public sealed class CivilianOptions
     /// notifying a translation or community liaison service (multilingual warnings).
     /// </summary>
     public double LimitedEnglishCompliance { get; set; } = 0.5;
+
+    /// <summary>Extra compliance once command has told the public what to do through the media (Phase 10).</summary>
+    public double PublicWarningBoost { get; set; } = 0.08;
+
+    /// <summary>Compliance is multiplied by this while another agency's statement contradicts the official line.</summary>
+    public double ConflictingMessageFactor { get; set; } = 0.7;
 }
 
 /// <summary>
@@ -156,7 +162,7 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
             }
 
             var worst = exposures.Count == 0 ? HazardLevel.None : exposures.Max(e => e.Exposure.Level);
-            var order = ZoneAt(world, person.Location);
+            var order = ZoneAt(world, person.Location, context.SimTime);
 
             if (person.State == CivilianState.Normal)
             {
@@ -232,6 +238,13 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
             var compliance = person.Language is not null && !MultilingualWarnings(context.World)
                 ? _options.LimitedEnglishCompliance
                 : _options.EvacuationCompliance;
+            // Phase 10: a clear public warning from the authorities persuades more people; another agency saying the
+            // opposite (no joint information centre) persuades fewer.
+            var publicInfo = context.World.Interagency;
+            if (publicInfo.LastWarningAt is { } said && said >= order.DeclaredAt - TimeSpan.FromMinutes(15))
+                compliance = Math.Min(0.97, compliance + _options.PublicWarningBoost);
+            if (publicInfo.ConflictingSince is not null)
+                compliance *= _options.ConflictingMessageFactor;
             if (random.NextDouble() >= compliance)
             {
                 person.IgnoredOrder = order.ZoneId; // "it's not that bad", stays put
@@ -350,17 +363,32 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
 
     // ---- Evacuation and shelter orders ----
 
-    /// <summary>People inside a newly declared zone hear about it over the next 2–10 minutes (door-knocking, alerts).</summary>
+    /// <summary>
+    /// People inside a newly declared zone hear about it over the next 2–10 minutes (door-knocking, alerts). A public
+    /// warning through the media (Phase 10: the PIO) reaches them within 1–3 minutes of going out. Where an authority
+    /// disputes the zone, nobody there is warned until the dispute lets the measure apply.
+    /// </summary>
     private void WarnZones(SimulationContext context)
     {
         var world = context.World;
+        var broadcast = world.Interagency.LastWarningAt;
         foreach (var action in world.ProtectiveActions.Values)
         {
             foreach (var person in world.Civilians)
             {
-                if (person.WarnedAt is not null || person.State is CivilianState.Injured or CivilianState.Safe) continue;
-                if (!action.Area.Contains(person.Location.ToPoint())) continue;
-                person.WarnedAt = action.DeclaredAt + TimeSpan.FromMinutes(2 + _random!.NextDouble() * 8);
+                if (person.State is CivilianState.Injured or CivilianState.Safe) continue;
+                if (person.WarnedAt is { } due && (due <= context.SimTime || broadcast is null)) continue;
+                var point = person.Location.ToPoint();
+                if (!action.Area.Contains(point) || !world.Interagency.Enforced(action.ZoneId, point, context.SimTime)) continue;
+                var start = action.DeclaredAt > context.SimTime - Step ? action.DeclaredAt : context.SimTime;
+                var warned = person.WarnedAt ?? start + TimeSpan.FromMinutes(2 + _random!.NextDouble() * 8);
+                if (broadcast is { } said && said >= action.DeclaredAt - TimeSpan.FromMinutes(15))
+                {
+                    // Fixed per person, so re-checking every tick doesn't keep drawing earlier times.
+                    var heard = (said > start ? said : start) + TimeSpan.FromMinutes(1 + person.Id % 13 / 6.0);
+                    if (heard < warned) warned = heard;
+                }
+                person.WarnedAt = warned;
             }
         }
     }
@@ -370,11 +398,11 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
                                      || k.Contains("interpret", StringComparison.OrdinalIgnoreCase)
                                      || k.Contains("community", StringComparison.OrdinalIgnoreCase));
 
-    private static ProtectiveAction? ZoneAt(WorldState world, GeoPoint point)
+    private static ProtectiveAction? ZoneAt(WorldState world, GeoPoint point, DateTimeOffset now)
     {
         if (world.ProtectiveActions.Count == 0) return null;
         var p = point.ToPoint();
-        return world.ProtectiveActions.Values.FirstOrDefault(a => a.Area.Contains(p));
+        return world.ProtectiveActions.Values.FirstOrDefault(a => a.Area.Contains(p) && world.Interagency.Enforced(a.ZoneId, p, now));
     }
 
     // ---- Harm ----

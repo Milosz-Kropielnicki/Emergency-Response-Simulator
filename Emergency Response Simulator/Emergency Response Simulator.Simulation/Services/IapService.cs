@@ -195,7 +195,18 @@ public sealed class IapService(
         if (Blocking(plan) is { } blocked)
             return blocked;
 
-        return await PublishAsync(new IapApproved(planId, approvedBy.Trim()), cancellationToken);
+        // Unified command (Phase 10): every member signs, and none signs a plan that leaves out its priority.
+        var signedBy = approvedBy.Trim();
+        if (cop.FindIncident(plan.IncidentId) is { Command.IsUnified: true } incident)
+        {
+            var missing = Interagency.UncoveredPriorities(plan.Content, incident.Command, cop.Agencies);
+            if (missing.Count > 0)
+                return CommandResult.Fail($"Unified command won't sign: {missing[0].Commander} ({missing[0].Agency}) wants an objective that covers " +
+                                          $"\"{missing[0].Priority}\"{(missing.Count > 1 ? $", and {missing.Count - 1} other member(s) theirs" : "")}.");
+            signedBy += $", with unified command ({string.Join("; ", incident.Command.Unified.Select(m => $"{m.Commander}, {m.Agency}"))})";
+        }
+
+        return await PublishAsync(new IapApproved(planId, signedBy), cancellationToken);
     }
 
     public async Task<CommandResult> ReturnAsync(Guid planId, string returnedBy, string comments, CancellationToken cancellationToken = default)

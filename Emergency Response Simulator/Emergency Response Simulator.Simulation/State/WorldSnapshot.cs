@@ -26,8 +26,12 @@ public sealed record WorldSnapshot(
     IReadOnlyList<CascadeRecord> Cascades,
     WorldSnapshot.CommsView Comms,
     IReadOnlyList<WorldSnapshot.CrewView> Crews,
-    IReadOnlyList<WorldSnapshot.DistressView> Distress)
+    IReadOnlyList<WorldSnapshot.DistressView> Distress,
+    IReadOnlyList<WorldSnapshot.HeldView>? Held = null)
 {
+    /// <summary>Something an agency knows and has not told command (Phase 10: information silos).</summary>
+    public sealed record HeldView(string Agency, string Claim, DateTimeOffset KnownAt, bool Urgent, string Standing);
+
     /// <summary>A crew as it really is (Phase 8): how tired and stressed, who is missing, what it was never told.</summary>
     /// <param name="Activity">"working inside", "working outside", "in rehab", "rescue team", "handing over" or the phase.</param>
     public sealed record CrewView(
@@ -119,7 +123,10 @@ public sealed record WorldSnapshot(
             d.Id, world.Units.GetValueOrDefault(d.UnitId)?.Callsign ?? "?",
             world.Units.GetValueOrDefault(d.UnitId)?.Crew.Members.FirstOrDefault(m => m.Id == d.MemberId)?.Title ?? "?",
             d.Cause, d.Location, d.Heard, d.AirRunsOutAt,
-            d.RescueUnitId is { } rescuer ? world.Units.GetValueOrDefault(rescuer)?.Callsign : null, d.RescueProgress)).ToList());
+            d.RescueUnitId is { } rescuer ? world.Units.GetValueOrDefault(rescuer)?.Callsign : null, d.RescueProgress)).ToList(),
+        world.Interagency.Held.Values.Where(h => h.SharedAt is null).Select(h => new HeldView(
+            world.Agencies.GetValueOrDefault(h.Info.AgencyId)?.Name ?? "Agency", h.Info.Claim, h.KnownAt, h.Info.Urgent,
+            world.Interagency.StandingOf(h.Info.AgencyId).ToString())).ToList());
 
     private static string Activity(WorldUnit unit, DateTimeOffset at) => unit switch
     {

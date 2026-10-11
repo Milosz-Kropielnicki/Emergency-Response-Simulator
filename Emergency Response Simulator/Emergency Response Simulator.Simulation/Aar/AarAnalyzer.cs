@@ -31,6 +31,7 @@ public sealed partial class AarAnalyzer
     private readonly Dictionary<Guid, string> _callsigns = [];
     private readonly Dictionary<Guid, Guid?> _unitAgency = [];
     private readonly HashSet<Guid> _aiAgencies = [];
+    private readonly Dictionary<Guid, string> _agencyNames = [];
     private readonly Dictionary<Guid, UnitType> _unitTypes = [];
     private readonly Dictionary<Guid, (string Number, GeoPoint Location, DateTimeOffset At)> _incidents = [];
     private readonly List<(DateTimeOffset At, GeoPoint? Location, string Source, string Claim, ReportSource Kind)> _reports = [];
@@ -97,8 +98,9 @@ public sealed partial class AarAnalyzer
         // Bookkeeping the analysis needs whichever way the event went.
         switch (payload)
         {
-            case AgencyRegistered { AiControlled: true } e:
-                _aiAgencies.Add(e.AgencyId);
+            case AgencyRegistered e:
+                _agencyNames[e.AgencyId] = e.Name;
+                if (e.AiControlled) _aiAgencies.Add(e.AgencyId);
                 break;
             case UnitRegistered e:
                 _callsigns[e.UnitId] = e.Callsign;
@@ -131,7 +133,8 @@ public sealed partial class AarAnalyzer
             _cop.Apply(simEvent);
         }
 
-        var entry = EventDescriber.Describe(simEvent, id => _callsigns.GetValueOrDefault(id), id => _incidents.TryGetValue(id, out var i) ? i.Number : null);
+        var entry = EventDescriber.Describe(simEvent, id => _callsigns.GetValueOrDefault(id), id => _incidents.TryGetValue(id, out var i) ? i.Number : null,
+            id => _agencyNames.GetValueOrDefault(id));
         if (entry is not null)
             _timeline.Add(new AarTimelineEntry(entry.Sequence, entry.SimTime, entry.Category, entry.Text, decision, truth, entry.Important || decision));
     }
@@ -259,6 +262,52 @@ public sealed partial class AarAnalyzer
                 if (!e.FullBriefing) note = "Quick changeover: information may have been lost.";
                 break;
 
+            // ---- Multi-agency (Phase 10) ----
+
+            case IcsPositionAssigned { Role: IcsRole.Liaison or IcsRole.PublicInformation } e when _incidents.TryGetValue(e.IncidentId, out var staffedFor):
+                From(staffedFor.At, $"{staffedFor.Number} opened", TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(20));
+                break;
+
+            case UnifiedCommandInvited e when _incidents.TryGetValue(e.IncidentId, out var shared)
+                                              && !_decisions.Any(d => d.Category == "Multi-agency" && d.Decision.Contains("invited")):
+                From(shared.At, $"{shared.Number} opened", TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(20));
+                break;
+
+            case EocActivationRequested e when e.Level > _cop.Eoc.Level:
+                From(EocWarrantedAt(at), "Incident became a major emergency", TimeSpan.FromMinutes(15), TimeSpan.FromMinutes(30));
+                if (e.Level == EocLevel.Full && _cop.Incidents.All(i => i.Priority < IncidentPriority.High))
+                {
+                    rating = Rating.Fair;
+                    note = "Full activation (12 staff, overtime) for an incident never above Medium priority.";
+                }
+                break;
+
+            case DisputeResolutionChosen e when _cop.Disputes.FirstOrDefault(d => d.Id == e.DisputeId) is { } dispute:
+                From(dispute.RaisedAt, $"Objection from {dispute.Agency}", TimeSpan.FromMinutes(3), TimeSpan.FromMinutes(8));
+                if (e.Resolution == DisputeResolution.Assert)
+                {
+                    rating = rating == Rating.Poor ? Rating.Poor : Rating.Fair;
+                    note = $"Overruled {dispute.Agency}: quick, but relations suffered.";
+                }
+                else if (e.Resolution == DisputeResolution.Concede && dispute.Kind == DisputeKind.LeadAgency && _truth.FireBurning.Values.Sum() > 0)
+                {
+                    rating = Rating.Poor;
+                    note = "Handed the lead over while the fire still burned: firefighting went defensive.";
+                }
+                break;
+
+            case SitrepSubmitted when All<SitrepRequested>().Where(x => x.Event.SimTime <= at).Select(x => x.Payload).LastOrDefault() is { } asked:
+                trigger = $"EOC wanted it by {Clock(asked.DueAt)}";
+                rating = at <= asked.DueAt ? Rating.Good : at - asked.DueAt <= TimeSpan.FromMinutes(10) ? Rating.Fair : Rating.Poor;
+                break;
+
+            case PublicStatementIssued e when Interagency.IsWarning(e.Text):
+                var zoneAt = All<ZoneDeclared>().Where(x => x.Event.SimTime <= at && x.Payload.Type is ZoneType.EvacuationZone or ZoneType.ShelterInPlace)
+                    .Select(x => (DateTimeOffset?)x.Event.SimTime).LastOrDefault();
+                From(zoneAt, "Protective zone declared", TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(10));
+                if (!e.Joint) note = "Not agreed through a joint information centre: other agencies may say something different.";
+                break;
+
             case OrderIssued e when Qualifications.RequiredFor(e.Text) is { } needed && e.TargetKind == OrderTargetKind.Unit
                                     && e.TargetId is { } target && _cop.FindUnit(target)?.Crew is { } crew && !crew.Meets(needed):
                 rating = Rating.Poor;
@@ -280,7 +329,8 @@ public sealed partial class AarAnalyzer
 
     private (string Category, string Text) Describe(SimEvent simEvent)
     {
-        var entry = EventDescriber.Describe(simEvent, id => _callsigns.GetValueOrDefault(id), id => _incidents.TryGetValue(id, out var i) ? i.Number : null);
+        var entry = EventDescriber.Describe(simEvent, id => _callsigns.GetValueOrDefault(id), id => _incidents.TryGetValue(id, out var i) ? i.Number : null,
+            id => _agencyNames.GetValueOrDefault(id));
         var category = simEvent.Payload switch
         {
             IncidentCreated or IncidentUpdated or IncidentCommanderAssigned => "Incident",
@@ -292,6 +342,9 @@ public sealed partial class AarAnalyzer
             RadioCallMade or RepeatRequested or UnitChannelAssigned or ChannelPatchRequested or ChannelPatchRemoved or CallbackMade => "Comms",
             ParRequested or EvacuationSignalled or EmergencyTrafficDeclared or MaydayDeclared or RescueTeamDeployed => "Safety",
             CrewRehabOrdered or CrewReliefRequested or PeerSupportArranged => "Crews",
+            UnifiedCommandInvited or AgencyAssistanceRequested or AgencyBriefingRequested or DisputeResolutionChosen or EocActivationRequested
+                or SitrepSubmitted or PublicStatementIssued => "Multi-agency",
+            IcsPositionAssigned { Role: IcsRole.Liaison or IcsRole.PublicInformation } => "Multi-agency",
             IcsPositionAssigned or IcsGroupFormed or IcsGroupDisbanded or UnitAssignedToGroup => "Command",
             _ when simEvent.Source == EventSources.Iap => "Planning",
             _ => "Other",

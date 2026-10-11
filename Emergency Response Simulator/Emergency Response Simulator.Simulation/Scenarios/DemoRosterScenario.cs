@@ -15,6 +15,17 @@ public sealed class DemoRosterScenario : IScenario
 {
     public string Name => "Demo roster";
 
+    /// <summary>Agency names scenarios refer to (Phase 10).</summary>
+    public static class Agencies
+    {
+        public const string Investigators = "Garda National Bureau of Criminal Investigation";
+        public const string SafetyRegulator = "Health and Safety Authority";
+        public const string PublicHealth = "HSE Public Health";
+        public const string Waterways = "Waterways Ireland";
+        public const string Council = "Dublin City Council";
+        public const string RoadsPolicing = "Garda Roads Policing";
+    }
+
     public async Task SeedAsync(IEventPublisher publisher, CancellationToken cancellationToken = default)
     {
         var fire = Guid.NewGuid();
@@ -47,12 +58,82 @@ public sealed class DemoRosterScenario : IScenario
         var southEms = Guid.NewGuid();
         var trafficCorps = Guid.NewGuid();
         // Each works its own talkgroup: command hears their crews only through their control rooms (or a patch).
+        // Each has its own priorities at a joint incident (Phase 10): the words are what an IAP objective must say to cover them.
         await Register(new AgencyRegistered(northFire, "City Fire Brigade, North District", "Fire N", AgencyType.Fire, AiControlled: true,
-            RadioChannel: "FIRE NORTH"));
+            RadioChannel: "FIRE NORTH", Jurisdiction: "Dublin City", Priority: "Keep fire cover for the north city", PriorityTerms: ["cover", "standby"]));
         await Register(new AgencyRegistered(southEms, "Ambulance Service, Dublin South", "EMS S", AgencyType.Ems, AiControlled: true,
-            RadioChannel: "AMB SOUTH"));
+            RadioChannel: "AMB SOUTH", Jurisdiction: "Dublin Region", Priority: "Get every casualty to the right hospital",
+            PriorityTerms: ["casualt", "patient", "hospital", "triage"]));
         await Register(new AgencyRegistered(trafficCorps, "Garda Roads Policing", "Garda RP", AgencyType.Police, AiControlled: true,
-            RadioChannel: "GARDA RP"));
+            RadioChannel: "GARDA RP", Jurisdiction: "Dublin Region", Priority: "Keep traffic moving on the city's main routes",
+            PriorityTerms: ["traffic", "diversion", "road"]));
+
+        // Agencies with no units on the roster, whose agreement, knowledge or authority command may need (Phase 10).
+        var council = Guid.NewGuid();
+        var nbci = Guid.NewGuid();
+        var hsa = Guid.NewGuid();
+        var publicHealth = Guid.NewGuid();
+        var waterways = Guid.NewGuid();
+        var port = Guid.NewGuid();
+        await Register(new AgencyRegistered(council, "Dublin City Council", "DCC", AgencyType.EmergencyManagement, AiControlled: true,
+            Jurisdiction: "Dublin City", Priority: "Look after displaced residents and get the area back to normal",
+            PriorityTerms: ["resident", "welfare", "rest centre", "evacuat", "shelter"]));
+        await Register(new AgencyRegistered(nbci, Agencies.Investigators, "GNBCI", AgencyType.Investigation, AiControlled: true,
+            Jurisdiction: "Ireland", Priority: "Preserve the scene and the evidence for the investigation", PriorityTerms: ["scene", "evidence", "investigat"]));
+        await Register(new AgencyRegistered(hsa, Agencies.SafetyRegulator, "HSA", AgencyType.Regulator, AiControlled: true,
+            Jurisdiction: "Ireland", Priority: "Establish what was stored on the site and keep workers safe",
+            PriorityTerms: ["chemical", "hazmat", "decontamin", "site safety"]));
+        await Register(new AgencyRegistered(publicHealth, Agencies.PublicHealth, "HSE PH", AgencyType.PublicHealth, AiControlled: true,
+            Jurisdiction: "Dublin Region", Priority: "Protect the public from smoke and chemical exposure",
+            PriorityTerms: ["public health", "exposure", "smoke", "air quality", "shelter"]));
+        await Register(new AgencyRegistered(waterways, Agencies.Waterways, "WI", AgencyType.AreaAuthority, AiControlled: true,
+            Jurisdiction: "Grand Canal Dock basin", Priority: "Keep the people on the basin and its moorings safe",
+            PriorityTerms: ["basin", "canal", "mooring", "waterway"]));
+        await Register(new AgencyRegistered(port, "Dublin Port Company", "DPC", AgencyType.AreaAuthority, AiControlled: true,
+            Jurisdiction: "Dublin Port", Priority: "Keep the port working", PriorityTerms: ["port", "shipping", "vessel"]));
+
+        // Jurisdictions: city, county, regional (state) and national (federal) tiers, and two estates whose authorities must
+        // agree measures inside them. Boundaries are schematic, not surveyed.
+        await Register(new JurisdictionDeclared("ireland", "Ireland", JurisdictionLevel.National,
+            "Government (National Emergency Coordination Group)", null,
+            [new(55.45, -10.70), new(55.45, -5.95), new(51.35, -5.95), new(51.35, -10.70)],
+            Powers: "national coordination, the Defence Forces and national specialist teams"));
+        await Register(new JurisdictionDeclared("dublin-region", "Dublin Region", JurisdictionLevel.Regional,
+            "Regional Coordination Group (Major Emergency region)", null,
+            [new(53.63, -6.55), new(53.63, -6.00), new(53.18, -6.00), new(53.18, -6.55)],
+            Powers: "coordinating the principal response agencies across the region's councils"));
+        await Register(new JurisdictionDeclared("dublin-city", "Dublin City", JurisdictionLevel.City, "Dublin City Council", council,
+            [new(53.405, -6.335), new(53.405, -6.175), new(53.330, -6.175), new(53.305, -6.215), new(53.305, -6.335)],
+            Powers: "the city's fire brigade, roads, housing and rest centres"));
+        await Register(new JurisdictionDeclared("dlr", "Dún Laoghaire–Rathdown", JurisdictionLevel.County, "Dún Laoghaire–Rathdown County Council", null,
+            [new(53.330, -6.175), new(53.305, -6.215), new(53.235, -6.215), new(53.215, -6.100), new(53.300, -6.100)],
+            Powers: "the county's roads, housing and rest centres"));
+        await Register(new JurisdictionDeclared("kildare", "County Kildare", JurisdictionLevel.County, "Kildare County Council", null,
+            [new(53.45, -6.95), new(53.45, -6.46), new(53.27, -6.46), new(53.10, -6.62), new(53.10, -6.95)],
+            Powers: "Kildare Fire Service and the county's roads"));
+        await Register(new JurisdictionDeclared("grand-canal-dock", "Grand Canal Dock basin", JurisdictionLevel.National, Agencies.Waterways, waterways,
+            [new(53.34245, -6.23820), new(53.34378, -6.23820), new(53.34378, -6.23360), new(53.34245, -6.23360)],
+            RequiresConsent: true, Powers: "the Grand Canal Dock basin, its quays, moorings and boats"));
+        await Register(new JurisdictionDeclared("dublin-port", "Dublin Port", JurisdictionLevel.National, "Dublin Port Company (Harbour Master)", port,
+            [new(53.3470, -6.2290), new(53.3580, -6.2290), new(53.3580, -6.1750), new(53.3470, -6.1750)],
+            RequiresConsent: true, Powers: "the port estate, berths and vessel movements"));
+
+        // Mutual-aid agreements with the neighbouring services (Phase 10): what each will send, who approves, and the terms.
+        await Register(new MutualAidAgreementRegistered(Guid.NewGuid(), "Kildare Fire Service", AgencyType.Fire, "County Kildare",
+            [UnitType.Engine, UnitType.Ladder, UnitType.WaterTender, UnitType.Tanker], MaxUnits: 4, "Kildare Chief Fire Officer",
+            TimeSpan.FromMinutes(2.5), TimeSpan.FromMinutes(15), NeedsMajorEmergency: false,
+            "Firefighting and rescue for High or Critical incidents, under the host incident commander but with crews kept under their own " +
+            "officer. Not hazardous-materials entry or decontamination.",
+            ["hazmat", "chemical", "decontamination", "decon", "hot zone"], "KILDARE FIRE"));
+        await Register(new MutualAidAgreementRegistered(Guid.NewGuid(), "National Ambulance Service (Midlands)", AgencyType.Ems, "Midlands",
+            [UnitType.AmbulanceAls, UnitType.AmbulanceBls], MaxUnits: 4, "National Ambulance Service Control",
+            TimeSpan.FromMinutes(1.5), TimeSpan.FromMinutes(20), NeedsMajorEmergency: true,
+            "Ambulances once a major emergency has been declared; they return to the Midlands as soon as the casualties are cleared.",
+            [], "NAS MIDLANDS"));
+        await Register(new MutualAidAgreementRegistered(Guid.NewGuid(), "Garda Kildare Division", AgencyType.Police, "County Kildare",
+            [UnitType.Patrol, UnitType.Traffic, UnitType.Motorcycle], MaxUnits: 4, "Garda Chief Superintendent, Kildare",
+            TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(12), NeedsMajorEmergency: false,
+            "Cordons, traffic control and evacuation assistance for High or Critical incidents.", []));
         await AddUnit("Engine 31", UnitType.Engine, northFire, new GeoPoint(53.3585, -6.2560), "Station 11", 5, "Structural", "BreathingApparatus");
         await AddUnit("Engine 33", UnitType.Engine, northFire, new GeoPoint(53.3585, -6.2560), "Station 11", 4, "Structural");
         await AddUnit("Ambulance 52", UnitType.AmbulanceAls, southEms, new GeoPoint(53.3245, -6.2385), "Donnybrook", 2, "ALS");

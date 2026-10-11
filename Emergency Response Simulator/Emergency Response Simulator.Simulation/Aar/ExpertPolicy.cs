@@ -20,6 +20,9 @@ namespace Emergency_Response_Simulator.Simulation.Aar;
 /// calls a PAR; PARs every 20 minutes;</item>
 /// <item>rotates crews through rehab after 40 minutes on task, relieves crews past their shift, rings back missed callers,
 /// asks for repeats of unclear messages and acknowledges alerts.</item>
+/// <item>(Phase 10) appoints a liaison officer and a PIO, brings the agencies with a stake into unified command, stands the
+/// EOC up to partial activation for a chemical fire, negotiates disputes, puts protective advice out through the PIO and
+/// sends situation reports on time.</item>
 /// </list>
 /// Its commands go straight into the event stream with source C2, so the AAR can judge them like anyone else's.
 /// </summary>
@@ -49,6 +52,7 @@ public sealed class ExpertPolicy(ICopService cop) : ISimulationSystem
         Pars(context, now, incident);
         Crews(context, now);
         Comms(context, now);
+        Agencies(context, now, incident);
 
         if (now - _openedAt >= TimeSpan.FromMinutes(8) && _done.Add("more"))
         {
@@ -87,7 +91,7 @@ public sealed class ExpertPolicy(ICopService cop) : ISimulationSystem
         _incident = Guid.NewGuid();
         _openedAt = now;
         Emit(context, new IncidentCreated(_incident.Value, "INC-00001", IncidentType.StructureFire, IncidentPriority.High, _location,
-            null, "Recommended response"));
+            "Barrow Street", "Barrow Street warehouse fire"));
         foreach (var report in located)
             Emit(context, new ReportLinked(report.Id, _incident.Value));
 
@@ -141,6 +145,72 @@ public sealed class ExpertPolicy(ICopService cop) : ISimulationSystem
         if (report is null || !Once("hospitals", report.ReceivedAt, now)) return;
         foreach (var hospital in cop.Hospitals.OrderBy(h => GeoMath.DistanceMeters(h.Location, _location)).Take(2))
             Emit(context, new NotificationSent(Guid.NewGuid(), incident, hospital.Name, "Major incident at Barrow Street: expect multiple casualties, activate your major emergency plan."));
+    }
+
+    // ---- Multi-agency (Phase 10) ----
+
+    /// <summary>
+    /// Liaison and PIO from the start; the agencies with a stake into unified command; the EOC to partial activation for a
+    /// chemical fire; disputes negotiated; protective advice put out through the PIO; situation reports on time.
+    /// </summary>
+    private void Agencies(SimulationContext context, DateTimeOffset now, Guid incident)
+    {
+        if (cop.FindIncident(incident) is not { } known) return;
+        if (Once("liaison", _openedAt, now))
+        {
+            Emit(context, new IcsPositionAssigned(incident, IcsRole.Liaison, "Stn Off. Kelly"));
+            Emit(context, new IcsPositionAssigned(incident, IcsRole.PublicInformation, "Ms. Daly"));
+        }
+
+        if (now - _openedAt >= TimeSpan.FromMinutes(1))
+        {
+            foreach (var agency in cop.Agencies.Where(a => a.AiControlled && HasStake(a, known)))
+                if (!known.Command.InUnifiedCommand(agency.Id) && _done.Add($"uc:{agency.Id}"))
+                    Emit(context, new UnifiedCommandInvited(incident, agency.Id));
+        }
+
+        var chemicals = cop.Reports.FirstOrDefault(r => AarAnalyzer.IsChemicalReport(r.Claim));
+        if (chemicals is not null && cop.Eoc.Level < EocLevel.Partial && cop.Eoc.Requested is null && Once("eoc", chemicals.ReceivedAt, now))
+            Emit(context, new EocActivationRequested(EocLevel.Partial, "Fire with a chemical store involved: major emergency"));
+
+        foreach (var dispute in cop.Disputes.Where(d => d.Status == DisputeStatus.Open))
+            if (Once($"dispute:{dispute.Id}", dispute.RaisedAt, now))
+                Emit(context, new DisputeResolutionChosen(dispute.Id, DisputeResolution.Negotiate));
+
+        foreach (var zone in cop.Zones.Where(z => z.Type is ZoneType.EvacuationZone or ZoneType.ShelterInPlace))
+        {
+            if (!Once($"warn:{zone.Id}", zone.EffectiveFrom, now)) continue;
+            var advice = zone.Type == ZoneType.EvacuationZone
+                ? "Residents inside the evacuation zone around Barrow Street should evacuate now to the community centre on Pearse Street."
+                : "People inside the shelter zone should stay indoors and keep windows and doors closed.";
+            Emit(context, new PublicStatementIssued(Guid.NewGuid(), incident, "PIO Ms. Daly", advice, cop.JointInformationCentre(incident)));
+        }
+
+        var eoc = cop.Eoc;
+        if (eoc.SitrepDue is { } due && due - now <= TimeSpan.FromMinutes(5) && (eoc.LastSitrepAt is null || eoc.LastSitrepAt < due - TimeSpan.FromMinutes(15))
+            && _done.Add($"sitrep:{due.Ticks}"))
+        {
+            var committed = cop.Units.Count(u => u.AssignedIncidentId == incident);
+            Emit(context, new SitrepSubmitted(Guid.NewGuid(),
+                $"{known.Number}: {EventDescriber.Humanize(known.Status).ToLowerInvariant()}, {committed} units committed, " +
+                $"{known.CasualtiesReported} casualties reported, {cop.Zones.Count} zones in force."));
+        }
+    }
+
+    /// <summary>Whether an agency belongs in unified command of the incident, judged from what command knows of it.</summary>
+    private bool HasStake(Agency agency, Incident incident)
+    {
+        var at = GeoPoint.FromPoint(incident.Location);
+        if (cop.Units.Any(u => u.AgencyId == agency.Id && u.Location is not null && GeoMath.DistanceMeters(GeoPoint.FromPoint(u.Location), at) < 600))
+            return true;
+        var chemical = cop.Reports.Any(r => AarAnalyzer.IsChemicalReport(r.Claim));
+        return agency.Type switch
+        {
+            AgencyType.EmergencyManagement => incident.Priority >= IncidentPriority.High,
+            AgencyType.Regulator or AgencyType.PublicHealth => chemical,
+            AgencyType.Investigation => incident.Type is IncidentType.Explosion or IncidentType.CrimeScene,
+            _ => cop.Jurisdictions.Any(j => j.AuthorityAgencyId == agency.Id && j.Boundary.Distance(incident.Location) * 111_000 < 400),
+        };
     }
 
     // ---- Safety ----

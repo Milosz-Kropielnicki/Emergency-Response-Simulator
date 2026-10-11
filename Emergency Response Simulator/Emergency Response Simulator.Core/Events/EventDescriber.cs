@@ -18,14 +18,17 @@ public static class EventDescriber
 {
     /// <param name="unitName">Resolves a unit id to its callsign.</param>
     /// <param name="incidentName">Resolves an incident id to its number.</param>
+    /// <param name="agencyName">Resolves an agency id to its name.</param>
     /// <returns>Null for events that are bookkeeping rather than history (e.g. AVL fixes).</returns>
     public static TimelineEntry? Describe(
         SimEvent simEvent,
         Func<Guid, string?> unitName,
-        Func<Guid, string?> incidentName)
+        Func<Guid, string?> incidentName,
+        Func<Guid, string?>? agencyName = null)
     {
         string Unit(Guid id) => unitName(id) ?? "Unknown unit";
         string Incident(Guid id) => incidentName(id) ?? "unknown incident";
+        string Agency(Guid id) => agencyName?.Invoke(id) ?? "Agency";
 
         TimelineEntry Entry(string category, string text, Guid? incident = null, Guid? unit = null, bool important = false) =>
             new(simEvent.Sequence, simEvent.SimTime, simEvent.Visibility, category, text, incident, unit, important);
@@ -156,6 +159,31 @@ public static class EventDescriber
             DistressEnded e => Entry("TRUTH", $"Firefighter distress over: {e.Outcome}"),
             StructureCollapsed e => Entry("TRUTH", $"Structural collapse: {e.Description}"),
             HandoverInformationLost e => Entry("TRUTH", $"{Unit(e.UnitId)} relief crew never told: {string.Join("; ", e.Items)}", unit: e.UnitId),
+            // Multi-agency (Phase 10)
+            JurisdictionDeclared e => Entry("JURISDICTION", $"{e.Name} ({Humanize(e.Level).ToLowerInvariant()}): {e.Authority}"),
+            MutualAidAgreementRegistered e => Entry("MUTUAL AID", $"Agreement with {e.Provider}: up to {e.MaxUnits} units, approved by {e.ApprovedBy}"),
+            UnifiedCommandInvited e => Entry("UNIFIED COMMAND", $"{Agency(e.AgencyId)} invited to share command of {Incident(e.IncidentId)}", e.IncidentId),
+            UnifiedCommandJoined e => Entry("UNIFIED COMMAND", $"{e.Commander} ({e.Agency}) joins unified command of {Incident(e.IncidentId)}", e.IncidentId, important: true),
+            UnifiedCommandDeclined e => Entry("UNIFIED COMMAND", $"{Agency(e.AgencyId)} declines unified command: {e.Reason}", e.IncidentId),
+            LeadAgencyChanged e => Entry("COMMAND", $"Lead agency for {Incident(e.IncidentId)}: {e.Agency} ({e.Reason})", e.IncidentId, important: true),
+            AgencyAssistanceRequested e => Entry("AGENCY", $"{Agency(e.AgencyId)} asked for {e.Quantity} unit(s) for {Incident(e.IncidentId)}: {e.Task}", e.IncidentId),
+            AgencyAssistanceDecided e => Entry("AGENCY", $"{e.Granted} unit(s) released: {e.Reason}"),
+            AgencyBriefingRequested e => Entry("AGENCY", $"Briefing requested from {Agency(e.AgencyId)}"),
+            InformationShared e => Entry("AGENCY", $"{e.Agency} shares what it knew (via {e.Via})"),
+            AgencyRelationChanged e => Entry("AGENCY", $"Relations with {Agency(e.AgencyId)}: {Humanize(e.Standing).ToLowerInvariant()} ({e.Reason})",
+                important: e.Standing != AgencyStanding.Good),
+            DisputeRaised e => Entry("DISPUTE", $"{e.Agency}: {e.Subject}. {e.Position}", e.IncidentId, important: true),
+            DisputeResolutionChosen e => Entry("DISPUTE", $"Command chooses to {Humanize(e.Resolution).ToLowerInvariant()}"),
+            DisputeResolved e => Entry("DISPUTE", $"Settled ({Humanize(e.Resolution).ToLowerInvariant()}): {e.Outcome}", important: true),
+            EocActivationRequested e => Entry("EOC", $"EOC to {EocLevels.Label(e.Level).ToLowerInvariant()}" + (e.Reason is null ? "" : $": {e.Reason}"), important: true),
+            EocSeatStaffed e => Entry("EOC", $"EOC seat staffed: {e.Function}" + (e.Agency is null ? "" : $" ({e.Agency})")),
+            EocLevelReached e => Entry("EOC", $"EOC at {EocLevels.Label(e.Level).ToLowerInvariant()}", important: true),
+            SitrepRequested e => Entry("EOC", $"EOC asks for a situation report by {e.DueAt.ToLocalTime():HH:mm}"),
+            SitrepSubmitted => Entry("EOC", "Situation report sent to the EOC"),
+            PublicStatementIssued e => Entry(e.Conflicting ? "MEDIA" : "PUBLIC INFO", (e.Conflicting ? "Conflicting statement, " : e.Joint ? "Joint statement, " : "Statement, ") +
+                $"{e.Issuer}: \"{e.Text}\"", e.IncidentId, important: e.Conflicting),
+            MediaEnquiryReceived e => Entry("MEDIA", $"{e.Outlet}: \"{e.Question}\"", e.IncidentId),
+            InformationHeld e => Entry("TRUTH", $"{Agency(e.AgencyId)} knows (not yet shared): {e.Claim}"),
             UnitPositionReported => null, // dozens per minute; shown on the map instead
             _ => Entry(simEvent.Type.ToUpperInvariant(), simEvent.Type),
         };

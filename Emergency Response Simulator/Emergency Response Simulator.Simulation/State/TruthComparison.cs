@@ -205,6 +205,12 @@ public static class TruthComparison
                 shift >= 30 ? DivergenceSeverity.Unknown : shift >= 10 ? DivergenceSeverity.Lagging : DivergenceSeverity.Aligned));
         }
 
+        // Information silos (Phase 10): what other agencies know and have kept to themselves.
+        foreach (var held in truth.Held ?? [])
+            lines.Add(new Divergence($"Held by {held.Agency}", held.Claim,
+                $"Not shared (known since {held.KnownAt.ToLocalTime():HH:mm}, relations {held.Standing.ToLowerInvariant()})",
+                held.Urgent ? DivergenceSeverity.Unknown : DivergenceSeverity.Lagging));
+
         return lines.OrderByDescending(l => l.Severity).ToList();
     }
 

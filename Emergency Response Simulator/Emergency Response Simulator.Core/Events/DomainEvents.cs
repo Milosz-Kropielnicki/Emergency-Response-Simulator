@@ -87,6 +87,30 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(RescueTeamDeployed), nameof(RescueTeamDeployed))]
 [JsonDerivedType(typeof(MaydayResolved), nameof(MaydayResolved))]
 [JsonDerivedType(typeof(OrderDeclined), nameof(OrderDeclined))]
+// Multi-agency and interoperability (Phase 10)
+[JsonDerivedType(typeof(JurisdictionDeclared), nameof(JurisdictionDeclared))]
+[JsonDerivedType(typeof(MutualAidAgreementRegistered), nameof(MutualAidAgreementRegistered))]
+[JsonDerivedType(typeof(UnifiedCommandInvited), nameof(UnifiedCommandInvited))]
+[JsonDerivedType(typeof(UnifiedCommandJoined), nameof(UnifiedCommandJoined))]
+[JsonDerivedType(typeof(UnifiedCommandDeclined), nameof(UnifiedCommandDeclined))]
+[JsonDerivedType(typeof(LeadAgencyChanged), nameof(LeadAgencyChanged))]
+[JsonDerivedType(typeof(AgencyAssistanceRequested), nameof(AgencyAssistanceRequested))]
+[JsonDerivedType(typeof(AgencyAssistanceDecided), nameof(AgencyAssistanceDecided))]
+[JsonDerivedType(typeof(AgencyBriefingRequested), nameof(AgencyBriefingRequested))]
+[JsonDerivedType(typeof(InformationShared), nameof(InformationShared))]
+[JsonDerivedType(typeof(AgencyRelationChanged), nameof(AgencyRelationChanged))]
+[JsonDerivedType(typeof(DisputeRaised), nameof(DisputeRaised))]
+[JsonDerivedType(typeof(DisputeResolutionChosen), nameof(DisputeResolutionChosen))]
+[JsonDerivedType(typeof(DisputeResolved), nameof(DisputeResolved))]
+[JsonDerivedType(typeof(EocActivationRequested), nameof(EocActivationRequested))]
+[JsonDerivedType(typeof(EocSeatStaffed), nameof(EocSeatStaffed))]
+[JsonDerivedType(typeof(EocLevelReached), nameof(EocLevelReached))]
+[JsonDerivedType(typeof(SitrepRequested), nameof(SitrepRequested))]
+[JsonDerivedType(typeof(SitrepSubmitted), nameof(SitrepSubmitted))]
+[JsonDerivedType(typeof(PublicStatementIssued), nameof(PublicStatementIssued))]
+[JsonDerivedType(typeof(MediaEnquiryReceived), nameof(MediaEnquiryReceived))]
+// Truth: multi-agency (Phase 10)
+[JsonDerivedType(typeof(InformationHeld), nameof(InformationHeld))]
 // Truth: the world as it really is
 [JsonDerivedType(typeof(WorldIncidentStarted), nameof(WorldIncidentStarted))]
 [JsonDerivedType(typeof(WorldIncidentChanged), nameof(WorldIncidentChanged))]
@@ -129,8 +153,11 @@ public abstract record DomainEvent;
 
 /// <param name="AiControlled">Run by the simulation (another control room), not by the trainee.</param>
 /// <param name="RadioChannel">The agency's own radio system, if it is not on ours (command needs a patch to talk to it).</param>
+/// <param name="Jurisdiction">The area it answers for (Phase 10), by name.</param>
+/// <param name="Priority">What its commander pushes for at a joint incident.</param>
+/// <param name="PriorityTerms">Words an IAP objective must use for the agency to agree it covers that priority.</param>
 public sealed record AgencyRegistered(Guid AgencyId, string Name, string ShortName, AgencyType Type, bool AiControlled = false,
-    string? RadioChannel = null) : DomainEvent;
+    string? RadioChannel = null, string? Jurisdiction = null, string? Priority = null, IReadOnlyList<string>? PriorityTerms = null) : DomainEvent;
 
 /// <summary>A receiving hospital and its emergency department as known at the start; also its true starting state.</summary>
 public sealed record HospitalRegistered(Guid HospitalId, string Name, GeoPoint Location, int EdCapacity, int Occupied) : DomainEvent;
@@ -281,12 +308,14 @@ public sealed record OrderAcknowledged(Guid OrderId, string ReadBack, bool Garbl
 public sealed record OrderClosed(Guid OrderId, bool Completed) : DomainEvent;
 
 /// <param name="ExpectedAt">When the provider says the resources will be on scene.</param>
+/// <param name="Quantity">How many the provider will send, when fewer than asked (Phase 10: agreement caps, cover kept back).</param>
 public sealed record ResourceRequestDecided(
     Guid RequestId,
     bool Approved,
     string DecidedBy,
     string? Reason,
-    DateTimeOffset? ExpectedAt) : DomainEvent;
+    DateTimeOffset? ExpectedAt,
+    int? Quantity = null) : DomainEvent;
 
 /// <summary>Requested resources have arrived in the area and are now on the roster.</summary>
 public sealed record ResourceRequestFulfilled(Guid RequestId, IReadOnlyList<Guid> UnitIds) : DomainEvent;
@@ -465,6 +494,110 @@ public sealed record MaydayResolved(Guid MaydayId, string Outcome) : DomainEvent
 
 /// <summary>A crew can't carry out an order, e.g. it has nobody qualified for the task.</summary>
 public sealed record OrderDeclined(Guid OrderId, string Reason) : DomainEvent;
+
+// ---- Multi-agency and interoperability (Phase 10, Design Document §14) ----
+
+/// <summary>An area some authority answers for: city, county, regional (state) or national (federal).</summary>
+/// <param name="RequiresConsent">Measures inside need the authority's agreement (a port estate, a canal basin).</param>
+public sealed record JurisdictionDeclared(
+    string JurisdictionId,
+    string Name,
+    JurisdictionLevel Level,
+    string Authority,
+    Guid? AuthorityAgencyId,
+    IReadOnlyList<GeoPoint> Boundary,
+    bool RequiresConsent = false,
+    string? Powers = null) : DomainEvent;
+
+/// <summary>A standing mutual-aid agreement with a neighbouring service.</summary>
+/// <param name="ExcludedTasks">Tasks it doesn't cover, as words that would appear in an order.</param>
+public sealed record MutualAidAgreementRegistered(
+    Guid AgreementId,
+    string Provider,
+    AgencyType ProviderType,
+    string? ProviderJurisdiction,
+    IReadOnlyList<UnitType> UnitTypes,
+    int MaxUnits,
+    string ApprovedBy,
+    TimeSpan DecisionTime,
+    TimeSpan LeadTime,
+    bool NeedsMajorEmergency,
+    string Terms,
+    IReadOnlyList<string> ExcludedTasks,
+    string? RadioChannel = null) : DomainEvent;
+
+/// <summary>Command asks an agency to send its commander to share command of an incident.</summary>
+public sealed record UnifiedCommandInvited(Guid IncidentId, Guid AgencyId) : DomainEvent;
+
+/// <summary>An agency's commander is at the command post, sharing command.</summary>
+public sealed record UnifiedCommandJoined(Guid IncidentId, Guid? AgencyId, string Agency, string Commander, string? Priority) : DomainEvent;
+
+public sealed record UnifiedCommandDeclined(Guid IncidentId, Guid AgencyId, string Reason) : DomainEvent;
+
+/// <summary>Which agency leads the response changes, e.g. to the police once a fire scene becomes a crime scene.</summary>
+public sealed record LeadAgencyChanged(Guid IncidentId, string Agency, string Reason) : DomainEvent;
+
+/// <summary>Command asks another agency to commit some of its own units to an incident.</summary>
+public sealed record AgencyAssistanceRequested(Guid RequestId, Guid AgencyId, Guid IncidentId, int Quantity, string Task) : DomainEvent;
+
+/// <summary>The agency's answer: which units it releases to command (perhaps fewer than asked), and why.</summary>
+public sealed record AgencyAssistanceDecided(Guid RequestId, int Granted, IReadOnlyList<Guid> UnitIds, string Reason) : DomainEvent;
+
+/// <summary>Command asks an agency to share what it knows.</summary>
+public sealed record AgencyBriefingRequested(Guid AgencyId) : DomainEvent;
+
+/// <summary>Something an agency knew reaches command (the claim itself arrives as the report).</summary>
+/// <param name="Via">How it came: "unified command", "liaison officer", "EOC", "briefing", "volunteered".</param>
+public sealed record InformationShared(Guid ItemId, Guid ReportId, string Agency, string Via) : DomainEvent;
+
+/// <summary>How an agency feels about command changes, and command can tell.</summary>
+public sealed record AgencyRelationChanged(Guid AgencyId, AgencyStanding Standing, string Reason) : DomainEvent;
+
+/// <summary>An agency objects: it claims the lead, the area, or the limits of an agreement.</summary>
+public sealed record DisputeRaised(
+    Guid DisputeId,
+    Guid? IncidentId,
+    DisputeKind Kind,
+    Guid? AgencyId,
+    string Agency,
+    string Subject,
+    string Position,
+    string Basis,
+    Guid? ZoneId = null,
+    Guid? OrderId = null) : DomainEvent;
+
+/// <summary>Command decides how to answer an objection.</summary>
+public sealed record DisputeResolutionChosen(Guid DisputeId, DisputeResolution Resolution) : DomainEvent;
+
+/// <summary>The dispute is settled: conceded, agreed, overruled or decided by the EOC.</summary>
+public sealed record DisputeResolved(Guid DisputeId, DisputeResolution Resolution, string Outcome) : DomainEvent;
+
+/// <summary>Command asks for the Emergency Operations Centre to be stood up (or down) to a level.</summary>
+public sealed record EocActivationRequested(EocLevel Level, string? Reason) : DomainEvent;
+
+/// <summary>Someone has arrived at the EOC and taken their seat.</summary>
+public sealed record EocSeatStaffed(string Function, string? Agency) : DomainEvent;
+
+/// <summary>The EOC is fully staffed for a level (or stood down to it).</summary>
+public sealed record EocLevelReached(EocLevel Level) : DomainEvent;
+
+/// <summary>The EOC wants a situation report by a time.</summary>
+public sealed record SitrepRequested(DateTimeOffset DueAt) : DomainEvent;
+
+public sealed record SitrepSubmitted(Guid SitrepId, string Text) : DomainEvent;
+
+/// <summary>A statement to the public: ours, or another agency's that may contradict it.</summary>
+/// <param name="Joint">Agreed through a joint information centre.</param>
+/// <param name="Conflicting">Another agency's own statement that contradicts the official line.</param>
+public sealed record PublicStatementIssued(Guid StatementId, Guid? IncidentId, string Issuer, string Text, bool Joint,
+    bool Conflicting = false) : DomainEvent;
+
+/// <summary>A journalist wants to know what is going on.</summary>
+public sealed record MediaEnquiryReceived(Guid EnquiryId, Guid? IncidentId, string Outlet, string Question) : DomainEvent;
+
+/// <summary>Truth: something an agency knows, which command only learns if the agency shares it (information silos).</summary>
+/// <param name="Urgent">Matters to life safety: shared first, even by an agency that is not cooperating well.</param>
+public sealed record InformationHeld(Guid ItemId, Guid AgencyId, string Claim, GeoPoint? Location, bool Urgent = false) : DomainEvent;
 
 /// <summary>
 /// Weather as reported to command by a met service or station. May lag or differ from the true

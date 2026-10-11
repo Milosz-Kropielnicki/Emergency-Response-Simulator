@@ -10,6 +10,15 @@ public enum AgencyType
     PublicHealth,
     Utility,
     Other,
+
+    /// <summary>A criminal investigation bureau: takes an interest in explosions and suspicious fires (Phase 10).</summary>
+    Investigation,
+
+    /// <summary>A safety or environmental regulator with statutory powers over hazardous sites.</summary>
+    Regulator,
+
+    /// <summary>Answers for an estate of its own: a port, a canal basin, an airport.</summary>
+    AreaAuthority,
 }
 
 /// <summary>Unit lifecycle from Design Document §6.4.</summary>

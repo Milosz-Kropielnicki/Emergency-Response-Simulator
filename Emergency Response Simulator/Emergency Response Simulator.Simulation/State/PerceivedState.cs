@@ -37,6 +37,14 @@ public sealed class PerceivedState : ICopService
     private readonly Dictionary<Guid, Crew> _crews = [];
     private readonly Dictionary<Guid, ParCheck> _pars = [];
     private readonly Dictionary<Guid, Mayday> _maydays = [];
+    private readonly Dictionary<string, Jurisdiction> _jurisdictions = [];
+    private readonly Dictionary<Guid, MutualAidAgreement> _agreements = [];
+    private readonly List<UnifiedCommandInvitation> _invitations = [];
+    private readonly Dictionary<Guid, AssistanceRequest> _assistance = [];
+    private readonly Dictionary<Guid, AuthorityDispute> _disputes = [];
+    private readonly EocStatus _eoc = new();
+    private readonly List<PublicStatement> _statements = [];
+    private readonly Dictionary<Guid, MediaEnquiry> _enquiries = [];
 
     /// <summary>The comms log keeps this many messages; older ones are in the event stream.</summary>
     private const int MaxCommsEntries = 1000;
@@ -96,6 +104,40 @@ public sealed class PerceivedState : ICopService
     public IReadOnlyList<OperationalPeriod> OperationalPeriods => Snapshot(_periods);
     public IReadOnlyList<IncidentActionPlan> ActionPlans => Snapshot(_plans);
 
+    public IReadOnlyList<Jurisdiction> Jurisdictions
+    {
+        get { lock (_lock) return _jurisdictions.Values.OrderBy(j => j.Level).ToList(); }
+    }
+
+    public IReadOnlyList<MutualAidAgreement> MutualAidAgreements => Snapshot(_agreements);
+
+    public IReadOnlyList<UnifiedCommandInvitation> UnifiedCommandInvitations
+    {
+        get { lock (_lock) return _invitations.ToList(); }
+    }
+
+    public IReadOnlyList<AssistanceRequest> AssistanceRequests => Snapshot(_assistance);
+
+    public IReadOnlyList<AuthorityDispute> Disputes
+    {
+        get { lock (_lock) return _disputes.Values.OrderBy(d => d.RaisedAt).ToList(); }
+    }
+
+    public EocStatus Eoc
+    {
+        get { lock (_lock) return _eoc.Copy(); }
+    }
+
+    public IReadOnlyList<PublicStatement> PublicStatements
+    {
+        get { lock (_lock) return _statements.ToList(); }
+    }
+
+    public IReadOnlyList<MediaEnquiry> MediaEnquiries
+    {
+        get { lock (_lock) return _enquiries.Values.OrderBy(m => m.ReceivedAt).ToList(); }
+    }
+
     public IReadOnlyDictionary<Guid, ObjectiveStatus> ObjectiveProgress
     {
         get { lock (_lock) return new Dictionary<Guid, ObjectiveStatus>(_progress); }
@@ -147,7 +189,7 @@ public sealed class PerceivedState : ICopService
                 _agencies[e.AgencyId] = new Agency
                 {
                     Id = e.AgencyId, Name = e.Name, ShortName = e.ShortName, Type = e.Type, AiControlled = e.AiControlled,
-                    RadioChannel = e.RadioChannel,
+                    RadioChannel = e.RadioChannel, Jurisdiction = e.Jurisdiction, Priority = e.Priority, PriorityTerms = [.. e.PriorityTerms ?? []],
                 };
                 // Another service's radio system: known, but not monitored until patched.
                 if (e.RadioChannel is { } own && !_channels.ContainsKey(own))
@@ -346,6 +388,160 @@ public sealed class PerceivedState : ICopService
                 }
                 break;
 
+            // ---- Multi-agency (Phase 10) ----
+
+            case JurisdictionDeclared e when e.Boundary.Count >= 3:
+                _jurisdictions[e.JurisdictionId] = new Jurisdiction
+                {
+                    Id = e.JurisdictionId, Name = e.Name, Level = e.Level, Authority = e.Authority, AuthorityAgencyId = e.AuthorityAgencyId,
+                    Boundary = Wgs84.CreatePolygon(e.Boundary), RequiresConsent = e.RequiresConsent, Powers = e.Powers,
+                };
+                break;
+
+            case MutualAidAgreementRegistered e:
+                _agreements[e.AgreementId] = new MutualAidAgreement
+                {
+                    Id = e.AgreementId, Provider = e.Provider, ProviderType = e.ProviderType, ProviderJurisdiction = e.ProviderJurisdiction,
+                    UnitTypes = [.. e.UnitTypes], MaxUnits = e.MaxUnits, ApprovedBy = e.ApprovedBy, DecisionTime = e.DecisionTime,
+                    LeadTime = e.LeadTime, NeedsMajorEmergency = e.NeedsMajorEmergency, Terms = e.Terms, ExcludedTasks = [.. e.ExcludedTasks],
+                    RadioChannel = e.RadioChannel,
+                };
+                break;
+
+            case UnifiedCommandInvited e:
+                _invitations.RemoveAll(i => i.IncidentId == e.IncidentId && i.AgencyId == e.AgencyId && i.Accepted is null);
+                _invitations.Add(new UnifiedCommandInvitation
+                {
+                    IncidentId = e.IncidentId, AgencyId = e.AgencyId, Agency = _agencies.GetValueOrDefault(e.AgencyId)?.Name ?? "Agency", InvitedAt = at,
+                });
+                break;
+
+            case UnifiedCommandJoined e:
+                if (_invitations.LastOrDefault(i => i.IncidentId == e.IncidentId && i.AgencyId == e.AgencyId) is { } accepted)
+                {
+                    accepted.Accepted = true;
+                    accepted.AnsweredAt = at;
+                }
+                if (_incidents.TryGetValue(e.IncidentId, out var unified))
+                {
+                    unified.Command.Apply(e, at);
+                    unified.LastUpdatedAt = at;
+                }
+                break;
+
+            case UnifiedCommandDeclined e when _invitations.LastOrDefault(i => i.IncidentId == e.IncidentId && i.AgencyId == e.AgencyId) is { } declinedInvite:
+                declinedInvite.Accepted = false;
+                declinedInvite.Reason = e.Reason;
+                declinedInvite.AnsweredAt = at;
+                break;
+
+            case LeadAgencyChanged e when _incidents.TryGetValue(e.IncidentId, out var led):
+                led.Command.Apply(e, at);
+                led.LastUpdatedAt = at;
+                break;
+
+            case AgencyAssistanceRequested e:
+                _assistance[e.RequestId] = new AssistanceRequest
+                {
+                    Id = e.RequestId, AgencyId = e.AgencyId, Agency = _agencies.GetValueOrDefault(e.AgencyId)?.Name ?? "Agency",
+                    IncidentId = e.IncidentId, Quantity = e.Quantity, Task = e.Task, RequestedAt = at,
+                };
+                break;
+
+            case AgencyAssistanceDecided e when _assistance.TryGetValue(e.RequestId, out var assisted):
+                assisted.Granted = e.Granted;
+                assisted.UnitIds.AddRange(e.UnitIds);
+                assisted.Reason = e.Reason;
+                assisted.DecidedAt = at;
+                foreach (var released in e.UnitIds)
+                    if (_units.TryGetValue(released, out var attached))
+                        attached.AttachedToCommand = true;
+                break;
+
+            case AgencyRelationChanged e when _agencies.TryGetValue(e.AgencyId, out var related):
+                related.Standing = e.Standing;
+                break;
+
+            case DisputeRaised e:
+                _disputes[e.DisputeId] = new AuthorityDispute
+                {
+                    Id = e.DisputeId, IncidentId = e.IncidentId, Kind = e.Kind, AgencyId = e.AgencyId, Agency = e.Agency, Subject = e.Subject,
+                    Position = e.Position, Basis = e.Basis, RaisedAt = at, ZoneId = e.ZoneId, OrderId = e.OrderId,
+                };
+                break;
+
+            case DisputeResolutionChosen e when _disputes.TryGetValue(e.DisputeId, out var weighing):
+                weighing.Resolution = e.Resolution;
+                weighing.ChosenAt = at;
+                weighing.Status = e.Resolution switch
+                {
+                    DisputeResolution.Negotiate => DisputeStatus.Negotiating,
+                    DisputeResolution.Escalate => DisputeStatus.Escalated,
+                    _ => weighing.Status,
+                };
+                break;
+
+            case DisputeResolved e when _disputes.TryGetValue(e.DisputeId, out var settled):
+                settled.Resolution = e.Resolution;
+                settled.Outcome = e.Outcome;
+                settled.ResolvedAt = at;
+                settled.Status = DisputeStatus.Resolved;
+                break;
+
+            case EocActivationRequested e:
+                _eoc.Requested = e.Level == _eoc.Level ? null : e.Level;
+                _eoc.RequestedAt = at;
+                _eoc.Reason = e.Reason;
+                break;
+
+            case EocSeatStaffed e:
+                if (!_eoc.Seats.Any(s => s.Function == e.Function))
+                    _eoc.Seats.Add(new EocSeat
+                    {
+                        Function = e.Function, Agency = e.Agency, StaffedAt = at,
+                        From = EocLevels.Seats.FirstOrDefault(s => s.Function == e.Function)?.From ?? EocLevel.Monitoring,
+                    });
+                break;
+
+            case EocLevelReached e:
+                _eoc.Level = e.Level;
+                _eoc.LevelSince = at;
+                if (_eoc.Requested == e.Level) _eoc.Requested = null;
+                _eoc.Seats.RemoveAll(s => s.From > e.Level);
+                if (EocLevels.SitrepInterval(e.Level) is null) _eoc.SitrepDue = null;
+                break;
+
+            case SitrepRequested e:
+                _eoc.SitrepDue = e.DueAt;
+                break;
+
+            case SitrepSubmitted:
+                _eoc.LastSitrepAt = at;
+                _eoc.SitrepsSubmitted++;
+                break;
+
+            case PublicStatementIssued e:
+                _statements.Add(new PublicStatement
+                {
+                    Id = e.StatementId, IncidentId = e.IncidentId, Issuer = e.Issuer, Text = e.Text, IssuedAt = at, Joint = e.Joint,
+                    Conflicting = e.Conflicting,
+                });
+                // One of our statements answers what the media were asking about that incident.
+                if (!e.Conflicting)
+                    foreach (var enquiry in _enquiries.Values.Where(m => m.AnsweredAt is null && (e.IncidentId is null || m.IncidentId == e.IncidentId)))
+                    {
+                        enquiry.AnsweredAt = at;
+                        enquiry.AnsweredBy = e.Issuer;
+                    }
+                break;
+
+            case MediaEnquiryReceived e:
+                _enquiries[e.EnquiryId] = new MediaEnquiry
+                {
+                    Id = e.EnquiryId, IncidentId = e.IncidentId, Outlet = e.Outlet, Question = e.Question, ReceivedAt = at,
+                };
+                break;
+
             case CallMissed e:
                 _missed[e.CallId] = new MissedCall { Id = e.CallId, At = at, Waited = e.Waited, Location = e.Location, AccuracyMeters = e.AccuracyMeters };
                 break;
@@ -374,6 +570,7 @@ public sealed class PerceivedState : ICopService
                 // A job from the unit's own agency, not one of command's incidents.
                 Unassign(tasked);
                 Contact(tasked, at);
+                tasked.AttachedToCommand = false; // its own agency has it back
                 tasked.Status = UnitStatus.Dispatched;
                 tasked.Tasking = $"{e.TaskedBy}: {e.Task}";
                 tasked.PlannedRoute = null;
@@ -520,6 +717,7 @@ public sealed class PerceivedState : ICopService
                 decided.DecisionReason = e.Reason;
                 decided.DecidedAt = at;
                 decided.ExpectedAt = e.ExpectedAt;
+                decided.Granted = e.Quantity;
                 break;
 
             case ResourceRequestFulfilled e when _requests.TryGetValue(e.RequestId, out var fulfilled):
@@ -660,6 +858,7 @@ public sealed class PerceivedState : ICopService
                 Unassign(unit);
                 unit.Status = UnitStatus.Available;
                 unit.Eta = null;
+                unit.AttachedToCommand = false; // a released unit goes back to its own agency
                 if (unit.Crew is { } stoodDownCrew)
                 {
                     stoodDownCrew.WorkingSince = null;
@@ -684,6 +883,7 @@ public sealed class PerceivedState : ICopService
                 {
                     Unassign(unit);
                     unit.Tasking = null;
+                    unit.AttachedToCommand = false;
                 }
                 if (e.Status is not (UnitStatus.Dispatched or UnitStatus.EnRoute))
                 {

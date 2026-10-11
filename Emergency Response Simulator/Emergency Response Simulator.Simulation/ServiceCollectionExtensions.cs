@@ -89,6 +89,8 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<ISimulationSystem>(sp => new CrewSystem(sp.GetRequiredService<CrewOptions>()));
         if (configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.CommsRealism)}", true))
             services.AddSingleton<ISimulationSystem>(sp => new CommsSystem(sp.GetRequiredService<CommsOptions>(), sp.GetRequiredService<IRoutingService>()));
+        if (configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.MultiAgency)}", true))
+            services.AddSingleton<ISimulationSystem>(_ => new InteragencySystem());
         services.AddSingleton<ISimulationSystem>(sp => new AttentionMonitor(
             sp.GetRequiredService<ICopService>(), sp.GetRequiredService<AttentionOptions>(), sp.GetRequiredService<IRoutingService>()));
         if (configuration[$"{SimulationOptions.SectionName}:Scenario"] == BarrowStreetScenario.Key)

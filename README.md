@@ -539,6 +539,73 @@ Open it with **📊 AAR** in the header. It opens in its own window, so the COP 
   - A self-contained **HTML report**: summary and verdict, debrief points, outcome comparison, key decisions, metrics, commitment chart and heatmaps (SVG), delays, decision timeline, key events, and a sign-off block with trainee, role, assessor, the assessor's verdict, comments and signature lines. It prints to PDF from any browser.
   - A **CSV** with every metric, branch point, outcome, decision, unit, delay and event in one sheet.
 
+## Multi-agency & interoperability (Phase 10)
+
+The other agencies are now joint partners with priorities and knowledge of their own (`InteragencySystem`, Order 19). Their truth (what they know and haven't said, how they feel about command, what they're waiting on, the EOC's staffing) is in `WorldInteragency`; the COP shows only what reaches command. Every command goes through `IC2Service` as events, so it replays and is judged in the AAR. `Simulation:MultiAgency = false` turns the friction model off.
+
+- **Jurisdictions** (`JurisdictionDeclared`, schematic boundaries):
+  - the design document's city / county / state / federal tiers, as city (Dublin City Council), county (Dún Laoghaire–Rathdown, Kildare), regional (the Dublin Major Emergency region, standing in for state) and national (the Government, standing in for federal);
+  - two estates whose authority must agree measures inside them: **Grand Canal Dock basin** (Waterways Ireland), about 200 m north of the Barrow Street fire and downwind once the wind backs, and **Dublin Port**;
+  - shown on the map ("Jurisdictions & estates"); clicking the map lists every jurisdiction at that spot.
+- **Unified command** (`InviteToUnifiedCommandAsync`): shared command, not just coordination.
+  - An agency with a stake joins about 3 minutes after being invited (1½ with a liaison officer), and says what it will push for. A stake means its units are at the scene, its estate is close or inside a zone, or it has a statutory role: investigators for an explosion, the regulator for a chemical site, the council for a High incident or a zone, public health for casualties or a plume. Agencies with no stake decline.
+  - Once in, command can **task its units** at that incident; it **shares what it knows** within 30 seconds; zones in its estate need no separate agreement; it releases more of its reserve; and disputes with it settle faster.
+  - Every member must **sign the IAP**: approval is refused until an objective covers each member's priority (e.g. "traffic" for Garda Roads Policing), and the approval names them all.
+- **Liaison and PIO** (ICS positions that now do something):
+  - The **liaison officer** rings round the agencies every 4 minutes and brings back what they know (not from a hostile agency), halves the wait for unified command, and halves negotiations.
+  - The **PIO** answers media enquiries 2 minutes after they come in, with a holding statement that passes on the protective advice in force ("residents inside the evacuation zone should evacuate now…").
+  - Command can issue its own statements (`IssuePublicStatementAsync`). A statement telling people what to do reaches people in a zone within 1–3 minutes instead of 2–10, and lifts compliance by 8 points.
+- **EOC activation levels** (`SetEocLevelAsync`):
+
+  | Level | Staff | Takes | Brings | Situation reports |
+  |---|---|---|---|---|
+  | Normal | duty officer on call | — | nothing | — |
+  | Monitoring | 2 | 5 min | watching only | hourly |
+  | Partial | 7 | 15 min | a declared major emergency: agencies release half their reserves, mutual-aid decisions 40 % sooner, disputes can be escalated, agencies' information relayed, a joint information centre | every 30 min |
+  | Full | 12 | 30 min | all reserves released, council rest centres and buses, national coordination (and overtime) | every 20 min |
+
+  - Seats fill one by one; standing down is immediate. Situation reports (`SubmitSitrepAsync`, "Draft from COP") are asked for at each level's interval; an overdue one raises an alert and slows escalated decisions.
+  - The council's duty officer suggests standing the EOC up once an incident has been High for 10 minutes or a protective zone is declared.
+- **Interagency friction:**
+  - **Resource hoarding** (`RequestAgencyAssistanceAsync`): asked for units, an AI-run agency keeps a third of its fleet back for its own area. It keeps half back when relations are strained and gives nothing when hostile. Unified command halves the reserve, partial activation halves it again, and full activation releases everything. Released units come under command until stood down.
+  - **Information silos** (`InformationHeld`, truth): what an agency knows reaches command through unified command (30 s), the liaison officer's rounds, the EOC (5 min after partial activation), a direct question (`RequestAgencyBriefingAsync`, 75 s), or when it gets round to volunteering it (20 minutes, longer when strained; a hostile agency volunteers only life-safety items, late). At Barrow Street:
+    - Garda Roads Policing see two people trapped on a balcony (6½ min);
+    - the Health and Safety Authority's register confirms 1,000 kg of hypochlorite next door (7½ min);
+    - Waterways Ireland know 15 people live on boats in the basin, downwind (8 min);
+    - the council's rest centre takes 120, not 200 (10 min);
+    - the investigators have intelligence on the tenant (11 min);
+    - public health hears of chlorine symptoms in Ringsend once a release has run 3 minutes.
+  - **Competing priorities**: each agency states its priority (in the AGENCIES tab and when it joins), and pushes it in disputes and at IAP approval.
+  - **Conflicting messages**: 6 minutes after an evacuation or shelter zone, if no joint information centre is working (a PIO, with unified command or the EOC) and no joint statement has gone out, the council (or the police) puts out its own contradictory line, and compliance drops by 30 % until a joint statement corrects it.
+  - **The media**: enquiries arrive every 4–9 minutes by priority. Unanswered for 12 minutes, speculation appears on social media and worried residents ring 999.
+- **Mutual aid agreements and authority disputes:**
+  - Standing agreements (`MutualAidAgreementRegistered`) with Kildare Fire Service (up to 4 engines, ladders or tenders; not hazmat), the National Ambulance Service in the Midlands (up to 4; only once a major emergency is declared) and Garda Kildare (up to 4). Each has its own approver, decision time, lead time and terms.
+  - Mutual-aid requests follow them: capped at what is left of the agreement, sometimes one fewer while the provider keeps cover (unless the EOC is at full activation), and refused outside the terms. A unit type no agreement covers goes to the National Directorate, which releases it only for a Critical incident (4 minutes to decide, 30 to arrive).
+  - **Disputes** (`ResolveDisputeAsync`): Concede, Negotiate (4 min; less with a liaison officer or in unified command; more when relations are poor), Assert (immediate, relations get worse) or Escalate (the EOC decides in 5 min; needs partial activation).
+
+    | Dispute | Raised when | While open |
+    |---|---|---|
+    | Jurisdiction | A zone reaches into an estate whose authority isn't in unified command and hasn't agreed | The zone stops at the boundary: nobody there is warned. Conceding leaves the authority to warn its own people 8 min later |
+    | Mutual-aid terms | A mutual-aid crew is ordered to do something the agreement excludes (e.g. hazmat) | The order is declined. Negotiating or asserting gets it done; conceding or the EOC withdraws it |
+    | Lead agency | Barrow Street, 12 min in, with the fire still burning: the Garda investigators claim the lead for a possible crime scene | Conceding hands them the lead at once and firefighting goes defensive. Negotiating gives a staged handover once the fire is out |
+
+  - Overruled agencies remember: relations go Good → Strained → Hostile (conceding improves them), with the effects above.
+  - An objection unanswered for 3 minutes, and media enquiries waiting 8 minutes, come back as alerts.
+- **AAR:**
+  - A **Multi-agency** section: liaison officer and PIO appointed; unified command; how long other agencies' information took to reach command (and how); authority disputes and how they were settled; EOC activation against when the incident became a major emergency; situation reports on time; media enquiries answered; conflicting public messages; units released by other agencies.
+  - Decisions are rated: liaison, PIO and the first invitation within 10 min of opening; the EOC within 15 min of a major emergency; disputes answered within 3 min (asserting is at best fair; conceding the lead while the fire burns is poor); sitreps by their due time; warnings within 5 min of a zone.
+  - New branch points: **information held by other agencies** (when the most urgent item reached you, against unified command) and **who leads**.
+  - The recommended response (`ExpertPolicy`) appoints a liaison officer and PIO, invites agencies with a stake, stands the EOC up for a chemical fire, negotiates, warns the public and sends sitreps.
+- **UI:**
+  - The new **AGENCIES** tab in the right panel. Its header counts open disputes.
+  - **Dispute cards** with Concede, Negotiate, Assert and Escalate, each with a tooltip saying what it is likely to do.
+  - **Command** for the selected incident: single or unified, the lead agency, the jurisdictions there, members and what they want, and Invite.
+  - **EOC**: level and seats, what each level brings, the situation report due, and Draft from COP / Send sitrep.
+  - **Public information**: PIO and joint-information-centre status, statements (contradictions in red) and media enquiries.
+  - **Other agencies**: type, jurisdiction, units free, priority, standing, unified command and assistance status, and Ask for units / Ask what they know.
+  - **Mutual-aid agreements**.
+  - For the instructor, the truth comparison lists everything agencies know and haven't shared.
+
 ## Local setup
 
 ```powershell

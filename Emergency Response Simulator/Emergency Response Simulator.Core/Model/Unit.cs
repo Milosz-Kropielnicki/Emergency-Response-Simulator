@@ -46,6 +46,12 @@ public class Unit : Resource
     /// </summary>
     public string? Tasking { get; set; }
 
+    /// <summary>
+    /// Released by its own (AI-run) agency to work under command, at command's request (Phase 10). It goes back to its
+    /// agency when stood down. COP state, not stored in the database.
+    /// </summary>
+    public bool AttachedToCommand { get; set; }
+
     /// <summary>The radio channel the crew works on (COP state, not stored in the database).</summary>
     public string? Channel { get; set; }
 

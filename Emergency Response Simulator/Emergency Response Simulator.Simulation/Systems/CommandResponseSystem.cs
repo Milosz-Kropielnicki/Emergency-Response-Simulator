@@ -144,26 +144,34 @@ public sealed class CommandResponseSystem : ISimulationSystem
             var request = pending.Request;
             if (!pending.Decided)
             {
+                var ia = world.Interagency;
+                // Phase 10: mutual aid comes under the standing agreements, when the area has any.
+                var agreement = request.Kind == ResourceRequestKind.MutualAid ? AgreementFor(world, request) : null;
+                var outsideAgreements = request.Kind == ResourceRequestKind.MutualAid && ia.Agreements.Count > 0 && agreement is null;
+                // A declared major emergency (EOC at partial or above) speeds up decisions; an overruled provider drags its feet.
+                var pace = (ia.MajorEmergency ? 0.6 : 1) * (agreement is not null && ia.Reluctant.Contains(agreement.Provider) ? 2 : 1);
                 var (approver, delay, lead) = request.Kind switch
                 {
-                    ResourceRequestKind.MutualAid => ("Regional Duty Officer", MutualAidDecisionDelay, MutualAidLeadTime),
-                    ResourceRequestKind.SpecialistTeam => ("National Directorate for Fire & Emergency Management", SpecialistDecisionDelay, SpecialistLeadTime),
+                    ResourceRequestKind.MutualAid when agreement is not null => (agreement.ApprovedBy, agreement.DecisionTime * pace, agreement.LeadTime),
+                    ResourceRequestKind.MutualAid when outsideAgreements => (NationalDirectorate, OutsideAgreementDecisionDelay * pace, OutsideAgreementLeadTime),
+                    ResourceRequestKind.MutualAid => ("Regional Duty Officer", MutualAidDecisionDelay * pace, MutualAidLeadTime),
+                    ResourceRequestKind.SpecialistTeam => (NationalDirectorate, SpecialistDecisionDelay * pace, SpecialistLeadTime),
                     _ => (ControlRoomFor(request.UnitType), TimeSpan.Zero, AdditionalLeadTime),
                 };
                 if (context.SimTime - pending.RequestedAt < delay) continue;
 
                 pending.Decided = true;
+                pending.Agreement = agreement;
                 var priority = world.ReportedIncidentPriorities.GetValueOrDefault(request.IncidentId, IncidentPriority.Medium);
-                var approved = request.Kind == ResourceRequestKind.AdditionalResources || priority >= IncidentPriority.High;
-                string? reason = approved
-                    ? null
-                    : $"Declined: {request.Kind switch { ResourceRequestKind.MutualAid => "mutual aid", _ => "specialist teams" }} " +
-                      $"are reserved for High or Critical incidents; this incident is {priority}.";
+                var (approved, quantity, reason) = Decide(world, request, agreement, outsideAgreements, priority);
 
+                pending.Granted = approved ? quantity : null;
                 pending.ArriveAt = approved ? context.SimTime + lead : null;
+                var partly = approved && quantity < request.Quantity ? $" Sending {quantity} of the {request.Quantity}: {reason}" : "";
                 CommsNet.Chat(context, approver,
-                    approved ? $"Request approved: {request.Description}. Expected on scene {pending.ArriveAt?.ToLocalTime():HH:mm}." : reason!,
-                    new ResourceRequestDecided(request.RequestId, approved, approver, reason, pending.ArriveAt), TimeSpan.Zero);
+                    approved ? $"Request approved: {request.Description}. Expected on scene {pending.ArriveAt?.ToLocalTime():HH:mm}.{partly}" : reason!,
+                    new ResourceRequestDecided(request.RequestId, approved, approver, approved && quantity == request.Quantity ? null : reason,
+                        pending.ArriveAt, approved && quantity < request.Quantity ? quantity : null), TimeSpan.Zero);
                 if (!approved) world.PendingRequests.Remove(pending);
                 continue;
             }
@@ -171,17 +179,74 @@ public sealed class CommandResponseSystem : ISimulationSystem
             if (pending.ArriveAt is { } arriveAt && context.SimTime >= arriveAt)
             {
                 world.PendingRequests.Remove(pending);
-                Deliver(context, request);
+                Deliver(context, request, pending.Agreement, pending.Granted ?? request.Quantity);
             }
         }
     }
 
+    private const string NationalDirectorate = "National Directorate for Fire & Emergency Management";
+
+    /// <summary>Mutual aid outside every standing agreement goes to the national level, slower and only for the worst incidents.</summary>
+    public static readonly TimeSpan OutsideAgreementDecisionDelay = TimeSpan.FromMinutes(4);
+
+    public static readonly TimeSpan OutsideAgreementLeadTime = TimeSpan.FromMinutes(30);
+
+    /// <summary>The agreement that covers the request's unit type, with the most units still to give.</summary>
+    private static MutualAidAgreementRegistered? AgreementFor(WorldState world, ResourceRequested request)
+    {
+        var type = request.UnitType ?? UnitType.Engine;
+        return world.Interagency.Agreements.Values
+            .Where(a => a.UnitTypes.Contains(type))
+            .OrderByDescending(a => a.MaxUnits - world.Interagency.Provided.GetValueOrDefault(a.AgreementId))
+            .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Whether the request is granted, how many units come, and why not all or none. Under an agreement: its cap, the
+    /// major-emergency condition, and the provider keeping a unit back for its own cover (unless the EOC is fully up).
+    /// </summary>
+    private static (bool Approved, int Quantity, string? Reason) Decide(WorldState world, ResourceRequested request,
+        MutualAidAgreementRegistered? agreement, bool outsideAgreements, IncidentPriority priority)
+    {
+        if (request.Kind == ResourceRequestKind.AdditionalResources) return (true, request.Quantity, null);
+        var ia = world.Interagency;
+        if (outsideAgreements)
+            return priority == IncidentPriority.Critical
+                ? (true, request.Quantity, null)
+                : (false, 0, $"Declined: no mutual-aid agreement covers {ResourceGroups.Label(request.UnitType ?? UnitType.Engine).ToLowerInvariant()} units. " +
+                             $"Outside the agreements we release units only for Critical incidents; this incident is {priority}.");
+        if (agreement is null)
+            return priority >= IncidentPriority.High
+                ? (true, request.Quantity, null)
+                : (false, 0, $"Declined: {(request.Kind == ResourceRequestKind.MutualAid ? "mutual aid" : "specialist teams")} " +
+                             $"are reserved for High or Critical incidents; this incident is {priority}.");
+
+        if (agreement.NeedsMajorEmergency && !ia.MajorEmergency)
+            return (false, 0, $"Declined: under our agreement {agreement.Provider} sends crews only once a major emergency is declared " +
+                              "(the EOC at partial activation or above).");
+        if (!agreement.NeedsMajorEmergency && priority < IncidentPriority.High)
+            return (false, 0, $"Declined: the agreement with {agreement.Provider} is for High or Critical incidents; this incident is {priority}.");
+
+        var left = agreement.MaxUnits - ia.Provided.GetValueOrDefault(agreement.AgreementId);
+        if (left <= 0)
+            return (false, 0, $"Declined: {agreement.Provider} has already sent the {agreement.MaxUnits} units the agreement provides for.");
+        var quantity = Math.Min(request.Quantity, left);
+        var reason = quantity < request.Quantity ? $"the agreement provides for {agreement.MaxUnits} in all." : null;
+        // A busy neighbour keeps one back for its own area: resource hoarding, overridden only by a fully staffed EOC.
+        if (quantity > 1 && ia.EocLevel < EocLevel.Full && Roll(request.RequestId, 3) < 0.35)
+        {
+            quantity--;
+            reason = $"{agreement.Provider} is keeping one back to cover its own area.";
+        }
+        return (true, quantity, reason);
+    }
+
     /// <summary>New units join the roster at the edge of the area and are dispatched straight to the incident.</summary>
-    private void Deliver(SimulationContext context, ResourceRequested request)
+    private void Deliver(SimulationContext context, ResourceRequested request, MutualAidAgreementRegistered? agreement, int quantity)
     {
         var unitType = request.UnitType ?? UnitType.Engine;
         var agencyType = ResourceGroups.AgencyFor(unitType);
-        var provider = request.Kind switch
+        var provider = agreement?.Provider ?? request.Kind switch
         {
             ResourceRequestKind.MutualAid => agencyType switch
             {
@@ -193,16 +258,18 @@ public sealed class CommandResponseSystem : ISimulationSystem
             ResourceRequestKind.SpecialistTeam => "National Specialist Teams",
             _ => null, // our own service, from outside the operational area
         };
+        if (agreement is not null)
+            context.World.Interagency.Provided[agreement.AgreementId] = context.World.Interagency.Provided.GetValueOrDefault(agreement.AgreementId) + quantity;
 
         Guid? agencyId = provider is not null
-            ? ProviderAgency(context, provider, agencyType)
+            ? ProviderAgency(context, provider, agencyType, agreement)
             : context.World.Agencies.Where(a => a.Value.Type == agencyType && !a.Value.AiControlled)
                 .Select(a => (Guid?)a.Key).FirstOrDefault();
 
         var prefix = provider is null ? "Relief" : provider.Split(' ')[0];
         var entry = EntryPoints[_arrivals % EntryPoints.Length];
         var units = new List<Guid>();
-        for (var i = 0; i < request.Quantity; i++)
+        for (var i = 0; i < quantity; i++)
         {
             var unitId = Guid.NewGuid();
             var callsign = $"{prefix} {ResourceGroups.Label(unitType)} {++_arrivals}";
@@ -217,13 +284,14 @@ public sealed class CommandResponseSystem : ISimulationSystem
         context.EmitPerceived(new ResourceRequestFulfilled(request.RequestId, units), EventSources.Engine);
     }
 
-    private Guid ProviderAgency(SimulationContext context, string provider, AgencyType type)
+    private Guid ProviderAgency(SimulationContext context, string provider, AgencyType type, MutualAidAgreementRegistered? agreement)
     {
         if (_providerAgencies.TryGetValue(provider, out var id)) return id;
         id = Guid.NewGuid();
         _providerAgencies[provider] = id;
         var shortName = string.Concat(provider.Split(' ').Select(w => char.IsUpper(w[0]) ? w[0].ToString() : ""));
-        context.EmitPerceived(new AgencyRegistered(id, provider, shortName, type, RadioChannel: ProviderRadio(provider)), EventSources.Engine);
+        context.EmitPerceived(new AgencyRegistered(id, provider, shortName, type, RadioChannel: agreement?.RadioChannel ?? ProviderRadio(provider),
+            Jurisdiction: agreement?.ProviderJurisdiction), EventSources.Engine);
         return id;
     }
 

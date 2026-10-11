@@ -149,6 +149,36 @@ public interface IC2Service
 
     /// <summary>Ask the peer support team to see a crew after a traumatic incident (psychological first aid).</summary>
     Task<CommandResult> ArrangePeerSupportAsync(Guid unitId, CancellationToken cancellationToken = default);
+
+    // ---- Multi-agency (Design Document §14) ----
+
+    /// <summary>
+    /// Ask another agency's commander to share command of the incident (Unified Command). An agency with no stake in it
+    /// declines; one that joins lets command task its units there and shares what it knows at once.
+    /// </summary>
+    Task<CommandResult> InviteToUnifiedCommandAsync(Guid incidentId, Guid agencyId, CancellationToken cancellationToken = default);
+
+    /// <summary>Ask an agency run by another control room to release some of its units to the incident.</summary>
+    Task<CommandResult> RequestAgencyAssistanceAsync(Guid agencyId, Guid incidentId, int quantity, string task,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Ask an agency to share what it knows.</summary>
+    Task<CommandResult> RequestAgencyBriefingAsync(Guid agencyId, CancellationToken cancellationToken = default);
+
+    /// <summary>Answer an authority dispute: concede, negotiate, assert command's authority, or escalate to the EOC.</summary>
+    Task<CommandResult> ResolveDisputeAsync(Guid disputeId, DisputeResolution resolution, CancellationToken cancellationToken = default);
+
+    /// <summary>Stand the Emergency Operations Centre up (or down) to a level; staffing up takes time.</summary>
+    Task<CommandResult> SetEocLevelAsync(EocLevel level, string? reason = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Send the EOC a situation report.</summary>
+    Task<CommandResult> SubmitSitrepAsync(string text, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// A statement to the public and the media, through the PIO (or the IC if there is none). With a joint information
+    /// centre working, it goes out as every agency's agreed line.
+    /// </summary>
+    Task<CommandResult> IssuePublicStatementAsync(string text, Guid? incidentId = null, CancellationToken cancellationToken = default);
 }
 
 /// <param name="EntityId">Id of anything the command created, e.g. a new incident.</param>

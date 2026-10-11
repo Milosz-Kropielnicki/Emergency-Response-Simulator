@@ -46,6 +46,7 @@ public sealed class MapController
     private readonly GeoPoint _home;
 
     private readonly Dictionary<string, MemoryLayer> _staticLayers = [];
+    private readonly MemoryLayer _jurisdictions = new("Jurisdictions");
     private readonly MemoryLayer _zones = new("Zones");
     private readonly MemoryLayer _reports = new("Reports");
     private readonly MemoryLayer _incidents = new("Incidents");
@@ -100,7 +101,7 @@ public sealed class MapController
 
         foreach (var layer in new[]
                  {
-                     _traffic, _zones, _truth, _reports, _routes, _trails, _people, _incidents, _hospitals, _units, _trueUnits, _weather, _drawing,
+                     _traffic, _jurisdictions, _zones, _truth, _reports, _routes, _trails, _people, _incidents, _hospitals, _units, _trueUnits, _weather, _drawing,
                  })
         {
             layer.Features = [];
@@ -364,9 +365,26 @@ public sealed class MapController
 
         _hospitals.Features = IsOn(MapLayerKeys.Hospitals) ? _cop.Hospitals.Select(HospitalFeature).ToList() : [];
 
-        foreach (var layer in new[] { _zones, _reports, _routes, _trails, _incidents, _hospitals, _units, _weather })
+        _jurisdictions.Features = IsOn(MapLayerKeys.Jurisdictions) ? _cop.Jurisdictions.Select(JurisdictionFeature).ToList() : [];
+
+        foreach (var layer in new[] { _jurisdictions, _zones, _reports, _routes, _trails, _incidents, _hospitals, _units, _weather })
             layer.DataHasChanged();
         _map.RefreshGraphics();
+    }
+
+    private static IFeature JurisdictionFeature(Jurisdiction jurisdiction)
+    {
+        var lines = new List<string>
+        {
+            $"{MainViewModel.Humanize(jurisdiction.Level)} jurisdiction",
+            $"Authority: {jurisdiction.Authority}",
+        };
+        if (jurisdiction.Powers is { } powers) lines.Add($"Answers for {powers}");
+        if (jurisdiction.RequiresConsent) lines.Add($"Zones reaching in need {jurisdiction.Authority}'s agreement");
+        lines.Add("Boundary is schematic, not surveyed");
+        var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(jurisdiction.Boundary)), jurisdiction.Name, [.. lines], label: jurisdiction.Name);
+        AddStyles(feature, MapStyles.Jurisdiction(jurisdiction.Level, jurisdiction.RequiresConsent));
+        return feature;
     }
 
     private static IFeature ZoneFeature(Zone zone)
@@ -685,7 +703,8 @@ public sealed class MapController
 
         if (e.GestureType != GestureType.SingleTap) return;
 
-        var info = e.GetMapInfo(_map.Layers.Where(l => l.Enabled && l is MemoryLayer && l != _drawing).ToList());
+        // Jurisdictions cover everything: they are listed in the location info rather than caught by every click.
+        var info = e.GetMapInfo(_map.Layers.Where(l => l.Enabled && l is MemoryLayer && l != _drawing && l != _jurisdictions).ToList());
         if (info.Feature is { } feature && feature[InfoTitleField] is string title)
         {
             if (feature[IncidentIdField] is Guid incidentId)
@@ -709,16 +728,20 @@ public sealed class MapController
     private async Task ShowLocationInfoAsync(GeoPoint point)
     {
         var header = $"{point.Latitude:F5}, {point.Longitude:F5}";
+        // Who answers for this spot, from the most local tier up (Phase 10).
+        var areas = _cop.JurisdictionsAt(point)
+            .Select(j => $"{MainViewModel.Humanize(j.Level)}: {j.Name} ({j.Authority})" + (j.RequiresConsent ? ", consent needed for zones" : ""))
+            .ToList();
         if (_gis is null)
         {
-            _viewModel.ShowInfo(header, ["No GIS database configured."]);
+            _viewModel.ShowInfo(header, [.. areas, "No GIS database configured."]);
             return;
         }
 
-        _viewModel.ShowInfo(header, ["Looking up nearby facilities…"]);
+        _viewModel.ShowInfo(header, [.. areas, "Looking up nearby facilities…"]);
         try
         {
-            var lines = new List<string>();
+            var lines = new List<string>(areas);
             if (await _gis.GetElevationAsync(point) is { } elevation)
                 lines.Add($"Ground elevation: {elevation:F0} m");
 

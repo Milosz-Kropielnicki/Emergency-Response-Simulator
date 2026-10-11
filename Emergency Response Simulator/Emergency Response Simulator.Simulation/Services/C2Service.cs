@@ -14,10 +14,11 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2S
 {
     /// <summary>
     /// Units of an AI-run agency (Design Document §10.3) take orders from their own control room; command can see
-    /// them, and ask for them through a request or notification, but not dispatch them.
+    /// them, and ask for them through a request or notification, but not dispatch them. Phase 10: unless the agency has
+    /// released them to command, or shares command of the incident (Unified Command).
     /// </summary>
-    private static CommandResult? NotUnderCommand(Unit unit) => unit.Agency is { AiControlled: true } agency
-        ? CommandResult.Fail($"{unit.Callsign} belongs to {agency.Name}, which is not under your command. Ask them through a notification or mutual-aid request.")
+    private CommandResult? NotUnderCommand(Unit unit, Guid? incidentId = null) => unit.Agency is { AiControlled: true } agency && !cop.UnderCommand(unit, incidentId)
+        ? CommandResult.Fail($"{unit.Callsign} belongs to {agency.Name}, which is not under your command. Ask them for units, or invite them into unified command.")
         : null;
 
     public async Task<CommandResult> DispatchAsync(
@@ -25,7 +26,7 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2S
     {
         if (cop.FindUnit(unitId) is not { } unit)
             return CommandResult.Fail("Unknown unit.");
-        if (NotUnderCommand(unit) is { } refused)
+        if (NotUnderCommand(unit, incidentId) is { } refused)
             return refused;
         if (cop.FindIncident(incidentId) is not { } incident)
             return CommandResult.Fail("Unknown incident.");
@@ -55,7 +56,7 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2S
     {
         if (cop.FindUnit(unitId) is not { } unit)
             return CommandResult.Fail("Unknown unit.");
-        if (NotUnderCommand(unit) is { } refused)
+        if (NotUnderCommand(unit, newIncidentId) is { } refused)
             return refused;
         if (unit.Status == UnitStatus.OutOfService)
             return CommandResult.Fail($"{unit.Callsign} is out of service.");
@@ -579,6 +580,109 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2S
         var notificationId = Guid.NewGuid();
         var result = await PublishAsync(new NotificationSent(notificationId, incidentId, recipient.Trim(), message.Trim()), cancellationToken);
         return result with { EntityId = notificationId };
+    }
+
+    // ---- Multi-agency (Design Document §14) ----
+
+    public async Task<CommandResult> InviteToUnifiedCommandAsync(Guid incidentId, Guid agencyId, CancellationToken cancellationToken = default)
+    {
+        if (cop.FindIncident(incidentId) is not { } incident)
+            return CommandResult.Fail("Unknown incident.");
+        if (incident.Status == IncidentStatus.Closed)
+            return CommandResult.Fail($"{incident.Number} is closed.");
+        if (cop.Agencies.FirstOrDefault(a => a.Id == agencyId) is not { } agency)
+            return CommandResult.Fail("Unknown agency.");
+        if (!agency.AiControlled)
+            return CommandResult.Fail($"{agency.Name} is already under your command.");
+        if (incident.Command.InUnifiedCommand(agencyId))
+            return CommandResult.Fail($"{agency.Name} already shares command of {incident.Number}.");
+        if (cop.UnifiedCommandInvitations.Any(i => i.IncidentId == incidentId && i.AgencyId == agencyId && i.Accepted is null))
+            return CommandResult.Fail($"{agency.Name} hasn't answered your last invitation yet.");
+
+        return await PublishAsync(new UnifiedCommandInvited(incidentId, agencyId), cancellationToken);
+    }
+
+    public async Task<CommandResult> RequestAgencyAssistanceAsync(Guid agencyId, Guid incidentId, int quantity, string task,
+        CancellationToken cancellationToken = default)
+    {
+        if (cop.Agencies.FirstOrDefault(a => a.Id == agencyId) is not { } agency)
+            return CommandResult.Fail("Unknown agency.");
+        if (!agency.AiControlled)
+            return CommandResult.Fail($"{agency.Name}'s units are already yours to dispatch.");
+        if (cop.Units.All(u => u.AgencyId != agencyId))
+            return CommandResult.Fail($"{agency.Name} has no units of its own to send.");
+        if (cop.FindIncident(incidentId) is not { } incident)
+            return CommandResult.Fail("Unknown incident.");
+        if (incident.Status == IncidentStatus.Closed)
+            return CommandResult.Fail($"{incident.Number} is closed.");
+        if (quantity is < 1 or > 10)
+            return CommandResult.Fail("Ask for between 1 and 10 units.");
+        if (cop.AssistanceRequests.Any(r => r.AgencyId == agencyId && r.Granted is null))
+            return CommandResult.Fail($"{agency.Name} is still considering your last request.");
+
+        var requestId = Guid.NewGuid();
+        var result = await PublishAsync(new AgencyAssistanceRequested(requestId, agencyId, incidentId, quantity,
+            string.IsNullOrWhiteSpace(task) ? $"Assist at {incident.Number}" : task.Trim()), cancellationToken);
+        return result with { EntityId = requestId };
+    }
+
+    public async Task<CommandResult> RequestAgencyBriefingAsync(Guid agencyId, CancellationToken cancellationToken = default)
+    {
+        if (cop.Agencies.FirstOrDefault(a => a.Id == agencyId) is not { } agency)
+            return CommandResult.Fail("Unknown agency.");
+        if (!agency.AiControlled)
+            return CommandResult.Fail($"{agency.Name} reports to you already.");
+        return await PublishAsync(new AgencyBriefingRequested(agencyId), cancellationToken);
+    }
+
+    public async Task<CommandResult> ResolveDisputeAsync(Guid disputeId, DisputeResolution resolution, CancellationToken cancellationToken = default)
+    {
+        if (cop.Disputes.FirstOrDefault(d => d.Id == disputeId) is not { } dispute)
+            return CommandResult.Fail("Unknown dispute.");
+        if (!dispute.IsOpen)
+            return CommandResult.Fail("That dispute is settled.");
+        if (dispute.Status != DisputeStatus.Open)
+            return CommandResult.Fail(dispute.Status == DisputeStatus.Negotiating ? "Talks are already under way." : "The EOC is already deciding it.");
+        if (resolution == DisputeResolution.Escalate && cop.Eoc.Level < EocLevel.Partial)
+            return CommandResult.Fail($"Escalation needs the EOC at partial activation or above; it is at {EocLevels.Label(cop.Eoc.Level).ToLowerInvariant()}.");
+
+        return await PublishAsync(new DisputeResolutionChosen(disputeId, resolution), cancellationToken);
+    }
+
+    public async Task<CommandResult> SetEocLevelAsync(EocLevel level, string? reason = null, CancellationToken cancellationToken = default)
+    {
+        var eoc = cop.Eoc;
+        if ((eoc.Requested ?? eoc.Level) == level)
+            return CommandResult.Fail(eoc.Requested == level ? $"The EOC is already staffing up to {EocLevels.Label(level).ToLowerInvariant()}." : $"The EOC is already at {EocLevels.Label(level).ToLowerInvariant()}.");
+        return await PublishAsync(new EocActivationRequested(level, string.IsNullOrWhiteSpace(reason) ? null : reason.Trim()), cancellationToken);
+    }
+
+    public async Task<CommandResult> SubmitSitrepAsync(string text, CancellationToken cancellationToken = default)
+    {
+        if (cop.Eoc.Level == EocLevel.Normal)
+            return CommandResult.Fail("The EOC isn't activated: there is nobody to send a situation report to.");
+        if (string.IsNullOrWhiteSpace(text))
+            return CommandResult.Fail("Write the situation report.");
+        var sitrepId = Guid.NewGuid();
+        var result = await PublishAsync(new SitrepSubmitted(sitrepId, text.Trim()), cancellationToken);
+        return result with { EntityId = sitrepId };
+    }
+
+    public async Task<CommandResult> IssuePublicStatementAsync(string text, Guid? incidentId = null, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return CommandResult.Fail("Write the statement.");
+        var incident = incidentId is { } id ? cop.FindIncident(id) : null;
+        if (incidentId is not null && incident is null)
+            return CommandResult.Fail("Unknown incident.");
+
+        var pio = incident?.Command.Positions.GetValueOrDefault(IcsRole.PublicInformation)
+                  ?? cop.Incidents.Select(i => i.Command.Positions.GetValueOrDefault(IcsRole.PublicInformation)).FirstOrDefault(n => n is not null);
+        var issuer = pio is not null ? $"PIO {pio}" : "Incident Commander";
+        var statementId = Guid.NewGuid();
+        var result = await PublishAsync(new PublicStatementIssued(statementId, incidentId, issuer, text.Trim(), cop.JointInformationCentre(incidentId)),
+            cancellationToken);
+        return result with { EntityId = statementId };
     }
 
     /// <summary>The new value if it differs from the current one, otherwise null (no change).</summary>

@@ -192,8 +192,81 @@ public static class BarrowStreetScenario
                 context => UnitIdByCallsign(context, "Engine 7") is { } engine7
                     ? [Truth(new UnitRadioFailed(engine7, Failed: false))]
                     : []),
+
+            // ---- Multi-agency (Phase 10): what the other agencies know, which reaches command only if they share it ----
+
+            new(TimeSpan.FromMinutes(6.5), "Garda Roads Policing see people trapped on a balcony (held: information silo)",
+                context => Held(context, DemoRosterScenario.Agencies.RoadsPolicing,
+                    "Our patrol on Grand Canal Street saw two people on a third-floor balcony of the Barrow Street apartments waving for help. " +
+                    "Smoke is getting into the building.", GeoMath.Destination(FireLocation, 40, 120), urgent: true)),
+
+            new(TimeSpan.FromMinutes(7.5), "The Health and Safety Authority's register shows what unit 4 stores (held)",
+                context => Held(context, DemoRosterScenario.Agencies.SafetyRegulator,
+                    "Our register shows unit 4 next to the warehouse holds up to 1,000 kg of hypochlorite cleaning products. Heat, or water " +
+                    "on the drums, gives off chlorine gas.", ChemicalStore, urgent: true)),
+
+            new(TimeSpan.FromMinutes(8), "Waterways Ireland: people living on boats in the basin, downwind (held)",
+                context => Held(context, DemoRosterScenario.Agencies.Waterways,
+                    "About 15 people live on boats moored in Grand Canal Dock, and the water-sports centre on Hanover Quay has a youth " +
+                    "group out on the water.", BasinCentre, urgent: true)),
+
+            new(TimeSpan.FromMinutes(10), "Dublin City Council: the rest centre is smaller than the Garda think (held)",
+                context => Held(context, DemoRosterScenario.Agencies.Council,
+                    "Pearse Street community centre can take 120 people, not 200. We can open St. Andrew's Resource Centre on Pearse " +
+                    "Street as an overflow if asked.", null, urgent: false)),
+
+            new(TimeSpan.FromMinutes(11), "Garda intelligence on the warehouse tenant (held)",
+                context => Held(context, DemoRosterScenario.Agencies.Investigators,
+                    "Intelligence: the warehouse tenant is under investigation for storing unlicensed chemicals. Expect more drums than " +
+                    "declared, and treat the seat of the explosion as a crime scene.", FireLocation, urgent: false)),
+
+            new(TimeSpan.FromMinutes(1), "HSE Public Health hears of chlorine symptoms downwind (held, once a release has run 3 min)",
+                context => Held(context, DemoRosterScenario.Agencies.PublicHealth,
+                    "GPs in Ringsend are ringing us about people with stinging eyes and coughs. It looks like chlorine is reaching there.",
+                    GeoMath.Destination(FireLocation, 30, 700), urgent: true),
+                Condition: context => ChlorineRelease(context) is { } release && context.SimTime - release.StartedAt >= TimeSpan.FromMinutes(3),
+                Until: TimeSpan.FromMinutes(60)),
+
+            new(TimeSpan.FromMinutes(12), "The Garda investigators claim the lead: a possible crime scene (authority dispute)",
+                context => LeadClaim(context),
+                Condition: context => OpenIncidentHere(context) is not null && FireBurning(context),
+                Until: TimeSpan.FromMinutes(40)),
         ]);
     }
+
+    /// <summary>The middle of Grand Canal Dock basin, north of the fire and downwind once the wind backs.</summary>
+    public static readonly GeoPoint BasinCentre = new(53.34310, -6.23590);
+
+    private static IEnumerable<(EventVisibility, DomainEvent)> Held(SimulationContext context, string agency, string claim, GeoPoint? location, bool urgent) =>
+        AgencyIdByName(context, agency) is { } id
+            ? [Truth(new InformationHeld(Guid.NewGuid(), id, claim, location, urgent))]
+            : [];
+
+    private static IEnumerable<(EventVisibility, DomainEvent)> LeadClaim(SimulationContext context)
+    {
+        if (OpenIncidentHere(context) is not { } incident || AgencyIdByName(context, DemoRosterScenario.Agencies.Investigators) is not { } investigators)
+            return [];
+        const string agency = DemoRosterScenario.Agencies.Investigators;
+        const string position = "The explosion may be criminal. The Garda should take the lead now, and the warehouse be preserved as a crime " +
+                                "scene: no overhaul, and no more water on the seat of the explosion than is needed.";
+        CommsNet.Chat(context, agency, $"Detective Superintendent, {agency}: {position}", null, TimeSpan.Zero);
+        return [Perceived(new DisputeRaised(Guid.NewGuid(), incident, DisputeKind.LeadAgency, investigators, agency,
+            "Who leads at the warehouse", position,
+            "The Garda Síochána investigate suspected crime; under the major emergency framework the lead can pass to them once the scene is a crime scene."))];
+    }
+
+    private static Guid? OpenIncidentHere(SimulationContext context) =>
+        context.World.Interagency.Incidents
+            .Where(i => !i.Value.Closed && GeoMath.DistanceMeters(i.Value.Location, FireLocation) < 500)
+            .OrderBy(i => i.Value.CreatedAt)
+            .Select(i => (Guid?)i.Key)
+            .FirstOrDefault();
+
+    private static bool FireBurning(SimulationContext context) =>
+        context.World.Hazards.Values.Any(h => h.Kind == HazardKind.Fire && !h.Ended);
+
+    private static Guid? AgencyIdByName(SimulationContext context, string name) =>
+        context.World.Agencies.Where(a => a.Value.Name == name).Select(a => (Guid?)a.Key).FirstOrDefault();
 
     /// <summary>Scripted 999 calls ring the line like anyone else's: they can queue for a call-taker.</summary>
     private static IEnumerable<(EventVisibility, DomainEvent)> Call(SimulationContext context, PendingCall call)

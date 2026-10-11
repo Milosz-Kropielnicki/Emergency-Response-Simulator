@@ -74,6 +74,14 @@ public sealed class CopView : ICopService
     public IReadOnlyList<OperationalPeriod> OperationalPeriods => _current.OperationalPeriods;
     public IReadOnlyList<IncidentActionPlan> ActionPlans => _current.ActionPlans;
     public IReadOnlyDictionary<Guid, ObjectiveStatus> ObjectiveProgress => _current.ObjectiveProgress;
+    public IReadOnlyList<Jurisdiction> Jurisdictions => _current.Jurisdictions;
+    public IReadOnlyList<MutualAidAgreement> MutualAidAgreements => _current.MutualAidAgreements;
+    public IReadOnlyList<UnifiedCommandInvitation> UnifiedCommandInvitations => _current.UnifiedCommandInvitations;
+    public IReadOnlyList<AssistanceRequest> AssistanceRequests => _current.AssistanceRequests;
+    public IReadOnlyList<AuthorityDispute> Disputes => _current.Disputes;
+    public EocStatus Eoc => _current.Eoc;
+    public IReadOnlyList<PublicStatement> PublicStatements => _current.PublicStatements;
+    public IReadOnlyList<MediaEnquiry> MediaEnquiries => _current.MediaEnquiries;
     public Incident? FindIncident(Guid incidentId) => _current.FindIncident(incidentId);
     public Unit? FindUnit(Guid unitId) => _current.FindUnit(unitId);
 }

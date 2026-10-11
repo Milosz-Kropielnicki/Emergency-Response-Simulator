@@ -9,7 +9,10 @@ namespace Emergency_Response_Simulator.Simulation.State;
 // advanced by simulation systems one tick at a time and never shown to the trainee directly.
 
 /// <param name="RadioChannel">The agency's own radio system, when it is not on ours.</param>
-public sealed record WorldAgency(string Name, AgencyType Type, bool AiControlled = false, string? RadioChannel = null);
+/// <param name="Priority">What its commander pushes for at a joint incident (Phase 10).</param>
+/// <param name="PriorityTerms">Words an IAP objective must use to cover that priority.</param>
+public sealed record WorldAgency(string Name, AgencyType Type, bool AiControlled = false, string? RadioChannel = null,
+    string? Jurisdiction = null, string? Priority = null, IReadOnlyList<string>? PriorityTerms = null);
 
 /// <summary>A physical hazard and the model that advances it.</summary>
 public sealed class WorldHazard

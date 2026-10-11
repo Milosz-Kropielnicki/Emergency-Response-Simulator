@@ -838,6 +838,197 @@
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
+                    <!-- Multi-agency command (Phase 10, Design Document §14) -->
+                    <TabItem DataContext="{Binding Agencies}">
+                        <TabItem.Header>
+                            <TextBlock x:Name="AgenciesHeader" Text="{Binding TabHeader}" />
+                        </TabItem.Header>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="2">
+                                <!-- Authority disputes: the most urgent thing here -->
+                                <ItemsControl ItemsSource="{Binding Disputes}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:DisputeRow}">
+                                            <Border x:Name="Card" BorderBrush="{StaticResource WarningBrush}" BorderThickness="2" CornerRadius="3" Padding="8,6" Margin="0,0,0,8">
+                                                <StackPanel>
+                                                    <TextBlock x:Name="Title" Text="{Binding Title}" FontWeight="Bold" Foreground="{StaticResource WarningBrush}" TextWrapping="Wrap" />
+                                                    <TextBlock FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap">
+                                                        <Run Text="{Binding Agency, Mode=OneWay}" /> · <Run Text="{Binding Time, Mode=OneWay}" />
+                                                    </TextBlock>
+                                                    <TextBlock Text="{Binding Position}" TextWrapping="Wrap" Margin="0,2,0,2" />
+                                                    <TextBlock Text="{Binding Basis}" FontSize="11" FontStyle="Italic" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock Text="{Binding Status}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0" />
+                                                    <UniformGrid Columns="4" Margin="0,4,0,0" Visibility="{Binding CanAnswer, Converter={StaticResource BoolToVisibility}}">
+                                                        <Button Content="Concede" Padding="4,2" Margin="0,0,2,0" ToolTip="{Binding ConcedeTip}"
+                                                                Command="{Binding DataContext.Agencies.ConcedeCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding Id}" />
+                                                        <Button Content="Negotiate" Padding="4,2" Margin="2,0" ToolTip="{Binding NegotiateTip}" FontWeight="SemiBold"
+                                                                Command="{Binding DataContext.Agencies.NegotiateCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding Id}" />
+                                                        <Button Content="Assert" Padding="4,2" Margin="2,0" ToolTip="{Binding AssertTip}"
+                                                                Command="{Binding DataContext.Agencies.AssertCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding Id}" />
+                                                        <Button Content="Escalate" Padding="4,2" Margin="2,0,0,0" ToolTip="{Binding EscalateTip}"
+                                                                Command="{Binding DataContext.Agencies.EscalateCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding Id}" />
+                                                    </UniformGrid>
+                                                </StackPanel>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Settled}" Value="True">
+                                                    <Setter TargetName="Card" Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+                                                    <Setter TargetName="Card" Property="BorderThickness" Value="1" />
+                                                    <Setter TargetName="Title" Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Unified command of the selected incident -->
+                                <TextBlock Text="COMMAND (selected incident)" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Text="{Binding IncidentLabel}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding CommandSummary}" FontSize="11" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding JurisdictionSummary}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}"
+                                           Visibility="{Binding JurisdictionSummary, Converter={x:Static vm:Converters.TextToVisible}}" />
+                                <ItemsControl ItemsSource="{Binding Members}" Margin="0,4,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:MemberRow}">
+                                            <TextBlock TextWrapping="Wrap" FontSize="11" Margin="0,1">
+                                                <Run Text="{Binding Commander, Mode=OneWay}" FontWeight="SemiBold" /> (<Run Text="{Binding Agency, Mode=OneWay}" />) · <Run Text="{Binding Detail, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <DockPanel Margin="0,4,0,8">
+                                    <Button DockPanel.Dock="Right" Content="Invite to unified command" Command="{Binding InviteCommand}" Margin="4,0,0,0" Padding="6,0"
+                                            ToolTip="Their commander joins you at the command post: you can task their units here, they share what they know at once, and zones in their area need no separate agreement. Agencies with no stake decline." />
+                                    <ComboBox ItemsSource="{Binding Invitable}" SelectedItem="{Binding Invitee}" DisplayMemberPath="Name" />
+                                </DockPanel>
+
+                                <!-- EOC -->
+                                <TextBlock Text="EMERGENCY OPERATIONS CENTRE" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Text="{Binding EocStatus}" TextWrapping="Wrap" FontWeight="SemiBold" />
+                                <DockPanel Margin="0,4,0,2">
+                                    <Button DockPanel.Dock="Right" Content="Set level" Command="{Binding SetEocLevelCommand}" Margin="4,0,0,0" Padding="6,0"
+                                            ToolTip="Staffing up takes time (5 min to monitoring, 15 to partial, 30 to full); standing down is immediate" />
+                                    <ComboBox ItemsSource="{Binding EocLevelChoices}" SelectedItem="{Binding SelectedEocLevel}" />
+                                </DockPanel>
+                                <TextBlock Text="{Binding EocImplications}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,4" />
+                                <Expander Header="Seats" FontSize="11" Margin="0,0,0,4">
+                                    <ItemsControl ItemsSource="{Binding EocSeats}" Margin="12,2,0,0">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:SeatRow}">
+                                                <TextBlock x:Name="Seat" Text="{Binding Function}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                <DataTemplate.Triggers>
+                                                    <DataTrigger Binding="{Binding Staffed}" Value="True">
+                                                        <Setter TargetName="Seat" Property="Foreground" Value="{StaticResource OkBrush}" />
+                                                    </DataTrigger>
+                                                </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Expander>
+                                <TextBlock x:Name="SitrepDueText" Text="{Binding SitrepDue}" FontSize="11" TextWrapping="Wrap" />
+                                <TextBox Text="{Binding SitrepText, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="40" Margin="0,2,0,2"
+                                         ToolTip="Situation report for the EOC. 'Draft from COP' fills it in." />
+                                <UniformGrid Columns="2" Margin="0,0,0,8">
+                                    <Button Content="Draft from COP" Command="{Binding DraftSitrepCommand}" Margin="0,0,2,0" Padding="6,2" />
+                                    <Button Content="Send sitrep" Command="{Binding SendSitrepCommand}" Margin="2,0,0,0" Padding="6,2" />
+                                </UniformGrid>
+
+                                <!-- Public information -->
+                                <TextBlock Text="PUBLIC INFORMATION" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Text="{Binding PioSummary}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                <TextBox Text="{Binding StatementText, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="40" Margin="0,4,0,2"
+                                         ToolTip="Tell the public what to do (evacuate, stay indoors, avoid the area): warned people act sooner, and more of them do" />
+                                <Button Content="Issue statement" Command="{Binding IssueStatementCommand}" Padding="6,2" Margin="0,0,0,4" HorizontalAlignment="Right" />
+                                <ItemsControl ItemsSource="{Binding Enquiries}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:EnquiryRow}">
+                                            <StackPanel Margin="0,2">
+                                                <TextBlock x:Name="Header" Text="{Binding Header}" FontSize="11" Foreground="{StaticResource WarningBrush}" TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding Question}" FontSize="11" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Answered}" Value="True">
+                                                    <Setter TargetName="Header" Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <ItemsControl ItemsSource="{Binding Statements}" Margin="0,4,0,8">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:StatementRow}">
+                                            <StackPanel Margin="0,2">
+                                                <TextBlock x:Name="Header" Text="{Binding Header}" FontSize="11" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding Text}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                            </StackPanel>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Conflicting}" Value="True">
+                                                    <Setter TargetName="Header" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Other agencies -->
+                                <TextBlock Text="OTHER AGENCIES" Style="{StaticResource PanelHeader}" />
+                                <DockPanel Margin="0,0,0,4">
+                                    <TextBlock DockPanel.Dock="Left" Text="Ask for" VerticalAlignment="Center" Margin="0,0,4,0" FontSize="11" />
+                                    <TextBox DockPanel.Dock="Left" Text="{Binding AskQuantity}" Width="28" Margin="0,0,4,0" ToolTip="How many units to ask for" />
+                                    <TextBlock DockPanel.Dock="Left" Text="unit(s) for" VerticalAlignment="Center" Margin="0,0,4,0" FontSize="11" />
+                                    <TextBox Text="{Binding AskTask, UpdateSourceTrigger=PropertyChanged}" ToolTip="What the units are for (their control room decides how many to release)" />
+                                </DockPanel>
+                                <ItemsControl ItemsSource="{Binding Agencies}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:AgencyRow}">
+                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="3" Padding="8,6" Margin="0,0,0,6">
+                                                <StackPanel>
+                                                    <DockPanel>
+                                                        <TextBlock x:Name="Standing" DockPanel.Dock="Right" Text="{Binding Standing}" FontSize="11" Foreground="{StaticResource OkBrush}"
+                                                                   VerticalAlignment="Center" ToolTip="How the agency feels about you: overruling it makes it slower to share and quicker to object" />
+                                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                    </DockPanel>
+                                                    <TextBlock Text="{Binding Detail}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock Text="{Binding Priority}" FontSize="11" TextWrapping="Wrap" FontStyle="Italic"
+                                                               Visibility="{Binding Priority, Converter={x:Static vm:Converters.TextToVisible}}" />
+                                                    <TextBlock Text="{Binding Role}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource AccentBrush}"
+                                                               Visibility="{Binding Role, Converter={x:Static vm:Converters.TextToVisible}}" />
+                                                    <WrapPanel Margin="0,4,0,0">
+                                                        <Button Content="Ask for units" Padding="6,0" FontSize="11" Margin="0,0,4,2" IsEnabled="{Binding HasUnits}"
+                                                                Command="{Binding DataContext.Agencies.AskForUnitsCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding Id}" ToolTip="Ask their control room to release units to the selected incident; they keep a reserve for their own area" />
+                                                        <Button Content="Ask what they know" Padding="6,0" FontSize="11" Margin="0,0,4,2"
+                                                                Command="{Binding DataContext.Agencies.BriefingCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding Id}" ToolTip="Agencies keep what they know to themselves unless asked, in unified command, or rung by your liaison officer" />
+                                                    </WrapPanel>
+                                                </StackPanel>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding StandingWarning}" Value="True">
+                                                    <Setter TargetName="Standing" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Mutual aid -->
+                                <Expander Header="Mutual-aid agreements" Margin="0,4,0,0">
+                                    <ItemsControl ItemsSource="{Binding Agreements}" Margin="4,2,0,0">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:AgreementRow}">
+                                                <StackPanel Margin="0,0,0,6">
+                                                    <TextBlock Text="{Binding Provider}" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding Covers}" FontSize="11" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding Terms}" FontSize="11" TextWrapping="Wrap" FontStyle="Italic" Foreground="{StaticResource MutedTextBrush}" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Expander>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
                 </TabControl>
             </Border>
         </Grid>

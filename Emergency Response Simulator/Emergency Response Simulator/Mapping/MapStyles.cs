@@ -329,6 +329,35 @@ public static class MapStyles
         };
     }
 
+    /// <summary>
+    /// A jurisdiction boundary (Phase 10): dashed outline by tier; estates whose authority must agree measures inside are
+    /// lightly filled so a zone reaching into one stands out.
+    /// </summary>
+    public static IStyle Jurisdiction(JurisdictionLevel level, bool requiresConsent)
+    {
+        var color = requiresConsent ? new Color(210, 60, 200) : level switch
+        {
+            JurisdictionLevel.City => new Color(240, 140, 30),
+            JurisdictionLevel.County => new Color(30, 170, 170),
+            JurisdictionLevel.Regional => new Color(110, 120, 170),
+            _ => new Color(150, 150, 150),
+        };
+        var styles = new StyleCollection
+        {
+            Styles =
+            {
+                new VectorStyle
+                {
+                    Fill = new Brush(Color.FromArgb(requiresConsent ? 40 : 0, color.R, color.G, color.B)),
+                    Outline = new Pen(color, requiresConsent ? 2.5 : 2) { PenStyle = PenStyle.DashDot },
+                },
+            },
+        };
+        if (requiresConsent || level is JurisdictionLevel.City or JurisdictionLevel.County)
+            styles.Styles.Add(ZoneLabel(color));
+        return styles;
+    }
+
     private static LabelStyle ZoneLabel(Color color) => new()
     {
         LabelColumn = LabelField, ForeColor = Color.White, BackColor = new Brush(Color.FromArgb(200, color.R / 2, color.G / 2, color.B / 2)),
