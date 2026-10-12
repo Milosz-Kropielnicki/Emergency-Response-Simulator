@@ -136,7 +136,32 @@
                                     <DataGridTextColumn Header="Their decisions" Binding="{Binding Ratings}" Width="170" />
                                     <DataGridTextColumn Header="Mean response" Binding="{Binding Response}" Width="100" />
                                     <DataGridTextColumn Header="Score" Binding="{Binding Score}" Width="70" />
+                                    <DataGridTextColumn Header="Observers" Binding="{Binding Observers}" Width="170" />
+                                    <DataGridTextColumn Header="Overall" Binding="{Binding Overall}" Width="150" />
                                     <DataGridTextColumn Header="Mostly" Binding="{Binding Focus}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+
+                        <!-- Observers' notes (Phase 11 M6) -->
+                        <StackPanel Visibility="{Binding HasNotes, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="OBSERVER NOTES" Style="{StaticResource PanelHeader}" />
+                            <DataGrid ItemsSource="{Binding Notes}" Margin="0,0,0,12">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="70" />
+                                    <DataGridTextColumn Header="Participant" Binding="{Binding Participant}" Width="120" />
+                                    <DataGridTextColumn Header="Rating" Binding="{Binding Rating}" Width="120" />
+                                    <DataGridTemplateColumn Header="Note" Width="*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate><TextBlock Text="{Binding Note}" Style="{StaticResource Wrap}" /></DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Header="About" Width="220">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate><TextBlock Text="{Binding About}" Style="{StaticResource Muted}" /></DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="By" Binding="{Binding By}" Width="140" />
                                 </DataGrid.Columns>
                             </DataGrid>
                         </StackPanel>

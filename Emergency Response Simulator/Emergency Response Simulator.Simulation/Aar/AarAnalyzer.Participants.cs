@@ -86,10 +86,11 @@ public sealed partial class AarAnalyzer
         var timed = mine.Where(d => d.ResponseTime is not null).Select(d => d.ResponseTime!.Value.TotalSeconds).ToList();
         var present = person.Present + (person.PresentSince is { } since ? End - since : TimeSpan.Zero);
         var focus = string.Join(", ", mine.GroupBy(d => d.Category).OrderByDescending(g => g.Count()).Take(3).Select(g => $"{g.Key} {g.Count()}"));
+        int? score = rated.Count == 0 ? null : (int)Math.Round(100 * rated.Average(d => d.Rating switch { Rating.Good => 1.0, Rating.Fair => 0.5, _ => 0.0 }));
+        var assessed = Assessed(id, score);
         return new AarParticipant(id, person.Name, string.Join(" → ", person.Roles.Select(Roles.Name)), person.JoinedAt, person.LeftAt, present,
             mine.Count, rated.Count(d => d.Rating == Rating.Good), rated.Count(d => d.Rating == Rating.Fair), rated.Count(d => d.Rating == Rating.Poor),
-            timed.Count == 0 ? null : TimeSpan.FromSeconds(timed.Average()),
-            rated.Count == 0 ? null : (int)Math.Round(100 * rated.Average(d => d.Rating switch { Rating.Good => 1.0, Rating.Fair => 0.5, _ => 0.0 })),
-            focus.Length == 0 ? "No commands" : focus);
+            timed.Count == 0 ? null : TimeSpan.FromSeconds(timed.Average()), score, focus.Length == 0 ? "No commands" : focus,
+            assessed.Competent, assessed.Developing, assessed.NotYet, assessed.ObserverScore, assessed.Combined, assessed.Level);
     }).OrderBy(p => p.JoinedAt)];
 }

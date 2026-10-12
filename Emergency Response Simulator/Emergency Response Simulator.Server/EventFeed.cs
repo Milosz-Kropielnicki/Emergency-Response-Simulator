@@ -37,15 +37,32 @@ public sealed class EventFeed : IDisposable
 
     public int Subscribers => _subscribers.Count;
 
-    public static bool Visible(SimEvent simEvent, bool truth) => truth || simEvent.Visibility == EventVisibility.Perceived;
+    /// <summary>
+    /// What a connection may see: perceived events; ground truth with the truth role; and assessment notes for assessors
+    /// (observers and the instructor, Phase 11 M6), with or without truth. Trainees never get a note.
+    /// </summary>
+    public static bool Visible(SimEvent simEvent, bool truth, bool assessor = false) =>
+        truth || simEvent.Visibility == EventVisibility.Perceived || (assessor && simEvent.Payload is AssessmentNoteRecorded);
 
-    public void Subscribe(string connectionId, long afterSequence, bool truth)
+    public void Subscribe(string connectionId, long afterSequence, bool truth, bool assessor = false) =>
+        Start(connectionId, new Subscriber(truth, assessor) { Last = afterSequence }, backfill: false);
+
+    /// <summary>
+    /// The connection's view changed (Phase 11 M6: an observer granted or refused truth, or a new role): carry on from
+    /// where it was with the new view. Newly granted truth first backfills the truth events it missed before now.
+    /// </summary>
+    public void Retune(string connectionId, bool truth, bool assessor)
     {
-        var subscriber = new Subscriber(truth);
+        if (!_subscribers.TryGetValue(connectionId, out var old) || (old.Truth == truth && old.Assessor == assessor)) return;
+        Start(connectionId, new Subscriber(truth, assessor) { Last = old.Last }, backfill: truth && !old.Truth);
+    }
+
+    private void Start(string connectionId, Subscriber subscriber, bool backfill)
+    {
         if (_subscribers.TryRemove(connectionId, out var previous))
             previous.Stop();
         _subscribers[connectionId] = subscriber; // live events queue from here on
-        subscriber.Pump = Task.Run(() => PumpAsync(connectionId, subscriber, afterSequence));
+        subscriber.Pump = Task.Run(() => PumpAsync(connectionId, subscriber, backfill));
     }
 
     public void Unsubscribe(string connectionId)
@@ -58,23 +75,37 @@ public sealed class EventFeed : IDisposable
     {
         if (simEvent.SessionId != _sessionId) return;
         foreach (var subscriber in _subscribers.Values)
-            if (Visible(simEvent, subscriber.Truth))
+            if (Visible(simEvent, subscriber.Truth, subscriber.Assessor))
                 subscriber.Queue.Writer.TryWrite(simEvent);
     }
 
-    private async Task PumpAsync(string connectionId, Subscriber subscriber, long afterSequence)
+    private async Task PumpAsync(string connectionId, Subscriber subscriber, bool backfill)
     {
         var client = _hub.Clients.Client(connectionId);
         var token = subscriber.Stopping.Token;
+        var afterSequence = subscriber.Last;
         var last = afterSequence;
         var batch = new List<SimEvent>(BatchSize);
         try
         {
+            // Truth just granted: the truth events before now, which the client's stream skipped (Phase 11 M6).
+            if (backfill)
+            {
+                await foreach (var simEvent in _store.ReadAsync(_sessionId, 0, token))
+                {
+                    if (simEvent.Sequence > afterSequence) break;
+                    if (simEvent.Visibility != EventVisibility.Truth) continue;
+                    batch.Add(simEvent);
+                    if (batch.Count >= BatchSize) await Backfill();
+                }
+                await Backfill();
+            }
+
             // History the client hasn't applied yet.
             await foreach (var simEvent in _store.ReadAsync(_sessionId, afterSequence, token))
             {
                 last = simEvent.Sequence;
-                if (!Visible(simEvent, subscriber.Truth)) continue;
+                if (!Visible(simEvent, subscriber.Truth, subscriber.Assessor)) continue;
                 batch.Add(simEvent);
                 if (batch.Count >= BatchSize) await Flush();
             }
@@ -102,8 +133,18 @@ public sealed class EventFeed : IDisposable
 
         async Task Flush()
         {
+            if (batch.Count > 0)
+            {
+                await client.Events(batch.ToList());
+                batch.Clear();
+            }
+            subscriber.Last = last; // only once sent: a retune carries on from here, with no gap
+        }
+
+        async Task Backfill()
+        {
             if (batch.Count == 0) return;
-            await client.Events(batch.ToList());
+            await client.Backfill(batch.ToList());
             batch.Clear();
         }
     }
@@ -115,9 +156,14 @@ public sealed class EventFeed : IDisposable
             subscriber.Stop();
     }
 
-    private sealed class Subscriber(bool truth)
+    private sealed class Subscriber(bool truth, bool assessor)
     {
         public bool Truth { get; } = truth;
+        public bool Assessor { get; } = assessor;
+
+        /// <summary>The last sequence sent (or, before anything is, the one the client said it had).</summary>
+        public long Last { get; set; }
+
         public Channel<SimEvent> Queue { get; } = Channel.CreateUnbounded<SimEvent>(new UnboundedChannelOptions { SingleReader = true });
         public CancellationTokenSource Stopping { get; } = new();
         public Task? Pump { get; set; }

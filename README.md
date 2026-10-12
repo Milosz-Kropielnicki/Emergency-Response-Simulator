@@ -608,7 +608,7 @@ The other agencies are now joint partners with priorities and knowledge of their
   - **Mutual-aid agreements**.
   - For the instructor, the truth comparison lists everything agencies know and haven't shared.
 
-## Server & clients (Phase 11, M1–M5)
+## Server & clients (Phase 11, M1–M6)
 
 The engine, event store and live COP can now run once, on a **simulation server**, with any number of WPF clients connected over SignalR. Standalone (everything in one process, as before) is still the default.
 
@@ -762,7 +762,26 @@ dotnet run --project "Emergency Response Simulator.Server" -- --ConnectionString
   - **Getting it back:** the instructor can hand the agency back, and it returns to the simulation automatically if the chief leaves the session.
   - **The permission matrix:** agency chiefs can now task units, checked by C2 against the agency they run. An agency chief's functions never fall to the IC: they belong to another agency.
 
-**Not yet** (later milestones): observers (M6) and voice (M7).
+### Observer mode (M6)
+
+- **Read-only:**
+  - **On the server:** an observer is refused every command, whatever their client sends: C2, IAP, the clock, the instructor console, and handing over a role ("Observers watch: they don't give commands.").
+  - **On the client:** the client is read-only too. `CopView.IsReadOnly` (and `ReadOnlyReason`) generalises `IsReplay`: a replay of the past, or an observing client. Every command button is disabled, and the header says "OBSERVING · read-only".
+- **What they see:** the COP (perceived only), or with ground truth as well when the instructor grants it per observer from the SESSION tab ("Let them see truth" / "Stop", `ObserverTruthChanged`).
+  - **Granting truth:** the server moves their connections into the truth group (world snapshots, live traffic) and retunes their event stream. The truth events they missed are backfilled into their mirror in sequence order, so their history holds the whole stream with no gaps, and new ones follow.
+  - **Taking it away:** stops new truth from then on.
+  - **Only while observing:** a grant lasts only while they observe; given a playing role, they lose it.
+- **Follow participant X:** the observer's view switches to X's role workspace (and again if X's role changes), and goes to the incident or unit of each command X gives, with a running "what they just did" line. The observer's default workspace starts on the ASSESS tab.
+- **Live assessment** (`IAssessmentService`, for observers and the instructor; `AssessmentNoteRecorded`):
+  - **Notes and ratings:** time-stamped notes and ratings on the rubric (Competent / Developing / Not yet competent), tagged to a player and, by default, to that player's latest action (its event sequence). A rating alone, or a note alone, will do.
+  - **Who sees them:** notes are ground truth, so trainees never receive them. Every assessor is sent every note, even an observer without truth, so observers and the instructor mark together.
+  - **Who is assessed:** players only. Nobody assesses themselves, or an observer or the instructor.
+- **In the review:**
+  - **Timeline:** notes appear on it (category ASSESSMENT), and in the participant's own timeline when filtered to them. An Observer notes table shows who, the rating, the note, what it was about (the tagged event, described) and who noted it.
+  - **Per-participant scoring:** how their own decisions rated (0–100) and their observer ratings (Competent 100, Developing 50, Not yet competent 0, averaged) combine evenly. Either stands alone when the other is missing. The result goes back onto the rubric: 75 and over is competent, 40 and over developing.
+  - **Exports:** the HTML and CSV exports include both.
+
+**Not yet** (later milestone): voice (M7).
 
 ## Local setup
 

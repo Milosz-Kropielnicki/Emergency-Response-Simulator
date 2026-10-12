@@ -25,6 +25,7 @@ public sealed class CommandDispatcher
         [SimulationHubProtocol.Services.Control] = typeof(ISimulationControl),
         [SimulationHubProtocol.Services.Aar] = typeof(IAarService),
         [SimulationHubProtocol.Services.Instructor] = typeof(IInstructorService),
+        [SimulationHubProtocol.Services.Assessment] = typeof(IAssessmentService),
     };
 
     private static readonly Dictionary<(string Service, string Method, int Args), MethodInfo> Methods = BuildTable();

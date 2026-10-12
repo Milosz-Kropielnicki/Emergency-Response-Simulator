@@ -82,6 +82,7 @@ public sealed partial class AarAnalyzer
             Findings = [.. Findings(metrics, branches), .. HandoverFindings(), .. PoliticalFindings()],
             Participants = Participants(),
             Instructor = _instructor,
+            Notes = Notes(),
         };
     }
 
@@ -118,6 +119,9 @@ public sealed partial class AarAnalyzer
             case ReportReceived e when !truth:
                 _reports.Add((simEvent.SimTime, e.Location, e.SourceName, e.Claim, e.Source));
                 break;
+            case AssessmentNoteRecorded e:
+                TrackNote(simEvent, e);
+                break;
             case PoliticalCallReceived or PoliticalCallAnswered or PoliticalFallout:
                 TrackPolitical(simEvent);
                 break;
@@ -149,7 +153,8 @@ public sealed partial class AarAnalyzer
         var rolePlay = RolePlayOf(payload);
         if (entry is not null)
             _timeline.Add(new AarTimelineEntry(entry.Sequence, entry.SimTime, entry.Category, entry.Text, decision, truth, entry.Important || decision,
-                simEvent.ActorId, rolePlay is { } playing ? $"Instructor role-play as {playing}" : ActorLabel(simEvent), rolePlay is not null));
+                simEvent.ActorId, rolePlay is { } playing ? $"Instructor role-play as {playing}" : ActorLabel(simEvent), rolePlay is not null,
+                payload is AssessmentNoteRecorded note ? note.ParticipantId : null));
     }
 
     /// <summary>Something the trainee did (through C2 or the IAP builder), as opposed to the world or the engine.</summary>

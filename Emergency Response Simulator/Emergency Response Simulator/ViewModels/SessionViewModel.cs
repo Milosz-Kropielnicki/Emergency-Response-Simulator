@@ -39,6 +39,9 @@ public partial class SessionViewModel : ObservableObject
 
     public bool IsNetworked => _connection is not null;
 
+    /// <summary>This participant sees ground truth now (the instructor, or an observer granted it, Phase 11 M6).</summary>
+    public bool SeesTruth => _connection?.Session?.Truth == true;
+
     public IReadOnlyList<UserRole> RoleChoices { get; } = Enum.GetValues<UserRole>().Where(r => r != UserRole.Instructor).ToList();
 
     public ObservableCollection<ParticipantRow> Participants { get; } = [];
@@ -78,6 +81,17 @@ public partial class SessionViewModel : ObservableObject
     private Task AssignAsync() => Selected is { } who
         ? Run(() => _connection!.AssignRoleAsync(who.Id, AssignRole), $"{who.Name} is now {Roles.Name(AssignRole)}")
         : Fail("Choose a participant.");
+
+    /// <summary>Lets the selected observer see ground truth (Phase 11 M6).</summary>
+    [RelayCommand]
+    private Task GrantTruthAsync() => Selected is { } who
+        ? Run(() => _connection!.SetObserverTruthAsync(who.Id, true), $"{who.Name} sees ground truth")
+        : Fail("Choose an observer.");
+
+    [RelayCommand]
+    private Task RevokeTruthAsync() => Selected is { } who
+        ? Run(() => _connection!.SetObserverTruthAsync(who.Id, false), $"{who.Name} sees what the players see")
+        : Fail("Choose an observer.");
 
     [RelayCommand]
     private Task HandOverAsync() => Selected is { IsMe: false } who

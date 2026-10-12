@@ -423,6 +423,10 @@ public sealed class PerceivedState : ICopService
 
             // ---- AI role players (Phase 11 M5) ----
 
+            case ObserverTruthChanged e when _participants.TryGetValue(e.ParticipantId, out var observer):
+                observer.TruthGranted = e.Granted;
+                break;
+
             case AgencyControlChanged e when _agencies.TryGetValue(e.AgencyId, out var controlled):
                 controlled.Controller = e.Controller;
                 controlled.ControlledBy = e.Controller == AgencyController.Participant ? e.ParticipantId : null;

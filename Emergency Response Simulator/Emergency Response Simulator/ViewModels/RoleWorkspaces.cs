@@ -3,7 +3,7 @@ using Emergency_Response_Simulator.Core.Model;
 namespace Emergency_Response_Simulator.ViewModels;
 
 /// <summary>Right-panel tabs, in the order the main window shows them.</summary>
-public enum WorkspacePanel { Comms, Incident, Unit, Ics, Crews, Agencies, Session }
+public enum WorkspacePanel { Comms, Incident, Unit, Ics, Crews, Agencies, Session, Assess }
 
 /// <summary>Bottom tabs, in the order the main window shows them.</summary>
 public enum WorkspaceBoard { Status, Command, History, Instructor }
@@ -62,8 +62,8 @@ public static class RoleWorkspaces
             WorkspaceBoard.Command, layers: [(MapLayerKeys.Jurisdictions, true)]),
         Of(UserRole.Instructor, "Everything, with ground truth: the instructor's board in front.",
             AllPanels, WorkspacePanel.Session, WorkspaceBoard.Instructor, boards: AllBoards),
-        Of(UserRole.Observer, "Watching: the map, the incidents and the history.",
-            [WorkspacePanel.Incident, WorkspacePanel.Comms], WorkspacePanel.Incident, WorkspaceBoard.History, boards: AllBoards),
+        Of(UserRole.Observer, "Watching and assessing: follow a player, note how they do, and the history.",
+            [WorkspacePanel.Assess, WorkspacePanel.Incident, WorkspacePanel.Comms, WorkspacePanel.Agencies], WorkspacePanel.Assess, WorkspaceBoard.History, boards: AllBoards),
     ];
 
     /// <summary>What the workspace picker offers: the full layout, then each role's.</summary>

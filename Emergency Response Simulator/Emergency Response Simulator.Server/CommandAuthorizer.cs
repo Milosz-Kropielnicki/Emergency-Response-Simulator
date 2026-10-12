@@ -22,6 +22,14 @@ public static class CommandAuthorizer
         var instructor = participant.Role == UserRole.Instructor;
         switch (service)
         {
+            // Observers (Phase 11 M6): read-only, whatever the client sends. They may note how players are doing.
+            case SimulationHubProtocol.Services.C2 or SimulationHubProtocol.Services.Iap or SimulationHubProtocol.Services.Control
+                or SimulationHubProtocol.Services.Instructor when participant.Role == UserRole.Observer:
+                throw new HubException("Observers watch: they don't give commands.");
+            case SimulationHubProtocol.Services.Assessment when !participant.Assessor:
+                throw new HubException("Only observers and the instructor record assessments.");
+            case SimulationHubProtocol.Services.Assessment when session.State == SessionState.Ended:
+                throw new HubException("The session has ended.");
             case SimulationHubProtocol.Services.Control when !instructor:
                 throw new HubException("Only the instructor controls the clock.");
             case SimulationHubProtocol.Services.Control when session.State == SessionState.Ended:

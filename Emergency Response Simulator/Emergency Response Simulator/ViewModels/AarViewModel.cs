@@ -25,7 +25,11 @@ public sealed record AarOutcomeRow(string Label, string Hurt, string Dead, strin
 public sealed record AarTimelineRow(DateTimeOffset At, string Time, string Category, string Text, bool IsDecision, bool IsTruth, string Actor);
 
 /// <summary>One participant's line in the review (networked sessions).</summary>
-public sealed record AarParticipantRow(string Name, string Roles, string Time, int Commands, string Ratings, string Response, string Score, string Focus);
+public sealed record AarParticipantRow(string Name, string Roles, string Time, int Commands, string Ratings, string Response, string Score, string Focus,
+    string Observers = "", string Overall = "");
+
+/// <summary>An observer's note in the review (Phase 11 M6).</summary>
+public sealed record AarNoteRow(string Time, string Participant, string Rating, string Note, string About, string By);
 
 /// <summary>Something the instructor did to run the exercise (Phase 11 M4).</summary>
 public sealed record AarInstructorRow(string Time, string Kind, string Text);
@@ -103,6 +107,11 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
     public ObservableCollection<AarInstructorRow> Instructor { get; } = [];
 
     [ObservableProperty] private bool _hasInstructor;
+
+    /// <summary>Observers' notes (Phase 11 M6).</summary>
+    public ObservableCollection<AarNoteRow> Notes { get; } = [];
+
+    [ObservableProperty] private bool _hasNotes;
     [ObservableProperty] private string _instructorNote = "";
     public ObservableCollection<ParticipantChoice> ParticipantChoices { get; } = [];
 
@@ -316,7 +325,11 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
         HasParticipants = report.Participants.Count > 0;
         Replace(Participants, report.Participants.Select(p => new AarParticipantRow(p.Name, p.Roles, AarAnalyzer.Duration(p.Present), p.Commands,
             $"{p.Good} good · {p.Fair} fair · {p.Poor} poor", p.MeanResponse is { } mean ? AarAnalyzer.Duration(mean) : "—",
-            p.Score is { } score ? $"{score} / 100" : "—", p.Focus)));
+            p.Score is { } score ? $"{score} / 100" : "—", p.Focus, AarExport.ObserverRatings(p),
+            p.Combined is { } combined ? $"{combined} / 100 · {Rubric.Name(p.Level!.Value)}" : "—")));
+        HasNotes = report.Notes.Count > 0;
+        Replace(Notes, report.Notes.Select(n => new AarNoteRow(Clock(n.At), n.Participant, n.Rating is { } rating ? Rubric.Name(rating) : "—", n.Note,
+            n.About ?? "", n.By ?? "")));
         var chosen = ParticipantFilter?.Id;
         Replace(ParticipantChoices, [new ParticipantChoice(null, "Everyone"), .. report.Participants.Select(p => new ParticipantChoice(p.Id, $"{p.Name} ({p.Roles})"))]);
         ParticipantFilter = ParticipantChoices.FirstOrDefault(c => c.Id == chosen) ?? ParticipantChoices[0];

@@ -79,4 +79,7 @@ public static class EventSources
 
     /// <summary>Session lifecycle and participants (Phase 11).</summary>
     public const string Session = "session";
+
+    /// <summary>Observers' and the instructor's assessment notes (Phase 11 M6).</summary>
+    public const string Assessment = "assessment";
 }

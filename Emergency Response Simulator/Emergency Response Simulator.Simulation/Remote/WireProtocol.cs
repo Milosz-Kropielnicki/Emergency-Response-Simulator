@@ -33,6 +33,9 @@ public static class SimulationHubProtocol
 
         /// <summary>The instructor console (Phase 11 M4): the instructor only.</summary>
         public const string Instructor = "instructor";
+
+        /// <summary>Live assessment (Phase 11 M6): observers and the instructor.</summary>
+        public const string Assessment = "assessment";
     }
 }
 
@@ -41,6 +44,12 @@ public interface ISimulationClient
 {
     /// <summary>Events in sequence order, already filtered to what this connection may see.</summary>
     Task Events(IReadOnlyList<SimEvent> events);
+
+    /// <summary>
+    /// Earlier events this connection may now see (Phase 11 M6: an observer just granted ground truth), to merge into the
+    /// stream it already holds. They are older than its last event.
+    /// </summary>
+    Task Backfill(IReadOnlyList<SimEvent> events);
 
     Task Clock(ClockState clock);
 
@@ -53,7 +62,7 @@ public interface ISimulationClient
     /// <summary>The traffic as it really is: instructors only.</summary>
     Task LiveTraffic(TrafficState traffic);
 
-    /// <summary>The session moved on: started, or ended.</summary>
+    /// <summary>The session moved on (started, ended), or this participant's view of it changed (truth granted).</summary>
     Task SessionChanged(SessionInfo session);
 }
 

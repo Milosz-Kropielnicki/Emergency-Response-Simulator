@@ -40,6 +40,7 @@ public sealed class SimulationConnection : IAsyncDisposable, IWorldSnapshotSourc
         _hub.ServerTimeout = TimeSpan.FromSeconds(30);
 
         _hub.On<IReadOnlyList<SimEvent>>(nameof(ISimulationClient.Events), events => Mirror.Accept(events));
+        _hub.On<IReadOnlyList<SimEvent>>(nameof(ISimulationClient.Backfill), events => Mirror.Backfill(events));
         _hub.On<ClockState>(nameof(ISimulationClient.Clock), clock =>
         {
             _clock = clock;
@@ -149,6 +150,9 @@ public sealed class SimulationConnection : IAsyncDisposable, IWorldSnapshotSourc
     public Task EndSessionAsync(string reason) => _hub.InvokeAsync("EndSession", reason);
 
     public Task AssignRoleAsync(Guid participantId, UserRole role) => _hub.InvokeAsync("AssignRole", participantId, role);
+
+    /// <summary>The instructor lets an observer see ground truth, or stops them (Phase 11 M6).</summary>
+    public Task SetObserverTruthAsync(Guid participantId, bool granted) => _hub.InvokeAsync("SetObserverTruth", participantId, granted);
 
     /// <summary>Hands your role over; once the exercise runs it completes after a briefing (or a quicker changeover).</summary>
     public Task HandOverRoleAsync(Guid toParticipantId, UserRole newRole, bool fullBriefing = true) =>

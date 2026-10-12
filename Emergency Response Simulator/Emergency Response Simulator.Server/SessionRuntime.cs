@@ -26,7 +26,13 @@ public sealed class ParticipantRecord
 
     public bool Present { get; set; } = true;
 
-    public bool Truth => Roles.SeesTruth(Role);
+    /// <summary>An observer the instructor lets see ground truth (Phase 11 M6); lost if they take another role.</summary>
+    public bool TruthGranted { get; set; }
+
+    public bool Truth => Roles.SeesTruth(Role) || (Role == UserRole.Observer && TruthGranted);
+
+    /// <summary>Observers and the instructor: they record and see assessment notes (Phase 11 M6).</summary>
+    public bool Assessor => Roles.IsAssessor(Role);
 
     public CommandActor Actor => new(Id, Role, Name);
 }
@@ -237,6 +243,7 @@ public sealed class SessionRuntime : IAsyncDisposable
             target.Role = role;
         }
         await PublishAsync(new RoleAssigned(target.Id, role), instructor);
+        await RetuneAsync(target);
     }
 
     /// <summary>
@@ -256,6 +263,7 @@ public sealed class SessionRuntime : IAsyncDisposable
             if (!to.Present) throw new HubException($"{to.Name} isn't in the session.");
             if (to.Id == from.Id) throw new HubException("Hand over to someone else.");
             role = from.Role;
+            if (role == UserRole.Observer) throw new HubException("Observers have no role to hand over.");
             if (role == UserRole.Instructor || to.Role == UserRole.Instructor || fromNewRole == UserRole.Instructor)
                 throw new HubException("The instructor role can't be handed over.");
             if (fromNewRole != to.Role && HolderOf(fromNewRole, except: from.Id) is { } holder)
@@ -272,6 +280,8 @@ public sealed class SessionRuntime : IAsyncDisposable
         if (State == SessionState.Lobby)
         {
             await PublishAsync(new RoleHandedOver(from.Id, to.Id, role, fromNewRole), from);
+            await RetuneAsync(from);
+            await RetuneAsync(to);
             return;
         }
 
@@ -322,6 +332,8 @@ public sealed class SessionRuntime : IAsyncDisposable
                 }
                 await PublishAsync(new RoleHandedOver(handover.From.Id, handover.To.Id, handover.Role, handover.FromNewRole,
                     handover.Id, handover.FullBriefing, items), handover.From);
+                await RetuneAsync(handover.From);
+                await RetuneAsync(handover.To);
                 return true;
             });
         }
@@ -344,6 +356,7 @@ public sealed class SessionRuntime : IAsyncDisposable
             target.Role = role;
         }
         await PublishAsync(new RoleAssigned(target.Id, role), by);
+        await RetuneAsync(target);
     }
 
     private ParticipantRecord? HolderOf(UserRole role, Guid? except = null) =>
@@ -380,6 +393,43 @@ public sealed class SessionRuntime : IAsyncDisposable
         foreach (var hosted in _hosted.Reverse())
             await hosted.StopAsync(CancellationToken.None);
         await NotifyAsync();
+    }
+
+    // ---- Observers (Phase 11 M6) ----
+
+    /// <summary>The instructor lets an observer see ground truth, or stops them. Their client's stream changes at once.</summary>
+    public async Task SetObserverTruthAsync(ParticipantRecord instructor, Guid participantId, bool granted)
+    {
+        var observer = Find(participantId) ?? throw new HubException("Unknown participant.");
+        if (observer.Role != UserRole.Observer)
+            throw new HubException($"{observer.Name} is {Roles.Name(observer.Role)}: only observers are granted ground truth.");
+        if (observer.TruthGranted == granted) return;
+        lock (_lock) observer.TruthGranted = granted;
+        await PublishAsync(new ObserverTruthChanged(observer.Id, granted), instructor);
+        await RetuneAsync(observer);
+    }
+
+    /// <summary>
+    /// Brings a participant's connections into line with what they may now see, after a truth grant or a change of role:
+    /// the truth group (world snapshots), the event stream (truth, assessment notes), and their session info. A grant
+    /// lasts only while they observe.
+    /// </summary>
+    private async Task RetuneAsync(ParticipantRecord participant)
+    {
+        if (participant.Role != UserRole.Observer && participant.TruthGranted)
+        {
+            lock (_lock) participant.TruthGranted = false;
+            await PublishAsync(new ObserverTruthChanged(participant.Id, false), participant);
+        }
+        foreach (var connection in participant.Connections.ToList())
+        {
+            if (participant.Truth)
+                await _hub.Groups.AddToGroupAsync(connection, SimulationHubProtocol.TruthGroup(Id));
+            else
+                await _hub.Groups.RemoveFromGroupAsync(connection, SimulationHubProtocol.TruthGroup(Id));
+            Feed.Retune(connection, participant.Truth, participant.Assessor);
+            await _hub.Clients.Client(connection).SessionChanged(InfoFor(participant));
+        }
     }
 
     private async Task NotifyAsync()

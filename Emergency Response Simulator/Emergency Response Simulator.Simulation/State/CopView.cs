@@ -30,6 +30,28 @@ public sealed class CopView : ICopService
 
     public bool IsReplay => !ReferenceEquals(_current, _live);
 
+    private bool _observing;
+
+    /// <summary>A read-only client (Phase 11 M6): an observer watches and never commands. The server refuses them anyway.</summary>
+    public bool Observing
+    {
+        get => _observing;
+        set
+        {
+            if (_observing == value) return;
+            _observing = value;
+            ModeChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>Commands can't be given from this view: it shows the past, or this client only observes.</summary>
+    public bool IsReadOnly => IsReplay || Observing;
+
+    /// <summary>Why commands are refused here, or null when they aren't.</summary>
+    public string? ReadOnlyReason => IsReplay ? "Return to live before issuing commands."
+        : Observing ? "Observers watch: they don't give commands."
+        : null;
+
     /// <summary>The simulation time being shown when replaying.</summary>
     public DateTimeOffset? ReplayTime { get; private set; }
 

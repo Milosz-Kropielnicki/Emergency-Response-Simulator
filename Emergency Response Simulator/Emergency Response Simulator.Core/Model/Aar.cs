@@ -50,8 +50,9 @@ public sealed record AarDecision(
 /// <summary>A message or event in the replayable timeline (decisions, radio, dispatches, what happened).</summary>
 /// <param name="ActorId">The participant whose command it was (networked sessions, Phase 11).</param>
 /// <param name="RolePlay">Something the instructor said or decided as someone in the world (Phase 11 M4).</param>
+/// <param name="AboutId">For an assessment note, the participant it is about (Phase 11 M6), so their timeline shows it.</param>
 public sealed record AarTimelineEntry(long Sequence, DateTimeOffset At, string Category, string Text, bool IsDecision, bool IsTruth, bool Important,
-    Guid? ActorId = null, string? Actor = null, bool RolePlay = false);
+    Guid? ActorId = null, string? Actor = null, bool RolePlay = false, Guid? AboutId = null);
 
 /// <summary>
 /// What the instructor did to run the exercise (Phase 11 M4): injects fired, held, released and skipped, role-play,
@@ -68,7 +69,15 @@ public sealed record AarInstructorAction(DateTimeOffset At, string Kind, string 
 /// <param name="Score">Share of their rated decisions that were good (fair counts half), 0–100; null with none rated.</param>
 /// <param name="Focus">What most of their commands were about, e.g. "Dispatch 12, Order 5".</param>
 public sealed record AarParticipant(Guid Id, string Name, string Roles, DateTimeOffset JoinedAt, DateTimeOffset? LeftAt, TimeSpan Present,
-    int Commands, int Good, int Fair, int Poor, TimeSpan? MeanResponse, int? Score, string Focus);
+    int Commands, int Good, int Fair, int Poor, TimeSpan? MeanResponse, int? Score, string Focus,
+    int Competent = 0, int Developing = 0, int NotYetCompetent = 0, int? ObserverScore = null, int? Combined = null, AssessmentRating? Level = null);
+
+/// <summary>
+/// An observer's (or the instructor's) note on a participant (Phase 11 M6), with the event it was about.
+/// </summary>
+/// <param name="About">What the event it was tagged to said, e.g. "Engine 4 dispatched to INC-00001".</param>
+public sealed record AarNote(DateTimeOffset At, Guid ParticipantId, string Participant, AssessmentRating? Rating, string Note, string? By,
+    long? AboutSequence, string? About);
 
 /// <summary>A unit's status over the session, for the commitment chart.</summary>
 public sealed record AarStatusSpan(DateTimeOffset From, DateTimeOffset To, UnitStatus Status);
@@ -164,13 +173,16 @@ public sealed class AarReport
     /// <summary>How the instructor ran the exercise (Phase 11 M4), in time order.</summary>
     public IReadOnlyList<AarInstructorAction> Instructor { get; init; } = [];
 
+    /// <summary>Observers' notes and ratings (Phase 11 M6), in time order.</summary>
+    public IReadOnlyList<AarNote> Notes { get; init; } = [];
+
     /// <summary>The decisions one participant made (everyone's with null).</summary>
     public IEnumerable<AarDecision> DecisionsOf(Guid? participantId) =>
         participantId is { } id ? Decisions.Where(d => d.ActorId == id) : Decisions;
 
     /// <summary>What one participant's commands produced, in order (the whole timeline with null).</summary>
     public IEnumerable<AarTimelineEntry> TimelineOf(Guid? participantId) =>
-        participantId is { } id ? Timeline.Where(t => t.ActorId == id) : Timeline;
+        participantId is { } id ? Timeline.Where(t => t.ActorId == id || t.AboutId == id) : Timeline;
 
     public Competence Overall
     {

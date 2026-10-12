@@ -324,7 +324,7 @@ public sealed partial class IapBuilderViewModel : ObservableObject
                            (model.Focus is { } focus ? $" · {focus}" : "");
         else
             PeriodDetail = "";
-        CanNewVersion = SelectedPeriod is not null && !_cop.IsReplay
+        CanNewVersion = SelectedPeriod is not null && !_cop.IsReadOnly
                         && versions.All(v => v.Status is IapStatus.Approved or IapStatus.Superseded);
     }
 
@@ -357,14 +357,14 @@ public sealed partial class IapBuilderViewModel : ObservableObject
             return;
         }
 
-        IsEditable = plan.IsEditable && !_cop.IsReplay;
+        IsEditable = plan.IsEditable && !_cop.IsReadOnly;
         Status = plan.Status;
         PlanTitle = $"Period {plan.OperationalPeriod?.Number} · version {plan.Version}";
         PlanStatus = IapDocument.StatusLine(plan);
         ReturnNote = plan.Status == IapStatus.Draft && plan.ReturnComments is { } comments ? $"Returned by {plan.ReturnedBy}: {comments}" : null;
         CanSubmit = IsEditable;
-        CanDecide = plan.Status == IapStatus.PendingApproval && !_cop.IsReplay;
-        CanBrief = plan.Status == IapStatus.Approved && !_cop.IsReplay;
+        CanDecide = plan.Status == IapStatus.PendingApproval && !_cop.IsReadOnly;
+        CanBrief = plan.Status == IapStatus.Approved && !_cop.IsReadOnly;
 
         var reload = plan.Id != _loadedPlanId
                      || (!IsDirty && plan.LastSavedAt != _loadedSavedAt)

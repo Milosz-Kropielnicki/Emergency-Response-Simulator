@@ -118,6 +118,9 @@
 
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{Binding IncidentTitle}" FontSize="17" FontWeight="Bold" />
+                    <!-- An observer's client is read-only (Phase 11 M6). -->
+                    <TextBlock Text="{Binding ObserverBanner}" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"
+                               Visibility="{Binding IsObserving, Converter={StaticResource BoolToVisibility}}" />
                     <TextBlock Text="{Binding IncidentSubtitle}" Foreground="{StaticResource MutedTextBrush}" />
                 </StackPanel>
             </DockPanel>
@@ -1129,6 +1132,12 @@
                                                 ToolTip="Puts the selected participant in this role" />
                                         <ComboBox ItemsSource="{Binding RoleChoices}" SelectedItem="{Binding AssignRole}" />
                                     </DockPanel>
+                                    <!-- Ground truth for an observer (Phase 11 M6) -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                        <Button Content="Let them see truth" Command="{Binding GrantTruthCommand}" Padding="6,0"
+                                                ToolTip="The selected observer sees ground truth too: the world, what's really happening, and the history behind it" />
+                                        <Button Content="Stop" Command="{Binding RevokeTruthCommand}" Padding="6,0" Margin="4,0,0,0" ToolTip="Back to what the players see" />
+                                    </StackPanel>
                                 </StackPanel>
 
                                 <TextBlock Text="PARTICIPANTS" Style="{StaticResource PanelHeader}" />
@@ -1165,6 +1174,62 @@
                                     <Button DockPanel.Dock="Right" Content="Hand over" Command="{Binding HandOverCommand}" Margin="4,0,0,0" Padding="6,0" />
                                     <ComboBox ItemsSource="{Binding RoleChoices}" SelectedItem="{Binding MyNewRole}" ToolTip="The role you take on" />
                                 </DockPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+                    <!-- Observing and live assessment (Phase 11 M6): observers and the instructor. -->
+                    <TabItem DataContext="{Binding Assessment}" Visibility="{Binding DataContext.ShowAssess, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
+                        <TabItem.Header>
+                            <TextBlock Text="{Binding TabHeader}" />
+                        </TabItem.Header>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="2">
+                                <TextBlock Text="FOLLOW" Style="{StaticResource PanelHeader}" />
+                                <ComboBox ItemsSource="{Binding FollowChoices}" SelectedItem="{Binding Following}" DisplayMemberPath="Label" Margin="0,0,0,2"
+                                          ToolTip="Show their role's workspace and go wherever they act" />
+                                <TextBlock Text="{Binding FollowStatus}" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,8" />
+
+                                <TextBlock Text="NOTE AND RATE" Style="{StaticResource PanelHeader}" />
+                                <ComboBox ItemsSource="{Binding Players}" SelectedItem="{Binding NoteFor}" DisplayMemberPath="Label" Margin="0,0,0,4" ToolTip="Who the note is about" />
+                                <ComboBox ItemsSource="{Binding Ratings}" SelectedItem="{Binding Rating}" Margin="0,0,0,4" ToolTip="Competent / Developing / Not yet competent" />
+                                <TextBox Text="{Binding NoteText, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="54" Margin="0,0,0,4" />
+                                <CheckBox IsChecked="{Binding TagLatest}" Margin="0,0,0,2">
+                                    <TextBlock Text="{Binding LatestAction}" TextWrapping="Wrap" FontSize="11" />
+                                </CheckBox>
+                                <Button Content="📝 Record note" Command="{Binding RecordCommand}" HorizontalAlignment="Left" Padding="8,2" Margin="0,4,0,8" />
+                                <TextBlock Text="Notes are never shown to the players during the exercise; every observer and the instructor sees them."
+                                           TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,8" />
+
+                                <TextBlock Text="NOTES (latest first)" Style="{StaticResource PanelHeader}" />
+                                <ItemsControl ItemsSource="{Binding Notes}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:NoteRow}">
+                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,3">
+                                                <StackPanel>
+                                                    <TextBlock FontSize="11">
+                                                        <Run Text="{Binding Time, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                        <Run Text="{Binding Participant, Mode=OneWay}" FontWeight="SemiBold" />
+                                                        <Run x:Name="Rating" Text="{Binding Rating, Mode=OneWay}" />
+                                                        <Run Text="{Binding About, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    </TextBlock>
+                                                    <TextBlock Text="{Binding Note}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding By, StringFormat='by {0}'}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                </StackPanel>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Value}" Value="Competent">
+                                                    <Setter TargetName="Rating" Property="Foreground" Value="{StaticResource OkBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Value}" Value="Developing">
+                                                    <Setter TargetName="Rating" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Value}" Value="NotYetCompetent">
+                                                    <Setter TargetName="Rating" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>

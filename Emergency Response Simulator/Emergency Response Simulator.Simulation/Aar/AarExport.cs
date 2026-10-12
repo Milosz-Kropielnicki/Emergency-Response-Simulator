@@ -18,6 +18,11 @@ public static class AarExport
 
     private static string Clock(DateTimeOffset at) => at.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture);
 
+    /// <summary>"2 competent, 1 developing", or "none" (Phase 11 M6).</summary>
+    public static string ObserverRatings(AarParticipant person) =>
+        string.Join(", ", new[] { (person.Competent, "competent"), (person.Developing, "developing"), (person.NotYetCompetent, "not yet competent") }
+            .Where(r => r.Item1 > 0).Select(r => $"{r.Item1} {r.Item2}")) is { Length: > 0 } text ? text : "none";
+
     public static string Label(Rating rating) => rating switch
     {
         Rating.Good => "Good",
@@ -100,12 +105,24 @@ public static class AarExport
         // Participants (networked sessions).
         if (report.Participants.Count > 0)
         {
-            html.Append("<h2>Participants</h2><table><tr><th>Name</th><th>Roles</th><th class=\"num\">Time in session</th><th class=\"num\">Commands</th><th class=\"num\">Good / fair / poor</th><th class=\"num\">Mean response</th><th class=\"num\">Score</th><th>Mostly</th></tr>");
+            html.Append("<h2>Participants</h2><table><tr><th>Name</th><th>Roles</th><th class=\"num\">Time in session</th><th class=\"num\">Commands</th><th class=\"num\">Good / fair / poor</th><th class=\"num\">Mean response</th><th class=\"num\">Score</th><th>Observers</th><th class=\"num\">Combined</th><th>Mostly</th></tr>");
             foreach (var person in report.Participants)
                 html.Append($"<tr><td><b>{E(person.Name)}</b></td><td>{E(person.Roles)}</td><td class=\"num\">{E(AarAnalyzer.Duration(person.Present))}</td>" +
                             $"<td class=\"num\">{person.Commands}</td><td class=\"num\">{person.Good} / {person.Fair} / {person.Poor}</td>" +
                             $"<td class=\"num\">{(person.MeanResponse is { } mean ? E(AarAnalyzer.Duration(mean)) : "—")}</td>" +
-                            $"<td class=\"num\">{(person.Score is { } score ? score.ToString(CultureInfo.InvariantCulture) : "—")}</td><td class=\"muted\">{E(person.Focus)}</td></tr>");
+                            $"<td class=\"num\">{(person.Score is { } score ? score.ToString(CultureInfo.InvariantCulture) : "—")}</td>" +
+                            $"<td>{E(ObserverRatings(person))}</td><td class=\"num\">{(person.Combined is { } combined ? $"{combined} ({E(Rubric.Name(person.Level!.Value))})" : "—")}</td>" +
+                            $"<td class=\"muted\">{E(person.Focus)}</td></tr>");
+            html.Append("</table>");
+        }
+
+        // Observers' notes (Phase 11 M6).
+        if (report.Notes.Count > 0)
+        {
+            html.Append("<h2>Observer notes</h2><table><tr><th>Time</th><th>Participant</th><th>Rating</th><th>Note</th><th>About</th><th>By</th></tr>");
+            foreach (var note in report.Notes)
+                html.Append($"<tr><td>{Clock(note.At)}</td><td><b>{E(note.Participant)}</b></td><td>{(note.Rating is { } rating ? E(Rubric.Name(rating)) : "—")}</td>" +
+                            $"<td>{E(note.Note)}</td><td class=\"muted\">{(note.About is { } about ? E(about) : "")}</td><td class=\"muted\">{E(note.By ?? "")}</td></tr>");
             html.Append("</table>");
         }
 
@@ -268,7 +285,12 @@ public static class AarExport
                 (decision.Actor is { } actor ? $" By {actor}." : ""));
         foreach (var person in report.Participants)
             Row("Participant", person.JoinedAt, person.Roles, person.Name, $"{person.Commands} commands", AarAnalyzer.Duration(person.Present),
-                person.Score?.ToString(CultureInfo.InvariantCulture) ?? "", $"Good {person.Good}, fair {person.Fair}, poor {person.Poor}. {person.Focus}.");
+                person.Combined?.ToString(CultureInfo.InvariantCulture) ?? "",
+                $"Good {person.Good}, fair {person.Fair}, poor {person.Poor}. {person.Focus}. Decisions {person.Score?.ToString(CultureInfo.InvariantCulture) ?? "—"}; observers: {ObserverRatings(person)}" +
+                (person.Level is { } level ? $"; overall {Rubric.Name(level)}." : "."));
+        foreach (var note in report.Notes)
+            Row("Observer note", note.At, note.Rating is { } rating ? Rubric.Name(rating) : "", note.Participant, note.Note, "", "",
+                $"{(note.About is { } about ? $"About: {about}. " : "")}By {note.By}");
         foreach (var unit in report.Units)
             Row("Unit", null, unit.Type, unit.Callsign, unit.Committed.ToString("P0", CultureInfo.InvariantCulture), "", "",
                 unit.DelayedEnRoute is { } delayed ? $"Delayed en route {AarAnalyzer.Duration(delayed)}" : "");

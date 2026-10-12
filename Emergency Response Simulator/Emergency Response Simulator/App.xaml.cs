@@ -72,6 +72,8 @@ namespace Emergency_Response_Simulator
             builder.Services.AddSingleton(sp => new Permissions(sp.GetRequiredService<CopView>(), sp.GetService<SimulationConnection>()));
             builder.Services.AddSingleton(sp => new SessionViewModel(sp.GetRequiredService<CopView>(), sp.GetService<SimulationConnection>(),
                 sp.GetRequiredService<Permissions>()));
+            builder.Services.AddSingleton(sp => new AssessmentViewModel(sp.GetRequiredService<CopView>(), sp.GetRequiredService<IEventStore>(),
+                sp.GetRequiredService<IAssessmentService>(), sp.GetService<SimulationConnection>()));
             builder.Services.AddSingleton<TimelineViewModel>();
             builder.Services.AddSingleton<InstructorViewModel>();
             builder.Services.AddSingleton<AarViewModel>();

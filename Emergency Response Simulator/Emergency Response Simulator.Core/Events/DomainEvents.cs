@@ -133,6 +133,9 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(PoliticalFallout), nameof(PoliticalFallout))]
 [JsonDerivedType(typeof(AgencyControlChanged), nameof(AgencyControlChanged))]
 [JsonDerivedType(typeof(AgencyRequestAnswered), nameof(AgencyRequestAnswered))]
+// Observer mode (Phase 11 M6)
+[JsonDerivedType(typeof(AssessmentNoteRecorded), nameof(AssessmentNoteRecorded))]
+[JsonDerivedType(typeof(ObserverTruthChanged), nameof(ObserverTruthChanged))]
 // Truth: multi-agency (Phase 10)
 [JsonDerivedType(typeof(InformationHeld), nameof(InformationHeld))]
 // Truth: the world as it really is
@@ -861,3 +864,16 @@ public sealed record AgencyControlChanged(Guid AgencyId, AgencyController Contro
 /// <summary>The participant running an agency answered command's request to it: for units, or to join unified command (C2).</summary>
 /// <param name="ItemId">The assistance request's id, or the invitation's (<see cref="Model.Interagency.InvitationId"/>).</param>
 public sealed record AgencyRequestAnswered(Guid ItemId, Guid AgencyId, bool Approve, int? Quantity, string? Text) : DomainEvent;
+
+// ---- Observer mode (Phase 11 M6) ----
+
+/// <summary>
+/// An observer's (or the instructor's) note on a participant, with an optional rating against the rubric, tagged to the
+/// event it is about. Ground truth: trainees never see it during the exercise; assessors all do.
+/// </summary>
+/// <param name="AboutSequence">The event the note is about, e.g. the participant's command; null for a general note.</param>
+public sealed record AssessmentNoteRecorded(Guid NoteId, Guid ParticipantId, AssessmentRating? Rating, string Note, long? AboutSequence = null)
+    : DomainEvent;
+
+/// <summary>The instructor let an observer see ground truth, or took it away.</summary>
+public sealed record ObserverTruthChanged(Guid ParticipantId, bool Granted) : DomainEvent;

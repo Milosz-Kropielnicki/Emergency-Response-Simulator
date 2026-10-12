@@ -16,6 +16,9 @@ public sealed class Participant
     /// <summary>A handover of their role under way (Phase 11 M3): they hold it until it completes.</summary>
     public PendingHandover? HandingOver { get; set; }
 
+    /// <summary>An observer the instructor lets see ground truth (Phase 11 M6).</summary>
+    public bool TruthGranted { get; set; }
+
     public string Label => $"{DisplayName} ({Roles.Name(Role)})";
 }
 
@@ -45,8 +48,14 @@ public static class Roles
         _ => throw new ArgumentOutOfRangeException(nameof(position)),
     };
 
-    /// <summary>Roles that see ground truth (until observers can be granted it, Phase 11 M6).</summary>
+    /// <summary>Roles that always see ground truth. Observers see it only when the instructor grants it (Phase 11 M6).</summary>
     public static bool SeesTruth(UserRole role) => role == UserRole.Instructor;
+
+    /// <summary>Who assesses the players (Phase 11 M6): observers and the instructor. They see every assessment note.</summary>
+    public static bool IsAssessor(UserRole role) => role is UserRole.Observer or UserRole.Instructor;
+
+    /// <summary>Who is assessed: everyone who plays.</summary>
+    public static bool IsPlayer(UserRole role) => !IsAssessor(role);
 
     public static string Name(UserRole role) => role switch
     {

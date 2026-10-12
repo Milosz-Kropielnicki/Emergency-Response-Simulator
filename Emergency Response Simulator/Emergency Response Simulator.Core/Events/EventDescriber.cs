@@ -217,6 +217,10 @@ public static class EventDescriber
                 : $"{Agency(e.AgencyId)}'s control room is run by the simulation again", important: true),
             AgencyRequestAnswered e => Entry("MULTI-AGENCY", $"{Agency(e.AgencyId)} answers: {(e.Approve ? "yes" : "no")}" +
                 (e.Quantity is { } n ? $", {n} unit(s)" : "") + (string.IsNullOrWhiteSpace(e.Text) ? "" : $" — \"{e.Text}\"")),
+            // Observer mode (Phase 11 M6)
+            AssessmentNoteRecorded e => Entry("ASSESSMENT", $"{Participant(e.ParticipantId)}" + (e.Rating is { } rating ? $": {Rubric.Name(rating)}" : "") +
+                (string.IsNullOrWhiteSpace(e.Note) ? "" : $" — {e.Note}") + (e.AboutSequence is { } about ? $" (on event #{about})" : ""), important: true),
+            ObserverTruthChanged e => Entry("SESSION", e.Granted ? $"{Participant(e.ParticipantId)} may see ground truth" : $"{Participant(e.ParticipantId)} no longer sees ground truth"),
             AiRoleTakenOver e => Entry("INSTRUCTOR", $"Instructor takes over {e.Name}"),
             AiRoleHandedBack e => Entry("INSTRUCTOR", $"{e.Name} handed back to the simulation"),
             InstructorBookmarked e => Entry("INSTRUCTOR", $"Bookmark{(e.ParticipantId is { } who ? $" ({Participant(who)})" : "")}: {e.Note}", important: true),

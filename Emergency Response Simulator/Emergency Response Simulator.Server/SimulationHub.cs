@@ -88,7 +88,7 @@ public sealed class SimulationHub(SessionManager sessions, CommandDispatcher dis
     {
         var session = Session;
         var truth = Participant.Truth;
-        session.Feed.Subscribe(Context.ConnectionId, afterSequence, truth);
+        session.Feed.Subscribe(Context.ConnectionId, afterSequence, truth, Participant.Assessor);
         await Clients.Caller.TrafficFeed(TrafficState.From(session.Services.GetRequiredService<TrafficFeed>().Snapshot));
         if (!truth) return;
         await Clients.Caller.WorldSnapshot(session.Engine.Snapshot);
@@ -106,6 +106,9 @@ public sealed class SimulationHub(SessionManager sessions, CommandDispatcher dis
     public Task EndSession(string reason) => Session.EndAsync(Instructor(), reason);
 
     public Task AssignRole(Guid participantId, UserRole role) => Session.AssignRoleAsync(Instructor(), participantId, role);
+
+    /// <summary>Lets an observer see ground truth, or stops them (Phase 11 M6). Instructor only.</summary>
+    public Task SetObserverTruth(Guid participantId, bool granted) => Session.SetObserverTruthAsync(Instructor(), participantId, granted);
 
     /// <summary>
     /// Hands this participant's role to another, who takes it; this participant takes <paramref name="newRole"/>. Once the

@@ -29,10 +29,12 @@ public partial class MainViewModel : ObservableObject
     private DateTimeOffset _messageExpires;
 
     public MainViewModel(CopView cop, ISimulationControl simulation, IC2Service c2, IIapService iap, TimelineViewModel timeline,
-        IRoutingService routing, DataSourceInfo dataSource, InstructorViewModel instructor, SessionViewModel session, Permissions permissions)
+        IRoutingService routing, DataSourceInfo dataSource, InstructorViewModel instructor, SessionViewModel session, Permissions permissions,
+        AssessmentViewModel assessment)
     {
         Instructor = instructor;
         Permissions = permissions;
+        Assessment = assessment;
         Session = session;
         session.ReportTo((result, done) => ShowCommandResult(result, done));
         _cop = cop;
@@ -52,6 +54,14 @@ public partial class MainViewModel : ObservableObject
         IncidentDetail = new IncidentDetailViewModel(this, c2);
         LayerGroups = BuildLayerGroups();
         Workspaces = RoleWorkspaces.Choices();
+        assessment.Attach(
+            (incident, unit) =>
+            {
+                if (incident is { } i && _cop.FindIncident(i) is not null) SelectedIncidentId = i;
+                if (unit is { } u && _cop.FindUnit(u) is not null) SelectedUnitId = u;
+            },
+            role => SelectedWorkspace = Workspaces.FirstOrDefault(w => w.Role == role) ?? SelectedWorkspace,
+            (result, done) => ShowCommandResult(result, done));
         permissions.Changed += (_, _) => OnPermissionsChanged();
         SelectedWorkspace = RoleWorkspaces.Full;
         _dispatcher = Application.Current.Dispatcher;
@@ -74,6 +84,16 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>The networked session: participants, code, lifecycle and roles (Phase 11). Hidden standalone.</summary>
     public SessionViewModel Session { get; }
+
+    /// <summary>Observing and live assessment (Phase 11 M6): follow a participant, record notes and ratings.</summary>
+    public AssessmentViewModel Assessment { get; }
+
+    /// <summary>This client only observes (Phase 11 M6): read-only, whatever it shows.</summary>
+    [ObservableProperty] private bool _isObserving;
+
+    [ObservableProperty] private string _observerBanner = "";
+
+    [ObservableProperty] private bool _showAssess;
 
     /// <summary>What this player's role may do (Phase 11 M3); commands their role can't give are disabled.</summary>
     public Permissions Permissions { get; }
@@ -115,6 +135,20 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _showCommandBoard = true;
     [ObservableProperty] private bool _showInstructorBoard = true;
 
+    /// <summary>
+    /// An observer's client is read-only (Phase 11 M6): commands are refused here as they are on the server, and the
+    /// header says so, with whether they see ground truth and whom they follow.
+    /// </summary>
+    private void RefreshObserving()
+    {
+        IsObserving = Permissions.Role == UserRole.Observer;
+        _cop.Observing = IsObserving;
+        ObserverBanner = !IsObserving ? ""
+            : "OBSERVING · read-only" + (Session.SeesTruth ? " · with ground truth" : "") +
+              (Assessment.Following?.Id is not null ? $" · following {Assessment.Following.Label}" : "");
+        ShowAssess = Assessment.IsAssessor && (SelectedWorkspace?.Panels.Contains(WorkspacePanel.Assess) ?? true);
+    }
+
     partial void OnSelectedWorkspaceChanged(RoleWorkspace? value)
     {
         if (value is null) return;
@@ -125,6 +159,7 @@ public partial class MainViewModel : ObservableObject
         ShowIcs = Shows(WorkspacePanel.Ics);
         ShowCrews = Shows(WorkspacePanel.Crews);
         ShowAgencies = Shows(WorkspacePanel.Agencies);
+        ShowAssess = Assessment.IsAssessor && Shows(WorkspacePanel.Assess);
         ShowCommandBoard = value.Boards.Contains(WorkspaceBoard.Command);
         ShowInstructorBoard = value.Boards.Contains(WorkspaceBoard.Instructor);
         RightPanelTab = (int)value.Focus;
@@ -427,15 +462,15 @@ public partial class MainViewModel : ObservableObject
 
     internal IReadOnlyList<Participant> Participants => _cop.Participants;
 
-    // ---- Commands (all through C2; refused while replaying) ----
+    // ---- Commands (all through C2; refused while replaying or observing) ----
 
     /// <summary>Runs a C2 command and reports the outcome in the header.</summary>
     public async Task<CommandResult?> RunCommandAsync(Func<Task<CommandResult>> command, string successMessage,
         bool quietIfUnchanged = false)
     {
-        if (_cop.IsReplay)
+        if (_cop.ReadOnlyReason is { } readOnly)
         {
-            ShowCommandResult(CommandResult.Fail("Return to live before issuing commands."));
+            ShowCommandResult(CommandResult.Fail(readOnly));
             return null;
         }
 
@@ -635,6 +670,8 @@ public partial class MainViewModel : ObservableObject
         Session.Refresh();
         OnPropertyChanged(nameof(IsConsoleAvailable));
         Permissions.Refresh();
+        Assessment.Refresh();
+        RefreshObserving();
         RefreshZones();
         RefreshWeather();
         RefreshHospitals();

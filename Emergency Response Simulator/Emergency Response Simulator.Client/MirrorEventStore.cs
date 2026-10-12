@@ -46,6 +46,26 @@ public sealed class MirrorEventStore : IEventStore
         }
     }
 
+    /// <summary>Raised after earlier events were merged in (<see cref="Backfill"/>), so views reading history can reload.</summary>
+    public event EventHandler? Backfilled;
+
+    /// <summary>
+    /// Merges in earlier events this client may now see (Phase 11 M6: an observer granted ground truth), in sequence
+    /// order. They don't replay through <see cref="Appended"/>: the live COP never takes truth, and history readers reload.
+    /// </summary>
+    public void Backfill(IEnumerable<SimEvent> batch)
+    {
+        lock (_lock)
+        {
+            var held = _events.Select(e => e.Sequence).ToHashSet();
+            var added = batch.Where(e => e.Sequence <= LastSequence && held.Add(e.Sequence)).ToList();
+            if (added.Count == 0) return;
+            _events.AddRange(added);
+            _events.Sort((a, b) => a.Sequence.CompareTo(b.Sequence));
+        }
+        Backfilled?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>
     /// Completes once the event with this sequence (or a later one) has been applied, or after the timeout, so a
     /// command's caller sees its own result on the COP when the call returns.
