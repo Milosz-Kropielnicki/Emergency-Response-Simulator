@@ -34,24 +34,40 @@ internal sealed class InProcessServer : IAsyncDisposable
     public SessionRuntime Session { get; private set; } = null!;
     public SessionManager Sessions => _app.Services.GetRequiredService<SessionManager>();
     public CommandDispatcher Dispatcher => _app.Services.GetRequiredService<CommandDispatcher>();
+
+    /// <summary>Where this server keeps voice recordings (Phase 11 M7).</summary>
+    public string ClipDirectory { get; private init; } = "";
     public SimulationEngine Engine => Session.Engine;
     public ICopService Cop => Session.Services.GetRequiredService<ICopService>();
     public StoreView Store => new(_app.Services.GetRequiredService<IEventStore>(), Session.Id);
 
-    public static async Task<InProcessServer> StartAsync(string scenario = BarrowStreetScenario.Key, bool start = true, params string[] settings)
+    public static Task<InProcessServer> StartAsync(string scenario = BarrowStreetScenario.Key, bool start = true, params string[] settings) =>
+        StartWithAsync(null, scenario, start, settings);
+
+    /// <summary>
+    /// With extra services, e.g. a scripted speech recogniser (Phase 11 M7). Voice recordings go to a folder of their own,
+    /// deleted afterwards; Whisper is off unless a test names a model.
+    /// </summary>
+    public static async Task<InProcessServer> StartWithAsync(Action<IServiceCollection>? services, string scenario = BarrowStreetScenario.Key,
+        bool start = true, params string[] settings)
     {
         // Command-line settings win over appsettings.Local.json, so the developer's database is never used.
+        var clips = Path.Combine(Path.GetTempPath(), "ers-voice-tests", Guid.NewGuid().ToString("N"));
         var app = ServerHost.Build(
         [
             "--ConnectionStrings:Ers=", "--Server:AllowInMemoryStore=true", $"--Server:InstructorPin={Pin}",
-            "--Server:SnapshotInterval=00:00:00.200", "--Server:ClockInterval=00:00:00.100", .. settings,
-        ], builder => builder.WebHost.UseTestServer());
+            "--Server:SnapshotInterval=00:00:00.200", "--Server:ClockInterval=00:00:00.100", "--Voice:WhisperModel=", $"--Voice:ClipDirectory={clips}", .. settings,
+        ], builder =>
+        {
+            builder.WebHost.UseTestServer();
+            services?.Invoke(builder.Services);
+        });
         await app.StartAsync();
-        var server = new InProcessServer(app);
+        var server = new InProcessServer(app) { ClipDirectory = clips };
 
         server.Instructor = server.NewConnection();
         await server.Instructor.ConnectAsync();
-        var ticket = await server.Instructor.CreateSessionAsync(new CreateSessionRequest(scenario, "Test exercise", "Ines (instructor)", Pin));
+        var ticket = await server.Instructor.CreateSessionAsync(new CreateSessionRequest(scenario, "Test exercise", "Ines (instructor)", Pin, VoiceConsent: true));
         server.Session = server.Sessions.Find(ticket.SessionId)!;
         await server.Instructor.StartFeedAsync();
 
@@ -80,11 +96,11 @@ internal sealed class InProcessServer : IAsyncDisposable
     }
 
     /// <summary>Someone joins the session with its code.</summary>
-    public async Task<SimulationConnection> JoinAsync(string name, UserRole role, bool feed = true, string? pin = null)
+    public async Task<SimulationConnection> JoinAsync(string name, UserRole role, bool feed = true, string? pin = null, bool voiceConsent = true)
     {
         var connection = NewConnection();
         await connection.ConnectAsync();
-        await connection.JoinSessionAsync(new JoinSessionRequest(Session.Code, name, role, pin));
+        await connection.JoinSessionAsync(new JoinSessionRequest(Session.Code, name, role, pin, voiceConsent));
         if (feed) await connection.StartFeedAsync();
         return connection;
     }
@@ -108,6 +124,13 @@ internal sealed class InProcessServer : IAsyncDisposable
         foreach (var client in _clients) await client.DisposeAsync();
         await _app.StopAsync();
         await _app.DisposeAsync();
+        try
+        {
+            if (Directory.Exists(ClipDirectory)) Directory.Delete(ClipDirectory, recursive: true);
+        }
+        catch (IOException)
+        {
+        }
     }
 
     // ---- Helpers for assertions ----

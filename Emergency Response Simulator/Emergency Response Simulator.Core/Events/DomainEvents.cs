@@ -136,6 +136,9 @@ namespace Emergency_Response_Simulator.Core.Events;
 // Observer mode (Phase 11 M6)
 [JsonDerivedType(typeof(AssessmentNoteRecorded), nameof(AssessmentNoteRecorded))]
 [JsonDerivedType(typeof(ObserverTruthChanged), nameof(ObserverTruthChanged))]
+// Voice (Phase 11 M7)
+[JsonDerivedType(typeof(RadioAudioRecorded), nameof(RadioAudioRecorded))]
+[JsonDerivedType(typeof(VoiceConsentRecorded), nameof(VoiceConsentRecorded))]
 // Truth: multi-agency (Phase 10)
 [JsonDerivedType(typeof(InformationHeld), nameof(InformationHeld))]
 // Truth: the world as it really is
@@ -877,3 +880,17 @@ public sealed record AssessmentNoteRecorded(Guid NoteId, Guid ParticipantId, Ass
 
 /// <summary>The instructor let an observer see ground truth, or took it away.</summary>
 public sealed record ObserverTruthChanged(Guid ParticipantId, bool Granted) : DomainEvent;
+
+// ---- Voice (Phase 11 M7) ----
+
+/// <summary>
+/// A spoken transmission was recorded, as it was heard on the channel. Its transcript is what entered the radio
+/// traffic (<see cref="RadioCallMade"/> <paramref name="MessageId"/>); the audio is attached for playback.
+/// </summary>
+/// <param name="Transcript">What the speech recogniser made of it; null when there is no recogniser or it heard nothing.</param>
+/// <param name="MessageId">The radio call the transcript became, when it became one.</param>
+public sealed record RadioAudioRecorded(Guid ClipId, string ChannelId, Guid? SpeakerId, string Speaker, double DurationSeconds, CommsQuality Quality,
+    string? Transcript = null, Guid? MessageId = null) : DomainEvent;
+
+/// <summary>A participant agreed to have what they say on the radio recorded (kept for <paramref name="RetentionDays"/>), or didn't.</summary>
+public sealed record VoiceConsentRecorded(Guid ParticipantId, bool Consented, int RetentionDays) : DomainEvent;

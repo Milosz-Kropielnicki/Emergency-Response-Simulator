@@ -4,6 +4,9 @@ using Emergency_Response_Simulator.Simulation.Remote;
 using Emergency_Response_Simulator.Simulation.Routing;
 using Emergency_Response_Simulator.Simulation.Scenarios;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Options;
+using Emergency_Response_Simulator.Core.Events;
+using Emergency_Response_Simulator.Server.Voice;
 
 namespace Emergency_Response_Simulator.Server;
 
@@ -12,7 +15,8 @@ namespace Emergency_Response_Simulator.Server;
 /// role) or resumes its place (reconnect token). From then on the server knows who it is: what it may see, and whom
 /// to stamp on the events its commands produce (Phase 11 M2). Nothing a client sends says who it is after that.
 /// </summary>
-public sealed class SimulationHub(SessionManager sessions, CommandDispatcher dispatcher) : Hub<ISimulationClient>
+public sealed class SimulationHub(SessionManager sessions, CommandDispatcher dispatcher, IOptions<VoiceOptions> voiceOptions, ISpeechRecognizer recognizer)
+    : Hub<ISimulationClient>
 {
     private const string SessionKey = "session";
     private const string ParticipantKey = "participant";
@@ -116,6 +120,23 @@ public sealed class SimulationHub(SessionManager sessions, CommandDispatcher dis
     /// </summary>
     public Task HandOverRole(Guid toParticipantId, UserRole newRole, bool fullBriefing) =>
         Session.HandOverAsync(Participant, toParticipantId, newRole, fullBriefing);
+
+    // ---- Voice (Phase 11 M7) ----
+
+    /// <summary>What happens to voice here, for the consent notice before joining.</summary>
+    public VoicePolicy VoicePolicy() => new(voiceOptions.Value.RetentionDays, recognizer.Available);
+
+    /// <summary>Push-to-talk pressed: the channel is this participant's until they let go, unless someone is already on it.</summary>
+    public Task<VoiceGrant> VoiceKeyDown(string channelId) => Session.Voice.KeyDownAsync(Participant, channelId);
+
+    /// <summary>One 20 ms Opus frame of this participant's transmission.</summary>
+    public Task VoiceFrame(Guid transmissionId, int sequence, byte[] packet) => Session.Voice.FrameAsync(Participant, transmissionId, sequence, packet);
+
+    /// <summary>Push-to-talk released. Returns once the transmission is recorded (and transcribed, and on the radio).</summary>
+    public Task<RadioAudioRecorded?> VoiceKeyUp(Guid transmissionId) => Session.Voice.KeyUpAsync(Participant, transmissionId);
+
+    /// <summary>A recorded transmission of this session, for playback (the review).</summary>
+    public Task<byte[]?> GetClip(Guid clipId) => Session.Voice.ClipAsync(clipId);
 
     private ParticipantRecord Instructor() =>
         Participant is { Role: UserRole.Instructor } instructor ? instructor : throw new HubException("Only the instructor can do that.");

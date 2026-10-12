@@ -468,6 +468,11 @@
                                         <ColumnDefinition Width="170" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
+                                    <!-- A recorded transmission plays back (Phase 11 M7) -->
+                                    <Button Grid.Column="2" Content="▶" Padding="4,0" FontSize="10" HorizontalAlignment="Right" Margin="0,0,6,0" ToolTip="Play the recording"
+                                            Visibility="{Binding HasClip, Converter={StaticResource BoolToVisibility}}"
+                                            Command="{Binding DataContext.PlayClipCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding ClipId}" />
                                     <Button Content="COP" Padding="4,0" FontSize="10" Margin="0,0,6,0"
                                             Command="{Binding DataContext.ShowCopCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                             CommandParameter="{Binding At}" />

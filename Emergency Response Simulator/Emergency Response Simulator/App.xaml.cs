@@ -74,6 +74,7 @@ namespace Emergency_Response_Simulator
                 sp.GetRequiredService<Permissions>()));
             builder.Services.AddSingleton(sp => new AssessmentViewModel(sp.GetRequiredService<CopView>(), sp.GetRequiredService<IEventStore>(),
                 sp.GetRequiredService<IAssessmentService>(), sp.GetService<SimulationConnection>()));
+            builder.Services.AddSingleton(sp => new RadioViewModel(sp.GetService<SimulationConnection>(), sp.GetRequiredService<CopView>(), builder.Configuration));
             builder.Services.AddSingleton<TimelineViewModel>();
             builder.Services.AddSingleton<InstructorViewModel>();
             builder.Services.AddSingleton<AarViewModel>();
@@ -115,6 +116,8 @@ namespace Emergency_Response_Simulator
             var name = configuration["Name"];
             var code = configuration["Code"];
             var create = configuration["Create"];
+            // Consent to voice recording (Phase 11 M7): --VoiceConsent=true, or the box in the join dialog.
+            var voiceConsent = configuration.GetValue<bool>("VoiceConsent");
             UserRole? role = Enum.TryParse<UserRole>(configuration["Role"], ignoreCase: true, out var parsed) ? parsed : null;
             string? error = null;
 
@@ -126,9 +129,9 @@ namespace Emergency_Response_Simulator
                 {
                     await connection.ConnectAsync();
                     if (!string.IsNullOrWhiteSpace(create))
-                        await connection.CreateSessionAsync(new CreateSessionRequest(create, configuration["Title"] ?? "", name, configuration["Pin"] ?? ""));
+                        await connection.CreateSessionAsync(new CreateSessionRequest(create, configuration["Title"] ?? "", name, configuration["Pin"] ?? "", voiceConsent));
                     else
-                        await connection.JoinSessionAsync(new JoinSessionRequest(code!, name, role!.Value, configuration["Pin"]));
+                        await connection.JoinSessionAsync(new JoinSessionRequest(code!, name, role!.Value, configuration["Pin"], voiceConsent));
                     _connection = connection;
                     return true;
                 }
@@ -141,7 +144,7 @@ namespace Emergency_Response_Simulator
 
             // The dialog is the only window for now: don't let closing it end the app before the main window opens.
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
-            var dialog = new JoinWindow(address, name, code, role, error);
+            var dialog = new JoinWindow(address, name, code, role, error, voiceConsent);
             var joined = dialog.ShowDialog() == true;
             ShutdownMode = ShutdownMode.OnMainWindowClose;
             if (!joined || dialog.Connection is null)

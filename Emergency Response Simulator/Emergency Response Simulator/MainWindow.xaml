@@ -284,6 +284,34 @@
                 <TabControl SelectedIndex="{Binding RightPanelTab}">
                     <TabItem Header="COMMS HUB" Visibility="{Binding ShowComms, Converter={StaticResource BoolToVisibility}}">
                         <DockPanel DataContext="{Binding CommsHub}">
+                            <!-- Voice on the radio (Phase 11 M7): push-to-talk on the role's channels; networked only. -->
+                            <Border DockPanel.Dock="Top" Style="{StaticResource Panel}" Padding="6" Margin="0,0,0,6"
+                                    DataContext="{Binding DataContext.Radio, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    Visibility="{Binding IsAvailable, Converter={StaticResource BoolToVisibility}}">
+                                <StackPanel>
+                                    <DockPanel>
+                                        <Button x:Name="VoiceTalkButton" AutomationProperties.Name="Push to talk" DockPanel.Dock="Right" Padding="10,2" Margin="6,0,0,0" FontWeight="SemiBold"
+                                                PreviewMouseLeftButtonDown="PttButton_Down" PreviewMouseLeftButtonUp="PttButton_Up" MouseLeave="PttButton_Up"
+                                                ToolTip="Hold to talk (or hold the push-to-talk key)">
+                                            <TextBlock>
+                                                <Run Text="🎙 Hold to talk" /><Run Text="{Binding PttLabel, StringFormat=' · {0}', Mode=OneWay}" FontWeight="Normal" FontSize="10" />
+                                            </TextBlock>
+                                        </Button>
+                                        <TextBlock Text="VOICE" Style="{StaticResource PanelHeader}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                        <ComboBox ItemsSource="{Binding Channels}" SelectedItem="{Binding Channel}" ToolTip="The channel you talk on" />
+                                    </DockPanel>
+                                    <ItemsControl ItemsSource="{Binding Channels}" Margin="0,4,0,0">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:VoiceChannelRow}">
+                                                <TextBlock FontSize="11" Visibility="{Binding Busy, Converter={StaticResource BoolToVisibility}}">
+                                                    <Run Text="🔊" /> <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" /> <Run Text="{Binding OnAir, Mode=OneWay}" />
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock x:Name="VoiceStatus" AutomationProperties.AutomationId="VoiceStatus" Text="{Binding Status}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                </StackPanel>
+                            </Border>
                             <!-- Which traffic to show -->
                             <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding Filters}" Margin="0,0,0,6">
                                 <ItemsControl.ItemsPanel>

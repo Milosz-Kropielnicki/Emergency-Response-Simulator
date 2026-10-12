@@ -2,6 +2,8 @@ using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Data;
 using Emergency_Response_Simulator.Simulation.EventStore;
 using Emergency_Response_Simulator.Simulation.Remote;
+using Emergency_Response_Simulator.Server.Voice;
+using Microsoft.Extensions.Options;
 
 namespace Emergency_Response_Simulator.Server;
 
@@ -33,6 +35,15 @@ public static class ServerHost
         builder.Services.AddSingleton<SessionManager>();
         builder.Services.AddSingleton<CommandDispatcher>();
         builder.Services.AddHostedService<Broadcaster>();
+
+        // Voice (Phase 11 M7): recordings on disk with a retention period; Whisper transcription when its model is there.
+        builder.Services.Configure<VoiceOptions>(builder.Configuration.GetSection(VoiceOptions.SectionName));
+        builder.Services.AddSingleton<IClipStore, FileClipStore>();
+        builder.Services.AddSingleton<IVoiceTransport, SignalRVoiceTransport>();
+        builder.Services.AddSingleton<ISpeechRecognizer>(sp => File.Exists(sp.GetRequiredService<IOptions<VoiceOptions>>().Value.WhisperModel)
+            ? new WhisperRecognizer(sp.GetRequiredService<IOptions<VoiceOptions>>().Value.WhisperModel, sp.GetRequiredService<ILogger<WhisperRecognizer>>())
+            : new NoSpeechRecognizer());
+        builder.Services.AddHostedService<VoiceRetention>();
         builder.Services.AddSignalR(hub => hub.MaximumReceiveMessageSize = 4 * 1024 * 1024)
             .AddJsonProtocol(json => WireJson.Configure(json.PayloadSerializerOptions));
         configure?.Invoke(builder);

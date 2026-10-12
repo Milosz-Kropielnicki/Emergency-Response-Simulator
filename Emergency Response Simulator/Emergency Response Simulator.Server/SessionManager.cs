@@ -46,7 +46,7 @@ public sealed class SessionManager(IServiceProvider root, IConfiguration configu
             _creating.Release();
         }
 
-        var ticket = await session.OpenAsync(request.DisplayName, connectionId);
+        var ticket = await session.OpenAsync(request.DisplayName, connectionId, request.VoiceConsent);
         logger.LogInformation("Session {Session} '{Title}' opened on {Scenario}; join code {Code}", session.Id, title, scenario.Key, session.Code);
         return (session, ticket);
     }
@@ -57,7 +57,7 @@ public sealed class SessionManager(IServiceProvider root, IConfiguration configu
         var session = _sessions.Values.FirstOrDefault(s => s.Code == code && s.Joinable(DateTimeOffset.UtcNow))
                       ?? throw new HubException("No open session has that code. Check it with your instructor; codes expire.");
         if (request.Role == UserRole.Instructor) CheckPin(request.Pin);
-        return (session, await session.JoinAsync(request.DisplayName, request.Role, connectionId));
+        return (session, await session.JoinAsync(request.DisplayName, request.Role, connectionId, request.VoiceConsent));
     }
 
     public async Task<(SessionRuntime Session, JoinTicket Ticket)> ResumeAsync(string token, string connectionId)

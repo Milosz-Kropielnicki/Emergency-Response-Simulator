@@ -154,7 +154,7 @@ public sealed partial class AarAnalyzer
         if (entry is not null)
             _timeline.Add(new AarTimelineEntry(entry.Sequence, entry.SimTime, entry.Category, entry.Text, decision, truth, entry.Important || decision,
                 simEvent.ActorId, rolePlay is { } playing ? $"Instructor role-play as {playing}" : ActorLabel(simEvent), rolePlay is not null,
-                payload is AssessmentNoteRecorded note ? note.ParticipantId : null));
+                payload is AssessmentNoteRecorded note ? note.ParticipantId : null, (payload as RadioAudioRecorded)?.ClipId));
     }
 
     /// <summary>Something the trainee did (through C2 or the IAP builder), as opposed to the world or the engine.</summary>

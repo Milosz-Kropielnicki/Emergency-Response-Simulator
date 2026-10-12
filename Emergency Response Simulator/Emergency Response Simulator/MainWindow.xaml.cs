@@ -31,6 +31,21 @@ namespace Emergency_Response_Simulator
             viewModel.IapRequested += (_, _) => ShowIapBuilder();
             viewModel.AarRequested += (_, _) => ShowAar(services);
             viewModel.ConsoleRequested += (_, _) => ShowConsole(services);
+            // Push-to-talk (Phase 11 M7): held down, the radio transmits; anywhere in the window, even while typing.
+            PreviewKeyDown += async (_, e) =>
+            {
+                if (e.Key != viewModel.Radio.PttKey || !viewModel.Radio.IsAvailable) return;
+                e.Handled = true;
+                if (!e.IsRepeat) await viewModel.Radio.PressAsync();
+            };
+            PreviewKeyUp += async (_, e) =>
+            {
+                if (e.Key != viewModel.Radio.PttKey || !viewModel.Radio.IsAvailable) return;
+                e.Handled = true;
+                await viewModel.Radio.ReleaseAsync();
+            };
+            Deactivated += async (_, _) => await viewModel.Radio.ReleaseAsync(); // no stuck transmission when focus leaves
+            Closed += (_, _) => viewModel.Radio.Dispose();
             Loaded += async (_, _) =>
             {
                 await viewModel.Timeline.LoadAsync();
@@ -90,6 +105,19 @@ namespace Emergency_Response_Simulator
                     _consoleWindow.WindowState = WindowState.Normal;
                 _consoleWindow.Activate();
             }
+        }
+
+        // The on-screen push-to-talk button (Phase 11 M7): held, the radio transmits.
+        private async void PttButton_Down(object sender, MouseButtonEventArgs e)
+        {
+            ((UIElement)sender).CaptureMouse();
+            await _viewModel.Radio.PressAsync();
+        }
+
+        private async void PttButton_Up(object sender, MouseEventArgs e)
+        {
+            ((UIElement)sender).ReleaseMouseCapture();
+            await _viewModel.Radio.ReleaseAsync();
         }
 
         private void TopHoverStrip_MouseEnter(object sender, MouseEventArgs e) => _viewModel.IsTopPanelOpen = true;

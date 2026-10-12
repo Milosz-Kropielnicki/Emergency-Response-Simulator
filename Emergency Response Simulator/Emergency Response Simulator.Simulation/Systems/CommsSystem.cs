@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
@@ -394,6 +395,9 @@ public sealed class CommsSystem(CommsOptions? options = null, IRoutingService? r
             payload = new ReportReceived(Guid.NewGuid(), unit.OrderedIncidentId is { } i && !world.AgencyTasks.ContainsKey(i) ? i : null,
                 ReportSource.FieldUnit, callsign, StatusOf(world, unit), Confidence.High, VerificationStatus.Confirmed, unit.Location, 30, unit.Id);
         }
+        // An instruction addressed to them (typed or spoken, Phase 11 M7) is read back, as crews are trained to.
+        else if (Instruction(said, callsign) is { } instruction)
+            text = $"Control, {callsign}, received: {instruction}, over.";
         else
             text = $"{callsign}, copy.";
 
@@ -402,6 +406,19 @@ public sealed class CommsSystem(CommsOptions? options = null, IRoutingService? r
             Channel = unit.Channel, From = callsign, UnitId = unit.Id, To = "Control", Text = text, Payload = payload, Priority = 3,
             QueuedAt = context.SimTime, NotBefore = context.SimTime + TimeSpan.FromSeconds(4 + Roll(call.Id, 5) * 4),
         });
+    }
+
+    /// <summary>
+    /// What a call tells this crew to do, without the radio procedure around it ("Engine 4, Control, proceed to Barrow
+    /// Street, over" → "proceed to Barrow Street"); null when it is only a call or an acknowledgement.
+    /// </summary>
+    public static string? Instruction(string said, string callsign)
+    {
+        var text = Regex.Replace(said, Regex.Escape(callsign), " ", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"\b(this is control|control|from control|over and out|over|out|please|thanks|thank you)\b", " ", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"[\s,.;:!?—–-]+", " ").Trim();
+        text = Regex.Replace(text, @"^(to|from)\s+", "", RegexOptions.IgnoreCase); // "Control to Engine 4, …"
+        return RadioPlan.Words(text) >= 3 ? text : null;
     }
 
     private static bool AsksForStatus(string text)

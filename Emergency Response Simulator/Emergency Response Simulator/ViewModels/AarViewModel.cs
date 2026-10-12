@@ -22,7 +22,11 @@ public sealed record AarBranchRow(string Topic, string Time, string Yours, strin
 
 public sealed record AarOutcomeRow(string Label, string Hurt, string Dead, string Firefighters, string Fire, string FirstOnScene, string Notes, string Actions);
 
-public sealed record AarTimelineRow(DateTimeOffset At, string Time, string Category, string Text, bool IsDecision, bool IsTruth, string Actor);
+/// <param name="ClipId">A recorded transmission to play (Phase 11 M7).</param>
+public sealed record AarTimelineRow(DateTimeOffset At, string Time, string Category, string Text, bool IsDecision, bool IsTruth, string Actor, Guid? ClipId = null)
+{
+    public bool HasClip => ClipId is not null;
+}
 
 /// <summary>One participant's line in the review (networked sessions).</summary>
 public sealed record AarParticipantRow(string Name, string Roles, string Time, int Commands, string Ratings, string Response, string Score, string Focus,
@@ -56,7 +60,7 @@ public sealed record AarDelayRow(string Time, string Callsign, string Lost, stri
 /// COP then"), metrics, commitment and delay analytics with heatmaps, branch points and the re-run comparison, the full
 /// replayable timeline, and exports for debriefing and certification.
 /// </summary>
-public sealed partial class AarViewModel(IAarService aar, SimulationSession session, TimelineViewModel timeline) : ObservableObject
+public sealed partial class AarViewModel(IAarService aar, SimulationSession session, TimelineViewModel timeline, RadioViewModel radio) : ObservableObject
 {
     /// <summary>Pixels the commitment chart spreads the session across.</summary>
     public const double GanttWidth = 720;
@@ -101,6 +105,10 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
     public ObservableCollection<HeatmapView> Heatmaps { get; } = [];
     public ObservableCollection<AarDelayRow> Delays { get; } = [];
     public ObservableCollection<AarTimelineRow> Timeline { get; } = [];
+
+    /// <summary>Plays a recorded transmission through the headset (Phase 11 M7).</summary>
+    [RelayCommand]
+    private Task PlayClipAsync(Guid clipId) => radio.PlayClipAsync(clipId);
     public ObservableCollection<AarParticipantRow> Participants { get; } = [];
 
     /// <summary>How the instructor ran the exercise (Phase 11 M4); scripted injects that went off on time are counted, not listed.</summary>
@@ -301,7 +309,7 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
         // With a participant chosen, only what their commands produced.
         var person = ParticipantFilter?.Id is not null;
         Replace(Timeline, Report.TimelineOf(ParticipantFilter?.Id).Where(t => (!DecisionsOnly || t.IsDecision || t.Important || person) && (IncludeTruth || !t.IsTruth))
-            .Select(t => new AarTimelineRow(t.At, Clock(t.At), t.Category, t.Text, t.IsDecision, t.IsTruth, t.Actor ?? "")));
+            .Select(t => new AarTimelineRow(t.At, Clock(t.At), t.Category, t.Text, t.IsDecision, t.IsTruth, t.Actor ?? "", t.ClipId)));
     }
 
     private void FillDecisions()

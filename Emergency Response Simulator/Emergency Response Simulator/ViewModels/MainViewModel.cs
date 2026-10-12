@@ -30,11 +30,12 @@ public partial class MainViewModel : ObservableObject
 
     public MainViewModel(CopView cop, ISimulationControl simulation, IC2Service c2, IIapService iap, TimelineViewModel timeline,
         IRoutingService routing, DataSourceInfo dataSource, InstructorViewModel instructor, SessionViewModel session, Permissions permissions,
-        AssessmentViewModel assessment)
+        AssessmentViewModel assessment, RadioViewModel radio)
     {
         Instructor = instructor;
         Permissions = permissions;
         Assessment = assessment;
+        Radio = radio;
         Session = session;
         session.ReportTo((result, done) => ShowCommandResult(result, done));
         _cop = cop;
@@ -87,6 +88,9 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>Observing and live assessment (Phase 11 M6): follow a participant, record notes and ratings.</summary>
     public AssessmentViewModel Assessment { get; }
+
+    /// <summary>The radio headset (Phase 11 M7): push-to-talk on the role's channels.</summary>
+    public RadioViewModel Radio { get; }
 
     /// <summary>This client only observes (Phase 11 M6): read-only, whatever it shows.</summary>
     [ObservableProperty] private bool _isObserving;
@@ -671,6 +675,7 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsConsoleAvailable));
         Permissions.Refresh();
         Assessment.Refresh();
+        Radio.Refresh();
         RefreshObserving();
         RefreshZones();
         RefreshWeather();

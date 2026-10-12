@@ -64,6 +64,16 @@ public interface ISimulationClient
 
     /// <summary>The session moved on (started, ended), or this participant's view of it changed (truth granted).</summary>
     Task SessionChanged(SessionInfo session);
+
+    // ---- Voice (Phase 11 M7) ----
+
+    /// <summary>Someone keyed up on a channel this connection listens to.</summary>
+    Task VoiceStarted(VoiceTalk talk);
+
+    /// <summary>One 20 ms Opus frame of a transmission, as it sounds on the radio.</summary>
+    Task VoiceAudio(Guid transmissionId, int sequence, byte[] packet);
+
+    Task VoiceEnded(Guid transmissionId);
 }
 
 /// <summary>Where a networked session is in its life (Phase 11 M2).</summary>
@@ -82,10 +92,12 @@ public enum SessionState
 public sealed record ScenarioInfo(string Key, string Name, string Description);
 
 /// <summary>An instructor opens a session. The PIN is the server's, never kept in a client's configuration.</summary>
-public sealed record CreateSessionRequest(string Scenario, string Title, string DisplayName, string Pin);
+/// <param name="VoiceConsent">Agrees to what they say on the radio being recorded for the review (Phase 11 M7).</param>
+public sealed record CreateSessionRequest(string Scenario, string Title, string DisplayName, string Pin, bool VoiceConsent = false);
 
 /// <summary>Someone joins a session by its code, under a name, in a role. Instructors also give the PIN.</summary>
-public sealed record JoinSessionRequest(string Code, string DisplayName, UserRole Role, string? Pin = null);
+/// <param name="VoiceConsent">Agrees to what they say on the radio being recorded for the review (Phase 11 M7). Without it they can listen but not talk.</param>
+public sealed record JoinSessionRequest(string Code, string DisplayName, UserRole Role, string? Pin = null, bool VoiceConsent = false);
 
 /// <summary>
 /// What a participant gets on joining: who they are in the session, and a token to come back as the same person after
@@ -150,4 +162,22 @@ public sealed class GeometryWktConverterFactory : JsonConverterFactory
         public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options) =>
             writer.WriteStringValue(value.AsText());
     }
+}
+
+// ---- Voice (Phase 11 M7) ----
+
+/// <summary>A transmission under way: who is talking on which channel.</summary>
+public sealed record VoiceTalk(Guid TransmissionId, string ChannelId, Guid SpeakerId, string Speaker);
+
+/// <summary>The answer to keying up: the channel is yours (half-duplex), or why not.</summary>
+public sealed record VoiceGrant(bool Granted, Guid? TransmissionId = null, string? Reason = null);
+
+/// <summary>What the server does with voice, for the consent notice at join.</summary>
+/// <param name="RetentionDays">How long recordings are kept.</param>
+/// <param name="Transcribed">Whether speech is transcribed (and so reaches simulated crews).</param>
+public sealed record VoicePolicy(int RetentionDays, bool Transcribed)
+{
+    public string Notice => $"Radio traffic you speak is recorded for the after-action review and kept for {RetentionDays} day(s)" +
+                            (Transcribed ? "; it is also transcribed by speech recognition so simulated crews can answer." : ".") +
+                            " Without your consent you can listen but not talk.";
 }

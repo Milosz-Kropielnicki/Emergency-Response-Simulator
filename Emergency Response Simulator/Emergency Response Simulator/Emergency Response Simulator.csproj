@@ -16,13 +16,13 @@
     <PackageReference Include="Mapsui.Nts" Version="5.1.0" />
     <PackageReference Include="Mapsui.Wpf" Version="5.1.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
+    <PackageReference Include="NAudio" Version="3.1.0" />
   </ItemGroup>
 
   <ItemGroup>
     <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
     <!-- Machine-specific connection strings, written by database/Setup-Database.ps1 (git-ignored). -->
-    <None Include="..\appsettings.Local.json" Link="appsettings.Local.json" CopyToOutputDirectory="PreserveNewest"
-          Condition="Exists('..\appsettings.Local.json')" />
+    <None Include="..\appsettings.Local.json" Link="appsettings.Local.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\appsettings.Local.json')" />
   </ItemGroup>
 
   <ItemGroup>

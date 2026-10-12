@@ -8,6 +8,8 @@ using Emergency_Response_Simulator.Simulation.Remote;
 using Emergency_Response_Simulator.Simulation.Scenarios;
 using Emergency_Response_Simulator.Simulation.State;
 using Emergency_Response_Simulator.Simulation.Systems;
+using Emergency_Response_Simulator.Server.Voice;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Emergency_Response_Simulator.Server;
@@ -33,6 +35,9 @@ public sealed class ParticipantRecord
 
     /// <summary>Observers and the instructor: they record and see assessment notes (Phase 11 M6).</summary>
     public bool Assessor => Roles.IsAssessor(Role);
+
+    /// <summary>Agreed to voice recording (Phase 11 M7): without it they listen but can't talk.</summary>
+    public bool VoiceConsent { get; set; }
 
     public CommandActor Actor => new(Id, Role, Name);
 }
@@ -84,6 +89,12 @@ public sealed class SessionRuntime : IAsyncDisposable
     public EventFeed Feed { get; }
     public CommandGate Gate { get; } = new();
 
+    /// <summary>The session's radio voice (Phase 11 M7).</summary>
+    public VoiceRouter Voice { get; private set; } = null!;
+
+    /// <summary>How long voice recordings are kept, as told to everyone at join.</summary>
+    public int RetentionDays { get; private set; }
+
     public bool Joinable(DateTimeOffset now) => State != SessionState.Ended && now < ExpiresAt;
 
     public IReadOnlyList<ParticipantRecord> Participants
@@ -114,8 +125,12 @@ public sealed class SessionRuntime : IAsyncDisposable
         services.AddSingleton<IScenario, DemoRosterScenario>();
 
         var provider = services.BuildServiceProvider();
+        var voice = root.GetRequiredService<IOptions<VoiceOptions>>().Value;
         var runtime = new SessionRuntime(provider, scenario, title, code, codeLifetime,
             root.GetRequiredService<IHubContext<SimulationHub, ISimulationClient>>(), root.GetRequiredService<ILoggerFactory>());
+        runtime.RetentionDays = voice.RetentionDays;
+        runtime.Voice = new VoiceRouter(runtime, root.GetRequiredService<IVoiceTransport>(), root.GetRequiredService<IClipStore>(),
+            root.GetRequiredService<ISpeechRecognizer>(), voice, root.GetRequiredService<ILoggerFactory>().CreateLogger<VoiceRouter>());
         foreach (var hosted in runtime._hosted)
             await hosted.StartAsync(CancellationToken.None);
         return runtime;
@@ -140,21 +155,30 @@ public sealed class SessionRuntime : IAsyncDisposable
     // ---- Participants ----
 
     /// <summary>The instructor who opened the session joins it first and records that it opened.</summary>
-    public async Task<JoinTicket> OpenAsync(string instructorName, string connectionId)
+    public async Task<JoinTicket> OpenAsync(string instructorName, string connectionId, bool voiceConsent = false)
     {
         var instructor = Admit(instructorName, UserRole.Instructor, connectionId);
         await PublishAsync(new SessionOpened(Scenario.Key, Title, instructor.Id), instructor);
         await PublishAsync(new ParticipantJoined(instructor.Id, instructor.Name, instructor.Role), instructor);
+        await ConsentAsync(instructor, voiceConsent);
         return TicketFor(instructor);
     }
 
     /// <summary>Someone joins by the code. An exclusive role already held by someone present is refused.</summary>
-    public async Task<JoinTicket> JoinAsync(string displayName, UserRole role, string connectionId)
+    public async Task<JoinTicket> JoinAsync(string displayName, UserRole role, string connectionId, bool voiceConsent = false)
     {
         if (State == SessionState.Ended) throw new HubException("That session has ended.");
         var participant = Admit(displayName, role, connectionId);
         await PublishAsync(new ParticipantJoined(participant.Id, participant.Name, participant.Role), participant);
+        await ConsentAsync(participant, voiceConsent);
         return TicketFor(participant);
+    }
+
+    /// <summary>Whether they agreed, at join, to what they say on the radio being recorded (Phase 11 M7).</summary>
+    private async Task ConsentAsync(ParticipantRecord participant, bool consented)
+    {
+        participant.VoiceConsent = consented;
+        await PublishAsync(new VoiceConsentRecorded(participant.Id, consented, RetentionDays), participant);
     }
 
     private ParticipantRecord Admit(string displayName, UserRole role, string connectionId)
@@ -200,6 +224,8 @@ public sealed class SessionRuntime : IAsyncDisposable
         {
             if (!_participants.TryGetValue(participantId, out var participant)) return;
             participant.Connections.Remove(connectionId);
+            if (participant.Connections.Count == 0)
+                _ = Voice.DroppedAsync(participant); // whatever they were saying ends there
             if (participant.Connections.Count == 0 && participant.Present)
                 participant.DroppedAt = DateTimeOffset.UtcNow;
         }

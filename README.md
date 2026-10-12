@@ -608,7 +608,7 @@ The other agencies are now joint partners with priorities and knowledge of their
   - **Mutual-aid agreements**.
   - For the instructor, the truth comparison lists everything agencies know and haven't shared.
 
-## Server & clients (Phase 11, M1–M6)
+## Server & clients (Phase 11, M1–M7)
 
 The engine, event store and live COP can now run once, on a **simulation server**, with any number of WPF clients connected over SignalR. Standalone (everything in one process, as before) is still the default.
 
@@ -781,7 +781,43 @@ dotnet run --project "Emergency Response Simulator.Server" -- --ConnectionString
   - **Per-participant scoring:** how their own decisions rated (0–100) and their observer ratings (Competent 100, Developing 50, Not yet competent 0, averaged) combine evenly. Either stands alone when the other is missing. The result goes back onto the rubric: 75 and over is competent, 40 and over developing.
   - **Exports:** the HTML and CSV exports include both.
 
-**Not yet** (later milestone): voice (M7).
+### Voice communications (M7)
+
+- **Client audio:**
+  - **Devices:** NAudio WASAPI, shared mode, communications category, captured as 48 kHz mono and sent as Opus in 20 ms frames (Concentus, `Simulation/Voice`).
+  - **Push to talk:** a real key, `` ` `` (backtick) by default (`Voice:PushToTalkKey` on the client), held anywhere in the main window, or the "Hold to talk" button in the COMMS HUB's VOICE panel.
+  - **The microphone** is open only while push-to-talk is held; letting go, or the window losing focus, ends the transmission.
+  - **Listening:** incoming transmissions are mixed to the speakers; the panel shows who is on air on each of your channels.
+- **The server's voice router** (`Server/Voice/VoiceRouter`) works through `IVoiceTransport`, implemented over the simulation hub's SignalR connections; a UDP or WebRTC media path could replace it without touching the router.
+  - **Channel membership follows the role (and so its workspace)** (`VoiceChannels`):
+    - **IC:** fire command and inter-agency.
+    - **Operations:** fire command and tactical 2 and 3.
+    - **Safety:** tactical 2 and fire command.
+    - **Dispatchers:** fire command, ambulance and Garda.
+    - **Liaison, PIO and Finance:** inter-agency.
+    - **Agency chiefs:** inter-agency plus the ambulance and Garda channels.
+    - **The instructor:** every channel.
+    - **Observers:** listen on every channel and never talk.
+  - **Half-duplex:** one talker per channel. Keying up on a busy channel is refused with who has it ("FIRE TAC 2 is busy: Bea is talking."). Talkers don't hear themselves. A transmission is cut off after `Voice:MaxTransmission` (60 s), and a dropped link ends it.
+  - **The Phase 7 model, applied to audio:** every transmission is band-limited to a handset's 300–3,000 Hz with a little hiss. Keying up over simulated traffic on the channel doubles with it, so the audio comes out garbled for everyone, and the crews hear it garbled too.
+- **Talking to simulated parties:**
+  - **Transcription:** each transmission's clean audio is transcribed by Whisper (Whisper.net on the CPU, `ggml-base.en.bin`, `Voice:WhisperModel`). The prompt is biased with the session's call signs, and "engine four" is normalised to "Engine 4", only after a call-sign word, so "no one" stays as said.
+  - **Into the radio traffic:** the transcript enters `TransmitAsync` as the speaker's transmission (the event, stamped with them), so a crew that hears its call sign answers. An instruction addressed to a crew ("Engine 4, Control, proceed to Barrow Street, over") is now read back ("Control, Engine 4, received: proceed to Barrow Street, over."), typed or spoken.
+  - **Without a model:** voice still works between players; it just isn't transcribed.
+  - **The engine:** Whisper.net rather than faster-whisper (your choice), so there's no Python runtime. It sits behind `ISpeechRecognizer`, so another engine can replace it.
+- **Recording:**
+  - **Each transmission** is kept as an Opus clip as it sounded on the radio (`Voice:ClipDirectory`, `%LOCALAPPDATA%\ErsVoice\clips\{session}\{clip}.erso`), with `RadioAudioRecorded` (channel, speaker, length, quality, transcript, and the radio call it became).
+  - **Retention:** recordings older than `Voice:RetentionDays` (30) are deleted at start-up and daily.
+  - **Consent at join:** the join dialog explains the recording and the transcription and asks for consent (`--VoiceConsent=true` on the command line). It is recorded as `VoiceConsentRecorded` with the retention period. Without it a participant listens but can't talk.
+- **AAR:** every recorded transmission is on the timeline ("Voice: Bea on FIRE CMD 1 (3.2 s): …") with a ▶ button that plays the clip through the headset, fetched from the server.
+
+**Exit criteria, as tested** (`VoiceTests`):
+- **Two players on FIRE TAC 2, half-duplex:** while Bea has the channel, Sam is refused. Sam and an observer hear her (through the radio effect); the IC, who isn't on TAC 2, doesn't, and Bea doesn't hear herself. Then Sam has the channel and Bea hears him.
+- **A spoken order to Engine 4 is read back.**
+- **Every transmission plays back from the review:** each clip is fetched through a client and decodes to its full length.
+- **Real speech:** a test also speaks a call with Windows' speech synthesiser, transcribes it with the real Whisper model when it's installed, and checks that Engine 4 answers.
+
+The base.en model is about 148 MB (from Hugging Face, `ggerganov/whisper.cpp`). Put it at `%LOCALAPPDATA%\ErsVoice\models\ggml-base.en.bin`, or point `Voice:WhisperModel` at it.
 
 ## Local setup
 

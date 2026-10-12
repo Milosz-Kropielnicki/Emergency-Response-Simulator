@@ -49,6 +49,9 @@ public sealed class SimulationConnection : IAsyncDisposable, IWorldSnapshotSourc
         _hub.On<TrafficState>(nameof(ISimulationClient.TrafficFeed), traffic => TrafficFeed.Publish(traffic.ToSnapshot()));
         _hub.On<TrafficState>(nameof(ISimulationClient.LiveTraffic), traffic => LiveTraffic.Publish(traffic.ToSnapshot()));
         _hub.On<WorldSnapshot>(nameof(ISimulationClient.WorldSnapshot), snapshot => Snapshot = snapshot);
+        _hub.On<VoiceTalk>(nameof(ISimulationClient.VoiceStarted), talk => VoiceStarted?.Invoke(this, talk));
+        _hub.On<Guid, int, byte[]>(nameof(ISimulationClient.VoiceAudio), (id, sequence, packet) => VoiceAudio?.Invoke(this, new VoicePacket(id, sequence, packet)));
+        _hub.On<Guid>(nameof(ISimulationClient.VoiceEnded), id => VoiceEnded?.Invoke(this, id));
         _hub.On<SessionInfo>(nameof(ISimulationClient.SessionChanged), session =>
         {
             Session = session;
@@ -97,6 +100,30 @@ public sealed class SimulationConnection : IAsyncDisposable, IWorldSnapshotSourc
 
     /// <summary>Raised when the link drops or comes back, or the session starts or ends (on a background thread).</summary>
     public event EventHandler? StateChanged;
+
+    // ---- Voice (Phase 11 M7) ----
+
+    /// <summary>Someone keyed up on a channel this participant listens to. Raised on a background thread.</summary>
+    public event EventHandler<VoiceTalk>? VoiceStarted;
+
+    /// <summary>A 20 ms Opus frame of a transmission, as it sounds on the radio. Raised on a background thread.</summary>
+    public event EventHandler<VoicePacket>? VoiceAudio;
+
+    public event EventHandler<Guid>? VoiceEnded;
+
+    public Task<VoicePolicy> VoicePolicyAsync() => _hub.InvokeAsync<VoicePolicy>("VoicePolicy");
+
+    /// <summary>Push-to-talk pressed on a channel: granted (half-duplex) or why not.</summary>
+    public Task<VoiceGrant> VoiceKeyDownAsync(string channelId) => _hub.InvokeAsync<VoiceGrant>("VoiceKeyDown", channelId);
+
+    /// <summary>One frame of this participant's transmission; sent without waiting, in order.</summary>
+    public Task SendVoiceFrameAsync(Guid transmissionId, int sequence, byte[] packet) => _hub.SendAsync("VoiceFrame", transmissionId, sequence, packet);
+
+    /// <summary>Push-to-talk released; returns the recording (with its transcript) once the server has it.</summary>
+    public Task<RadioAudioRecorded?> VoiceKeyUpAsync(Guid transmissionId) => _hub.InvokeAsync<RadioAudioRecorded?>("VoiceKeyUp", transmissionId);
+
+    /// <summary>A recorded transmission, for playback in the review.</summary>
+    public Task<byte[]?> GetClipAsync(Guid clipId) => _hub.InvokeAsync<byte[]?>("GetClip", clipId);
 
     /// <summary>The engine clock, moved on locally between the server's pushes while it runs.</summary>
     public ClockState Clock
@@ -226,3 +253,6 @@ public sealed class SimulationConnection : IAsyncDisposable, IWorldSnapshotSourc
         await _hub.DisposeAsync();
     }
 }
+
+/// <summary>One frame of a transmission received (Phase 11 M7).</summary>
+public sealed record VoicePacket(Guid TransmissionId, int Sequence, byte[] Packet);

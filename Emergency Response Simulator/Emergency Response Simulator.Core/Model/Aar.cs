@@ -51,8 +51,9 @@ public sealed record AarDecision(
 /// <param name="ActorId">The participant whose command it was (networked sessions, Phase 11).</param>
 /// <param name="RolePlay">Something the instructor said or decided as someone in the world (Phase 11 M4).</param>
 /// <param name="AboutId">For an assessment note, the participant it is about (Phase 11 M6), so their timeline shows it.</param>
+/// <param name="ClipId">A recorded transmission to play back (Phase 11 M7).</param>
 public sealed record AarTimelineEntry(long Sequence, DateTimeOffset At, string Category, string Text, bool IsDecision, bool IsTruth, bool Important,
-    Guid? ActorId = null, string? Actor = null, bool RolePlay = false, Guid? AboutId = null);
+    Guid? ActorId = null, string? Actor = null, bool RolePlay = false, Guid? AboutId = null, Guid? ClipId = null);
 
 /// <summary>
 /// What the instructor did to run the exercise (Phase 11 M4): injects fired, held, released and skipped, role-play,

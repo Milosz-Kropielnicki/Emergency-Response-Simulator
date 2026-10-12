@@ -220,6 +220,10 @@ public static class EventDescriber
             // Observer mode (Phase 11 M6)
             AssessmentNoteRecorded e => Entry("ASSESSMENT", $"{Participant(e.ParticipantId)}" + (e.Rating is { } rating ? $": {Rubric.Name(rating)}" : "") +
                 (string.IsNullOrWhiteSpace(e.Note) ? "" : $" — {e.Note}") + (e.AboutSequence is { } about ? $" (on event #{about})" : ""), important: true),
+            // Voice (Phase 11 M7)
+            RadioAudioRecorded e => Entry("COMMS", $"Voice: {e.Speaker} on {e.ChannelId} ({e.DurationSeconds:0.#} s" + (e.Quality == CommsQuality.Clear ? ")" : $", {e.Quality.ToString().ToLowerInvariant()})") +
+                (e.Transcript is { } transcript ? $": \"{transcript}\"" : ", not transcribed")),
+            VoiceConsentRecorded e => Entry("SESSION", e.Consented ? $"{Participant(e.ParticipantId)} agreed to voice recording" : $"{Participant(e.ParticipantId)} did not agree to voice recording: listens only"),
             ObserverTruthChanged e => Entry("SESSION", e.Granted ? $"{Participant(e.ParticipantId)} may see ground truth" : $"{Participant(e.ParticipantId)} no longer sees ground truth"),
             AiRoleTakenOver e => Entry("INSTRUCTOR", $"Instructor takes over {e.Name}"),
             AiRoleHandedBack e => Entry("INSTRUCTOR", $"{e.Name} handed back to the simulation"),

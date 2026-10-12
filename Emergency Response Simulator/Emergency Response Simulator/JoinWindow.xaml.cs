@@ -13,7 +13,7 @@ namespace Emergency_Response_Simulator
     /// </summary>
     public partial class JoinWindow : Window
     {
-        public JoinWindow(string? server, string? name, string? code, UserRole? role, string? error)
+        public JoinWindow(string? server, string? name, string? code, UserRole? role, string? error, bool voiceConsent = false)
         {
             InitializeComponent();
             ServerBox.Text = server ?? "http://localhost:5180";
@@ -24,6 +24,7 @@ namespace Emergency_Response_Simulator
             ScenarioBox.ItemsSource = ScenarioCatalog.All;
             ScenarioBox.SelectedIndex = 0;
             ErrorText.Text = error ?? "";
+            VoiceConsentBox.IsChecked = voiceConsent;
             Mode.SelectionChanged += (_, _) => GoButton.Content = Mode.SelectedIndex == 0 ? "Join" : "Open session";
         }
 
@@ -59,12 +60,13 @@ namespace Emergency_Response_Simulator
                 {
                     var role = ((RoleChoice)RoleBox.SelectedItem).Role;
                     await connection.JoinSessionAsync(new JoinSessionRequest(CodeBox.Text.Trim(), NameBox.Text.Trim(), role,
-                        role == UserRole.Instructor ? JoinPinBox.Password : null));
+                        role == UserRole.Instructor ? JoinPinBox.Password : null, VoiceConsentBox.IsChecked == true));
                 }
                 else
                 {
                     var scenario = (ScenarioInfo)ScenarioBox.SelectedItem;
-                    await connection.CreateSessionAsync(new CreateSessionRequest(scenario.Key, TitleBox.Text.Trim(), NameBox.Text.Trim(), CreatePinBox.Password));
+                    await connection.CreateSessionAsync(new CreateSessionRequest(scenario.Key, TitleBox.Text.Trim(), NameBox.Text.Trim(), CreatePinBox.Password,
+                        VoiceConsentBox.IsChecked == true));
                 }
                 Connection = connection;
                 DialogResult = true;
