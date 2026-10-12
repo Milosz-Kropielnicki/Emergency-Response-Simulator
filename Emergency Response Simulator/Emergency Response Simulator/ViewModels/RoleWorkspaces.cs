@@ -3,7 +3,7 @@ using Emergency_Response_Simulator.Core.Model;
 namespace Emergency_Response_Simulator.ViewModels;
 
 /// <summary>Right-panel tabs, in the order the main window shows them.</summary>
-public enum WorkspacePanel { Comms, Incident, Unit, Ics, Crews, Agencies, Session, Assess }
+public enum WorkspacePanel { Comms, Incident, Unit, Ics, Crews, Agencies, Session, Assess, Desk }
 
 /// <summary>Bottom tabs, in the order the main window shows them.</summary>
 public enum WorkspaceBoard { Status, Command, History, Instructor }
@@ -30,8 +30,9 @@ public static class RoleWorkspaces
 
     public static IReadOnlyList<RoleWorkspace> All { get; } =
     [
-        Of(UserRole.IncidentCommander, "Command overview: incidents, the command structure, approvals and other agencies.",
-            [WorkspacePanel.Incident, WorkspacePanel.Ics, WorkspacePanel.Agencies, WorkspacePanel.Comms, WorkspacePanel.Crews], WorkspacePanel.Incident,
+        // The IC starts at the desk: decisions waiting, and whatever falls to them from the roles nobody has taken.
+        Of(UserRole.IncidentCommander, "Command overview: what waits for your decision, incidents, the command structure and other agencies.",
+            [WorkspacePanel.Desk, WorkspacePanel.Incident, WorkspacePanel.Ics, WorkspacePanel.Agencies, WorkspacePanel.Comms, WorkspacePanel.Crews], WorkspacePanel.Desk,
             WorkspaceBoard.Command, layers: [(MapLayerKeys.Trails, false), (MapLayerKeys.Routes, false), (MapLayerKeys.Jurisdictions, true)]),
         Of(UserRole.Dispatcher, "Calls, units and the radio: who is free and how far away.",
             [WorkspacePanel.Comms, WorkspacePanel.Incident, WorkspacePanel.Unit], WorkspacePanel.Comms,
@@ -73,7 +74,8 @@ public static class RoleWorkspaces
 
     private static RoleWorkspace Of(UserRole role, string purpose, WorkspacePanel[] panels, WorkspacePanel focus, WorkspaceBoard board,
         bool layerPanel = true, WorkspaceBoard[]? boards = null, params (string Key, bool On)[] layers) =>
-        new(role, Roles.Name(role), purpose, [.. panels.Append(WorkspacePanel.Session).Distinct()], focus,
+        // Every role has its desk (Phase 12) and the session tab, whatever else it works from.
+        new(role, Roles.Name(role), purpose, [.. panels.Append(WorkspacePanel.Desk).Append(WorkspacePanel.Session).Distinct()], focus,
             boards ?? [WorkspaceBoard.Status, WorkspaceBoard.Command, WorkspaceBoard.History], board, layerPanel,
             layers.ToDictionary(l => l.Key, l => l.On));
 }

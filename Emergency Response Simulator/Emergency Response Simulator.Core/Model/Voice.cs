@@ -24,4 +24,11 @@ public static class VoiceChannels
     public static bool CanTalk(UserRole role, string channel) => role != UserRole.Observer && For(role).Contains(channel);
 
     public static bool Hears(UserRole role, string channel) => For(role).Contains(channel);
+
+    /// <summary>
+    /// Who may still talk on a channel under emergency traffic (Phase 12): the people working the emergency (the IC,
+    /// Operations, Safety and dispatch) and the instructor. Everyone else keeps off the air until it is lifted.
+    /// </summary>
+    public static bool MayTalkUnderEmergencyTraffic(UserRole role) =>
+        role is UserRole.IncidentCommander or UserRole.Operations or UserRole.Safety or UserRole.Dispatcher or UserRole.Instructor;
 }

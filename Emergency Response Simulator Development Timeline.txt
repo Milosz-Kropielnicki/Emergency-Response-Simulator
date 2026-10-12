@@ -211,11 +211,8 @@
 ---
 
 ## Phase 11 — Instructor Tools & Multiplayer: Foundation *(NEW)*
-**Weeks 67–82 | 16 weeks**
 
 **Focus:** Splitting the single-process engine into a server and clients, and delivering the core multiplayer, identity, permissions, instructor, observer, and voice foundations. This is the concrete implementation that the previous Phase 11 (now Phase 12) assumed.
-
-**Baseline:** Phases 0–10 complete.
 
 **Underlying gap addressed:** The engine, event store, COP and all UI currently run in one WPF process (`App.xaml.cs`). Everything else depends on splitting that into a server and clients.
 
@@ -318,8 +315,7 @@ M1 ─► M2 ─► M3 ─┬─► M4 ─► M5
 
 ---
 
-## Phase 12 — Instructor Tools & Multiplayer: Completion
-**Weeks 83–88 | 6 weeks**  
+## Phase 12 — Instructor Tools & Multiplayer: Completion 
 **High-impact training feature #5**
 
 **Focus:** Consolidating and polishing the multiplayer trainer.
@@ -340,7 +336,6 @@ M1 ─► M2 ─► M3 ─┬─► M4 ─► M5
 ---
 
 ## Phase 13 — Plume & Hazard Models
-**Weeks 89–94 | 6 weeks**
 
 **Focus:** Advanced dispersion prediction.
 

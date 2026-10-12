@@ -100,6 +100,9 @@ public sealed class WorldState
     public List<PendingApprovalReply> PendingApprovalReplies { get; } = [];
     public Dictionary<Guid, string> ApprovalRequesters { get; } = [];
 
+    /// <summary>How command decided each approval it was asked for: approved or not (Phase 12, for whoever asked).</summary>
+    public Dictionary<Guid, bool> ApprovalDecisions { get; } = [];
+
     // ---- Phase 10: multi-agency (Design Document §14) ----
 
     public WorldInteragency Interagency { get; } = new();
@@ -119,6 +122,31 @@ public sealed class WorldState
 
     /// <summary>Politicians' calls and whether command has answered (Phase 11 M5).</summary>
     public Dictionary<Guid, PoliticalCallState> PoliticalCalls { get; } = [];
+
+    /// <summary>
+    /// The session role each participant present plays now (Phase 12), from joins, assignments and handovers. A function
+    /// a person plays is theirs: the simulation never acts for them (it doesn't answer the media for a PIO player).
+    /// </summary>
+    public Dictionary<Guid, UserRole> Players { get; } = [];
+
+    /// <summary>How far the public trusts the response, 0–100 (Phase 12, <see cref="Systems.MediaCoverageSystem"/>).</summary>
+    public int PublicConfidence { get; private set; } = Systems.MediaCoverageSystem.Start;
+
+    /// <summary>Command's answers to politicians' requests to visit the scene (Phase 12).</summary>
+    public List<PoliticalVisitDecided> PoliticalVisits { get; } = [];
+
+    /// <summary>Whether someone in the session plays this role now.</summary>
+    public bool PlayedByParticipant(UserRole role) => Players.ContainsValue(role);
+
+    /// <summary>
+    /// Whether command has someone in an ICS position: named on the incident's chart (any incident's, without one), or
+    /// a participant playing that role in the session.
+    /// </summary>
+    public bool Staffed(IcsRole position, Guid? incidentId = null) =>
+        (incidentId is { } id
+            ? Commands.TryGetValue(id, out var command) && command.IsStaffed(position)
+            : Commands.Values.Any(c => c.IsStaffed(position)))
+        || PlayedByParticipant(Roles.Of(position));
 
     /// <summary>Units committed to an incident (as ordered), for span-of-control counts.</summary>
     public IReadOnlyCollection<Guid> UnitsAt(Guid incidentId) =>
@@ -468,6 +496,23 @@ public sealed class WorldState
                 // Whatever they ran goes back to the simulation.
                 foreach (var key in HumanRoles.Where(r => r.Value == e.ParticipantId).Select(r => r.Key).ToList())
                     HumanRoles.Remove(key);
+                Players.Remove(e.ParticipantId);
+                break;
+            case ParticipantJoined e:
+                Players[e.ParticipantId] = e.Role;
+                break;
+            case PublicConfidenceChanged e:
+                PublicConfidence = e.Confidence;
+                break;
+            case PoliticalVisitDecided e:
+                PoliticalVisits.Add(e);
+                break;
+            case RoleAssigned e when Players.ContainsKey(e.ParticipantId):
+                Players[e.ParticipantId] = e.Role;
+                break;
+            case RoleHandedOver e:
+                if (Players.ContainsKey(e.FromParticipantId)) Players[e.FromParticipantId] = e.FromNewRole;
+                if (Players.ContainsKey(e.ToParticipantId)) Players[e.ToParticipantId] = e.Role;
                 break;
             case AgencyRequestAnswered e:
                 AgencyAnswers.Add(e);
@@ -483,6 +528,7 @@ public sealed class WorldState
                 break;
             case ApprovalDecided e when ApprovalRequesters.TryGetValue(e.ApprovalId, out var requester):
                 PendingApprovalReplies.Add(new PendingApprovalReply(e, requester, simEvent.SimTime));
+                ApprovalDecisions[e.ApprovalId] = e.Approved;
                 break;
 
             case UnitDispatched e when Units.TryGetValue(e.UnitId, out var unit):

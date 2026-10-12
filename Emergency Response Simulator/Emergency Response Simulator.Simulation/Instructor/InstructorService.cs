@@ -289,4 +289,22 @@ public sealed class InstructorService(SimulationEngine engine, IEnumerable<ISimu
             cancellationToken);
         return CommandResult.Ok(recorded.Sequence);
     }
+
+    // ---- Exercise control (Phase 12) ----
+
+    public async Task<CommandResult> SendExerciseMessageAsync(string text, Guid? participantId = null, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return CommandResult.Fail("Write the message.");
+        string? to = null;
+        if (participantId is { } id)
+        {
+            if (cop.Participants.FirstOrDefault(p => p.Id == id && p.Present) is not { } participant)
+                return CommandResult.Fail("That person isn't in the session.");
+            to = participant.DisplayName;
+        }
+        // Perceived, so the players' streams carry it; it is a session fact, not something in the world.
+        var recorded = await engine.PublishAsync(new ExerciseControlMessage(Guid.NewGuid(), text.Trim(), participantId), EventVisibility.Perceived,
+            EventSources.Instructor, cancellationToken);
+        return CommandResult.Ok(recorded.Sequence) with { Detail = to is null ? "Sent to everyone" : $"Sent to {to}" };
+    }
 }

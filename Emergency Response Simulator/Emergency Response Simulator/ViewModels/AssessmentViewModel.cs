@@ -14,7 +14,12 @@ public sealed record RatingChoice(AssessmentRating? Rating, string Label)
     public override string ToString() => Label;
 }
 
-public sealed record NoteRow(string Time, string Participant, string Rating, AssessmentRating? Value, string Note, string About, string By);
+public sealed record AreaChoice(Competency? Area, string Label)
+{
+    public override string ToString() => Label;
+}
+
+public sealed record NoteRow(string Time, string Participant, string Rating, AssessmentRating? Value, string Note, string About, string By, string Area = "");
 
 /// <summary>
 /// Observing and live assessment (Phase 11 M6), for observers and the instructor in a networked session:
@@ -50,6 +55,16 @@ public partial class AssessmentViewModel : ObservableObject
         new(null, "No rating"),
         .. Enum.GetValues<AssessmentRating>().Select(r => new RatingChoice(r, Rubric.Name(r))),
     ];
+
+    /// <summary>The competency areas a note can assess (Phase 12), or none for an overall impression.</summary>
+    public IReadOnlyList<AreaChoice> Areas { get; } =
+    [
+        new(null, "Overall (no area)"),
+        .. Enum.GetValues<Competency>().Select(a => new AreaChoice(a, Rubric.Name(a))),
+    ];
+
+    /// <summary>Kept between notes: an observer often watches one area for a while.</summary>
+    [ObservableProperty] private AreaChoice? _area;
 
     public ObservableCollection<ParticipantChoice> Players { get; } = [];
     public ObservableCollection<ParticipantChoice> FollowChoices { get; } = [];
@@ -92,7 +107,7 @@ public partial class AssessmentViewModel : ObservableObject
         long? about = TagLatest && _latest.TryGetValue(who, out var latest) ? latest.Sequence : null;
         try
         {
-            var result = await _assessment.RecordNoteAsync(who, NoteText, Rating?.Rating, about);
+            var result = await _assessment.RecordNoteAsync(who, NoteText, Rating?.Rating, about, Area?.Area);
             _report?.Invoke(result, "Note recorded");
             if (result.Succeeded)
             {
@@ -165,7 +180,8 @@ public partial class AssessmentViewModel : ObservableObject
             {
                 var note = (AssessmentNoteRecorded)e.Payload;
                 return new NoteRow(MainViewModel.Time(e.SimTime), Name(note.ParticipantId), note.Rating is { } rating ? Rubric.Name(rating) : "—", note.Rating,
-                    note.Note, note.AboutSequence is { } about ? $"#{about}" : "", e.ActorId is { } by ? Name(by) : "");
+                    note.Note, note.AboutSequence is { } about ? $"#{about}" : "", e.ActorId is { } by ? Name(by) : "",
+                    note.Area is { } area ? Rubric.Name(area) : "");
             }).ToList();
         if (!notes.SequenceEqual(Notes))
         {

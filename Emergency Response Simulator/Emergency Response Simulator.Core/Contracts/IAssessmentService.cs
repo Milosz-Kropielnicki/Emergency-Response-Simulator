@@ -11,6 +11,7 @@ namespace Emergency_Response_Simulator.Core.Contracts;
 public interface IAssessmentService
 {
     /// <param name="aboutSequence">The event the note is about (e.g. their last command); null for a general note.</param>
+    /// <param name="area">The competency area it assesses (Phase 12); null for an overall impression.</param>
     Task<CommandResult> RecordNoteAsync(Guid participantId, string note, AssessmentRating? rating = null, long? aboutSequence = null,
-        CancellationToken cancellationToken = default);
+        Competency? area = null, CancellationToken cancellationToken = default);
 }

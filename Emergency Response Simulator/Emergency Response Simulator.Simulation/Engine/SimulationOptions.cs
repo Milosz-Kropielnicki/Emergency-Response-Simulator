@@ -59,4 +59,10 @@ public sealed class SimulationOptions
     /// minister's office, more often the worse it is, and higher up when nobody calls them back.
     /// </summary>
     public bool PoliticalPressure { get; set; } = true;
+
+    /// <summary>
+    /// The media cover the response, and public confidence rises and falls with how command keeps the public informed
+    /// (Phase 12).
+    /// </summary>
+    public bool MediaCoverage { get; set; } = true;
 }

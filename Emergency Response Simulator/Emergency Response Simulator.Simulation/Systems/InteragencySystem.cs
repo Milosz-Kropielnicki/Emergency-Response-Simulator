@@ -56,7 +56,7 @@ public sealed class InteragencySystem : ISimulationSystem
     public static readonly TimeSpan DisputeChaseAfter = TimeSpan.FromMinutes(3);
 
     private static readonly string[] Surnames = ["Byrne", "Doyle", "Kavanagh", "Nolan", "Fitzgerald", "Brennan", "Quinn", "Walsh", "Kinsella", "Moran", "Dunne", "Lynch"];
-    private static readonly string[] Outlets = ["RTÉ News", "The Irish Times", "Newstalk", "Dublin Live", "TheJournal.ie", "Irish Independent", "Sky News Ireland"];
+    internal static readonly string[] Outlets = ["RTÉ News", "The Irish Times", "Newstalk", "Dublin Live", "TheJournal.ie", "Irish Independent", "Sky News Ireland"];
 
     private readonly Dictionary<Guid, DateTimeOffset> _nextEnquiry = [];
     private readonly Dictionary<Guid, int> _enquiries = [];
@@ -334,7 +334,7 @@ public sealed class InteragencySystem : ISimulationSystem
         var ia = world.Interagency;
 
         // The liaison officer does the rounds of the agencies every few minutes.
-        var liaison = world.Commands.Values.Any(c => c.IsStaffed(IcsRole.Liaison));
+        var liaison = world.Staffed(IcsRole.Liaison);
         if (!liaison) _nextRelay = null;
         else _nextRelay ??= context.SimTime + LiaisonRelayInterval;
         var relayNow = _nextRelay is { } relay && context.SimTime >= relay;
@@ -606,8 +606,7 @@ public sealed class InteragencySystem : ISimulationSystem
         }
     }
 
-    private static bool LiaisonAt(WorldState world, Guid incidentId) =>
-        world.Commands.TryGetValue(incidentId, out var command) && command.IsStaffed(IcsRole.Liaison);
+    private static bool LiaisonAt(WorldState world, Guid incidentId) => world.Staffed(IcsRole.Liaison, incidentId);
 
     // ---- Emergency Operations Centre ----
 
@@ -759,8 +758,9 @@ public sealed class InteragencySystem : ISimulationSystem
             if (waiting.Count == 0) continue;
             var command = world.Commands.GetValueOrDefault(incidentId);
 
-            // The PIO answers with a holding statement, passing on any protective advice in force.
-            if (command?.Positions.GetValueOrDefault(IcsRole.PublicInformation) is { } pio
+            // A simulated PIO (named on the chart, nobody playing the role) answers with a holding statement, passing on
+            // any protective advice in force. A PIO played by a participant answers for themselves (Phase 12).
+            if (command?.Positions.GetValueOrDefault(IcsRole.PublicInformation) is { } pio && !world.PlayedByParticipant(UserRole.PublicInformation)
                 && waiting.Min(e => e.At) + PioAnswerDelay <= context.SimTime)
             {
                 var joint = command.IsUnified || ia.MajorEmergency;
@@ -815,7 +815,7 @@ public sealed class InteragencySystem : ISimulationSystem
             _contradicted.Add(action.ZoneId);
 
             var jointSince = ia.Statements.Any(s => s.Statement.Joint && !s.Statement.Conflicting && s.At >= action.DeclaredAt - TimeSpan.FromMinutes(5));
-            var jic = world.Commands.Values.Any(c => c.IsStaffed(IcsRole.PublicInformation)) && (ia.MajorEmergency || world.Commands.Values.Any(c => c.IsUnified));
+            var jic = world.Staffed(IcsRole.PublicInformation) &&(ia.MajorEmergency || world.Commands.Values.Any(c => c.IsUnified));
             if (jointSince || jic) continue; // the agencies agree their messages: nobody goes off on their own
 
             var speaker = world.Agencies.Where(a => a.Value.AiControlled)

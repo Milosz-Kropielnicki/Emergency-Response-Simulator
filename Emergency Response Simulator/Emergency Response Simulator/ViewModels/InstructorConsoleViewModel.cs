@@ -56,7 +56,9 @@ public sealed partial class WaitingRow(AiRoleItem item) : ObservableObject
     [ObservableProperty] private string _text = "";
 }
 
-public sealed record PlayerRow(string Name, string Role, string Commands, string LastCommand, string Idle, bool IsIdle, string LastAction);
+/// <param name="Desk">What waits on their role's desk (Phase 12), e.g. "7 · 3 overdue".</param>
+public sealed record PlayerRow(string Name, string Role, string Commands, string LastCommand, string Idle, bool IsIdle, string LastAction,
+    string Desk = "", bool IsOverloaded = false, string Oldest = "");
 
 public sealed record FeedRow(string Time, string Who, string Text);
 
@@ -216,6 +218,20 @@ public partial class InstructorConsoleViewModel : ObservableObject
         if (!Failed) BookmarkNote = "";
     }
 
+    // ---- Exercise control (Phase 12) ----
+
+    /// <summary>Who an exercise control message goes to: everyone (no id) or one participant present.</summary>
+    public ObservableCollection<ParticipantChoice> MessageTargets { get; } = [];
+    [ObservableProperty] private ParticipantChoice? _messageTarget;
+    [ObservableProperty] private string _messageText = "";
+
+    [RelayCommand]
+    private async Task SendMessageAsync()
+    {
+        await Run(() => _console.SendExerciseMessageAsync(MessageText, MessageTarget?.Id));
+        if (!Failed) MessageText = "";
+    }
+
     // ---- Refresh ----
 
     public async Task RefreshAsync()
@@ -251,6 +267,10 @@ public partial class InstructorConsoleViewModel : ObservableObject
             Sync(AiRoles, (await _console.ListAiRolesAsync()).Select(r => new AiRoleRow(r.Key, r.Name, r.System, r.Covers, r.TakenOver, r.Waiting, r.PlayedBy, r.CanGive)).ToList());
             Sync(Chiefs, _cop.Participants.Where(p => p.Present && p.Role == UserRole.AgencyChief).Select(p => new ParticipantChoice(p.Id, p.DisplayName)).ToList());
             Chief ??= Chiefs.FirstOrDefault();
+            var target = MessageTarget?.Id;
+            Sync(MessageTargets, [new ParticipantChoice(null, "Everyone"), .. _cop.Participants.Where(p => p.Present && p.Role != UserRole.Instructor)
+                .Select(p => new ParticipantChoice(p.Id, $"{p.DisplayName} ({Roles.Name(p.Role)})"))]);
+            MessageTarget = MessageTargets.FirstOrDefault(t => t.Id == target) ?? MessageTargets[0];
             var waiting = await _console.ListWaitingAsync();
             // Keep the rows (and what the instructor has typed) for items still waiting.
             foreach (var gone in Waiting.Where(w => waiting.All(i => i.Id != w.Item.Id)).ToList()) Waiting.Remove(gone);
@@ -259,13 +279,17 @@ public partial class InstructorConsoleViewModel : ObservableObject
 
             var monitor = PlayerMonitor.Build(_events, _cop, now);
             Sync(Players, monitor.Players.Select(p => new PlayerRow(p.Name + (p.Present ? "" : " (away)"), Roles.Name(p.Role), $"{p.Commands} ({p.Recent} recent)",
-                p.LastCommandAt is { } at ? MainViewModel.Time(at) : "none", p.Idle ? $"IDLE {Clock(p.IdleFor)}" : Clock(p.IdleFor), p.Idle, p.LastAction ?? "")).ToList());
+                p.LastCommandAt is { } at ? MainViewModel.Time(at) : "none", p.Idle ? $"IDLE {Clock(p.IdleFor)}" : Clock(p.IdleFor), p.Idle, p.LastAction ?? "",
+                p.Waiting == 0 ? "clear" : (p.Overloaded ? "OVERLOADED " : "") + $"{p.Waiting}" + (p.Overdue > 0 ? $" · {p.Overdue} overdue" : ""),
+                p.Overloaded, p.Oldest ?? "")).ToList());
             Sync(Feed, monitor.Feed.Take(40).Select(f => new FeedRow(MainViewModel.Time(f.At), f.Who, f.Text)).ToList());
             Sync(Alerts, monitor.Alerts.Select(a => $"{a.Title} · {Clock(a.Age)} unacknowledged").ToList());
             Sync(ChannelLoads, monitor.Channels.Take(8).Select(c => $"{c.Name}: {c.Utilisation:P0}{(c.Busy ? " · on air" : "")}{(c.EmergencyTraffic ? " · EMERGENCY TRAFFIC" : "")}").ToList());
             Sync(Bookmarks, monitor.Bookmarks.Select(b => $"{MainViewModel.Time(b.At)}  {b.Note}").ToList());
             var idle = monitor.Players.Count(p => p.Idle);
-            PlayersSummary = idle > 0 ? $"PLAYERS · {idle} IDLE" : $"PLAYERS · {monitor.Players.Count(p => p.Present)}";
+            var overloaded = monitor.Players.Count(p => p.Overloaded);
+            PlayersSummary = idle + overloaded == 0 ? $"PLAYERS · {monitor.Players.Count(p => p.Present)}"
+                : "PLAYERS" + (idle > 0 ? $" · {idle} IDLE" : "") + (overloaded > 0 ? $" · {overloaded} OVERLOADED" : "");
 
             Sync(Channels, _cop.Channels.Select(c => c.Info.Id).ToList());
             RolePlayChannel ??= Channels.FirstOrDefault();

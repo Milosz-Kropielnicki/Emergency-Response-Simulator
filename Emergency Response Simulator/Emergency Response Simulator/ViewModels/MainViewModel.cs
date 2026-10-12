@@ -30,8 +30,9 @@ public partial class MainViewModel : ObservableObject
 
     public MainViewModel(CopView cop, ISimulationControl simulation, IC2Service c2, IIapService iap, TimelineViewModel timeline,
         IRoutingService routing, DataSourceInfo dataSource, InstructorViewModel instructor, SessionViewModel session, Permissions permissions,
-        AssessmentViewModel assessment, RadioViewModel radio)
+        AssessmentViewModel assessment, RadioViewModel radio, ExerciseControlViewModel exerciseControl)
     {
+        ExerciseControl = exerciseControl;
         Instructor = instructor;
         Permissions = permissions;
         Assessment = assessment;
@@ -63,6 +64,12 @@ public partial class MainViewModel : ObservableObject
             },
             role => SelectedWorkspace = Workspaces.FirstOrDefault(w => w.Role == role) ?? SelectedWorkspace,
             (result, done) => ShowCommandResult(result, done));
+        Desk = new DeskViewModel(cop, permissions, assessment, incident =>
+        {
+            if (_cop.FindIncident(incident) is null) return;
+            SelectedIncidentId = incident;
+            RightPanelTab = (int)WorkspacePanel.Incident;
+        });
         permissions.Changed += (_, _) => OnPermissionsChanged();
         SelectedWorkspace = RoleWorkspaces.Full;
         _dispatcher = Application.Current.Dispatcher;
@@ -91,6 +98,12 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>The radio headset (Phase 11 M7): push-to-talk on the role's channels.</summary>
     public RadioViewModel Radio { get; }
+
+    /// <summary>What waits for this player's role to act on (Phase 12).</summary>
+    public DeskViewModel Desk { get; }
+
+    /// <summary>The instructor's exercise control messages to this player (Phase 12).</summary>
+    public ExerciseControlViewModel ExerciseControl { get; }
 
     /// <summary>This client only observes (Phase 11 M6): read-only, whatever it shows.</summary>
     [ObservableProperty] private bool _isObserving;
@@ -136,6 +149,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _showIcs = true;
     [ObservableProperty] private bool _showCrews = true;
     [ObservableProperty] private bool _showAgencies = true;
+    [ObservableProperty] private bool _showDesk = true;
     [ObservableProperty] private bool _showCommandBoard = true;
     [ObservableProperty] private bool _showInstructorBoard = true;
 
@@ -163,6 +177,7 @@ public partial class MainViewModel : ObservableObject
         ShowIcs = Shows(WorkspacePanel.Ics);
         ShowCrews = Shows(WorkspacePanel.Crews);
         ShowAgencies = Shows(WorkspacePanel.Agencies);
+        ShowDesk = Shows(WorkspacePanel.Desk);
         ShowAssess = Assessment.IsAssessor && Shows(WorkspacePanel.Assess);
         ShowCommandBoard = value.Boards.Contains(WorkspaceBoard.Command);
         ShowInstructorBoard = value.Boards.Contains(WorkspaceBoard.Instructor);
@@ -675,6 +690,7 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsConsoleAvailable));
         Permissions.Refresh();
         Assessment.Refresh();
+        Desk.Refresh();
         Radio.Refresh();
         RefreshObserving();
         RefreshZones();

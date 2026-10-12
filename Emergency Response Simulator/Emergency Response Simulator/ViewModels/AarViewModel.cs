@@ -33,7 +33,10 @@ public sealed record AarParticipantRow(string Name, string Roles, string Time, i
     string Observers = "", string Overall = "");
 
 /// <summary>An observer's note in the review (Phase 11 M6).</summary>
-public sealed record AarNoteRow(string Time, string Participant, string Rating, string Note, string About, string By);
+public sealed record AarNoteRow(string Time, string Participant, string Rating, string Note, string About, string By, string Area = "");
+
+/// <summary>One participant's observer ratings in one competency area (Phase 12).</summary>
+public sealed record AarCompetencyRow(string Participant, string Area, int Ratings, string Score, string Level);
 
 /// <summary>Something the instructor did to run the exercise (Phase 11 M4).</summary>
 public sealed record AarInstructorRow(string Time, string Kind, string Text);
@@ -120,6 +123,10 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
     public ObservableCollection<AarNoteRow> Notes { get; } = [];
 
     [ObservableProperty] private bool _hasNotes;
+
+    public ObservableCollection<AarCompetencyRow> Competencies { get; } = [];
+
+    [ObservableProperty] private bool _hasCompetencies;
     [ObservableProperty] private string _instructorNote = "";
     public ObservableCollection<ParticipantChoice> ParticipantChoices { get; } = [];
 
@@ -337,7 +344,10 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
             p.Combined is { } combined ? $"{combined} / 100 · {Rubric.Name(p.Level!.Value)}" : "—")));
         HasNotes = report.Notes.Count > 0;
         Replace(Notes, report.Notes.Select(n => new AarNoteRow(Clock(n.At), n.Participant, n.Rating is { } rating ? Rubric.Name(rating) : "—", n.Note,
-            n.About ?? "", n.By ?? "")));
+            n.About ?? "", n.By ?? "", n.Area is { } area ? Rubric.Name(area) : "—")));
+        HasCompetencies = report.Competencies.Count > 0;
+        Replace(Competencies, report.Competencies.Select(c => new AarCompetencyRow(c.Participant, Rubric.Name(c.Area), c.Ratings, $"{c.Score} / 100",
+            Rubric.Name(c.Level))));
         var chosen = ParticipantFilter?.Id;
         Replace(ParticipantChoices, [new ParticipantChoice(null, "Everyone"), .. report.Participants.Select(p => new ParticipantChoice(p.Id, $"{p.Name} ({p.Roles})"))]);
         ParticipantFilter = ParticipantChoices.FirstOrDefault(c => c.Id == chosen) ?? ParticipantChoices[0];

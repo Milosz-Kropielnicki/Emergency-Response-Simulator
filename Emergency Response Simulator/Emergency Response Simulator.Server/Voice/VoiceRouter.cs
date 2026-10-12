@@ -12,6 +12,10 @@ namespace Emergency_Response_Simulator.Server.Voice;
 /// <item><b>Membership</b>: a participant talks and listens on their role's channels (<see cref="VoiceChannels"/>),
 /// the ones their workspace's comms hub shows; observers listen on all and never talk.</item>
 /// <item><b>Half-duplex</b>: one talker per channel. Keying up on a channel someone is talking on is refused.</item>
+/// <item><b>Patches</b> (Phase 12): channels patched together are one talk group: one talker across them, and
+/// everyone on any of them hears it.</item>
+/// <item><b>Emergency traffic</b> (Phase 12): while it is declared on a channel, only those working the emergency may
+/// key up (<see cref="VoiceChannels.MayTalkUnderEmergencyTraffic"/>).</item>
 /// <item><b>Phase 7 on the audio</b>: every transmission sounds like a radio; keying up over simulated traffic doubles
 /// with it and comes out garbled, for the players and in the transcript the crews hear.</item>
 /// <item><b>Recording</b>: each transmission is kept as an Opus clip, as it was heard, and recorded
@@ -55,20 +59,30 @@ public sealed class VoiceRouter(SessionRuntime session, IVoiceTransport transpor
         if (!VoiceChannels.CanTalk(speaker.Role, channel))
             return new(false, Reason: speaker.Role == UserRole.Observer ? "Observers listen; they don't talk." : $"{Roles.Name(speaker.Role)} isn't on {channel}.");
 
-        // Phase 7: keying up over simulated traffic doubles with it.
+        // Channels patched together (Phase 7) are one talk group (Phase 12): one talker across them, heard on all of them.
         var cop = session.Services.GetRequiredService<ICopService>();
-        var simulated = cop.Channels.FirstOrDefault(c => c.Info.Id == channel) is { } state && state.IsBusy(session.Engine.SimTime) ? state.Talker : null;
+        var linked = cop.Linked(channel);
+        var states = cop.Channels.Where(c => linked.Contains(c.Info.Id)).ToList();
+
+        // Emergency traffic (Phase 12): only those working the emergency stay on the air.
+        if (states.FirstOrDefault(s => s.EmergencyTraffic) is { } emergency && !VoiceChannels.MayTalkUnderEmergencyTraffic(speaker.Role))
+            return new(false, Reason: $"Emergency traffic on {emergency.Info.Name}: keep off the air unless you are working the emergency.");
+
+        // Phase 7: keying up over simulated traffic doubles with it.
+        var simulated = states.FirstOrDefault(s => s.IsBusy(session.Engine.SimTime))?.Talker;
         Talk talk;
         lock (_lock)
         {
-            if (_floor.TryGetValue(channel, out var busy))
-                return new(false, Reason: busy.Speaker == speaker ? "You are already talking." : $"{channel} is busy: {busy.Speaker.Name} is talking.");
+            if (_floor.Values.FirstOrDefault(t => linked.Contains(t.Channel)) is { } busy)
+                return new(false, Reason: busy.Speaker == speaker ? "You are already talking."
+                    : busy.Channel == channel ? $"{channel} is busy: {busy.Speaker.Name} is talking."
+                    : $"{channel} is patched to {busy.Channel}, where {busy.Speaker.Name} is talking.");
             if (_floor.Values.Any(t => t.Speaker == speaker)) return new(false, Reason: "You are already talking on another channel.");
             talk = new Talk
             {
                 Id = Guid.NewGuid(), Speaker = speaker, Channel = channel,
                 Effect = new RadioEffect(simulated is null ? CommsQuality.Clear : CommsQuality.Garbled, Random.Shared.Next()),
-                Listeners = Listeners(channel, speaker),
+                Listeners = Listeners(linked, speaker),
             };
             _floor[channel] = talk;
         }
@@ -76,9 +90,11 @@ public sealed class VoiceRouter(SessionRuntime session, IVoiceTransport transpor
         return new(true, talk.Id, simulated is null ? null : $"Doubled with {simulated}: you'll come out garbled.");
     }
 
-    /// <summary>The connections of everyone present who listens on the channel, except the speaker (half-duplex).</summary>
-    private List<string> Listeners(string channel, ParticipantRecord speaker) =>
-        [.. session.Participants.Where(p => p.Present && p != speaker && VoiceChannels.Hears(p.Role, channel)).SelectMany(p => p.Connections)];
+    /// <summary>
+    /// The connections of everyone present who listens on the channel or one patched to it, except the speaker (half-duplex).
+    /// </summary>
+    private List<string> Listeners(IReadOnlyCollection<string> channels, ParticipantRecord speaker) =>
+        [.. session.Participants.Where(p => p.Present && p != speaker && channels.Any(c => VoiceChannels.Hears(p.Role, c))).SelectMany(p => p.Connections)];
 
     public async Task FrameAsync(ParticipantRecord speaker, Guid transmissionId, int sequence, byte[] packet)
     {

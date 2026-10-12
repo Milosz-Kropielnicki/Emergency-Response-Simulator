@@ -27,6 +27,7 @@ Emergency Response Simulator/
 └─ Emergency Response Simulator.Tests       xUnit
 hazard-models/                              Python plume service + tests
 database/                                   local PostgreSQL setup script
+docs/                                       instructor and observer guides (Phase 12)
 ```
 
 Dependencies point inward: `App → Client, Simulation, Data → Core` and `Server → Simulation, Data → Core`. Simulation and Data do not know about each other; the app (or the server) wires them together. The wire contract both sides share lives in `Simulation/Remote`.
@@ -818,6 +819,93 @@ dotnet run --project "Emergency Response Simulator.Server" -- --ConnectionString
 - **Real speech:** a test also speaks a call with Windows' speech synthesiser, transcribes it with the real Whisper model when it's installed, and checks that Engine 4 answers.
 
 The base.en model is about 148 MB (from Hugging Face, `ggerganov/whisper.cpp`). Put it at `%LOCALAPPDATA%\ErsVoice\models\ggml-base.en.bin`, or point `Voice:WhisperModel` at it.
+
+## Multiplayer completion (Phase 12)
+
+Phase 12 completes and hardens the Phase 11 multiplayer trainer. For running exercises, see the **[Instructor Guide](docs/Instructor-Guide.md)** and the **[Observer Guide](docs/Observer-Guide.md)**.
+
+### Roles
+
+**What a person plays is theirs:**
+- Ground truth now knows who plays which session role (`WorldState.Players`, from joins, assignments and handovers).
+- `WorldState.Staffed(position)` counts an ICS position as staffed when someone is named on the chart, or when a participant plays the role.
+- The simulation never acts for a role a person plays. A simulated PIO on the chart still answers the press with holding statements, but a PIO played by a participant answers for themselves.
+- Politicians ask for a participant PIO, and the liaison and joint-information-centre effects count a participant Liaison or PIO, even before the IC names them on the chart.
+
+**The desk** (`Simulation/State/RoleDesk`, the **DESK** tab) lists what waits for a role to act on now, most urgent and oldest first:
+- Maydays to send a rescue team to
+- approvals and IAPs to decide
+- read-backs to confirm (garbled ones flagged)
+- incidents nobody is assigned to
+- missed 999 calls
+- journalists and politicians to answer
+- disputes
+- the EOC situation report falling due
+- for an agency chief, their agency's requests and invitations
+
+Each item belongs to a function the role holds now, by the permission matrix. So the IC's desk also holds whatever falls to them from unfilled roles, and moves on when someone takes the role. Choosing an item goes to its incident. Standalone, one person's desk holds everything; an observer sees the desk of whoever they follow.
+
+### Instructor console
+
+- **The player monitor** shows each player's desk (waiting, overdue, longest waiting). A player is **overloaded** at 6 items or 3 overdue (`PlayerMonitor.OverloadedAt` / `OverdueAt`), and the tab header counts them alongside the idle.
+- **Exercise control** (`IInstructorService.SendExerciseMessageAsync`, `ExerciseControlMessage`): the instructor speaks to everyone, or to one participant, outside the world.
+  - It shows as an amber banner until dismissed. Nobody in the simulation hears it.
+  - It is a perceived session event, so it reaches the players' streams, and the review's timeline lists it ("Exercise control to Bea: …").
+  - Only the instructor may send one.
+- **Public confidence** appears among the world facts on the instructor's board (`WorldSnapshot.PublicConfidence`).
+
+### AI role players: the media and the politicians in depth
+
+**Media coverage and public confidence** (`MediaCoverageSystem`, `Simulation:MediaCoverage`, on by default):
+- Ground truth tracks how far the public trusts the response (0–100, from 60), as `PublicConfidenceChanged` with its reason.
+- **Raised by:**
+  - command's statements, more for clear protective advice and less for a flood of them
+  - a minister's visit to a safe scene
+- **Lowered by:**
+  - a journalist left waiting 10 minutes, who runs the story anyway
+  - an evacuation or shelter zone with no public advice from command within 10 minutes
+  - another agency contradicting the official line
+  - a minister going public unbriefed
+  - a VIP visit while the hazard is live
+- **Coverage:** every 12 minutes while a newsworthy incident runs, and at once when the tone turns, an outlet reports supportive, mixed or critical coverage. It reaches command as a media report ("Coverage: …").
+- **Taken over by the instructor:** with the media taken over, no coverage runs.
+
+**Requests to visit the scene** (`PoliticalPressureSystem`):
+- **When:** after 25 minutes of a Critical incident (40 for High), the local TD, or the minister once the pressure has reached her office, asks to visit. It arrives as an approval on the IC's desk.
+- **The decision:** recorded as `PoliticalVisitDecided`, with whether the hazard was live: a fire, release or flood within 800 m not over, or a protective action in force.
+- **Approved:** the party arrives at the cordon 15 minutes later. If the hazard is still live, that raises a Safety alert.
+- **Played by the instructor:** while the instructor plays the politicians, no visit requests come in.
+
+**In the review:**
+- where public confidence ended and its lowest point
+- the biggest drops (8 or more), each with its cause
+- visit decisions: approving a visit while the hazard is live is a weakness; putting it off, or hosting it once safe, is a strength
+
+### Voice
+
+- **Patches:** channels patched together (Phase 7) are **one talk group**. There is one talker across them, and everyone on any of them hears it. Keying up elsewhere in the group is refused ("AMB OPS 1 is patched to FIRE TAC 3, where Lou is talking.").
+- **Emergency traffic:** while it is declared on a channel (or one patched to it), only those working the emergency (the IC, Operations, Safety, dispatchers and the instructor) can key up (`VoiceChannels.MayTalkUnderEmergencyTraffic`).
+
+### Observer assessment
+
+- **Competency areas:** notes can name a competency area (`Competency`):
+  - command & control
+  - situational awareness
+  - decision making
+  - communication
+  - teamwork & liaison
+  - safety
+
+  `IAssessmentService.RecordNoteAsync` takes it as an optional `area`, and `AssessmentNoteRecorded.Area` records it. The ASSESS tab keeps the chosen area between notes.
+- **In the review:** a **Competencies** table (`AarReport.Competencies`) gives each player's rated notes per area, averaged and put back on the rubric. The notes table, the timeline and the HTML and CSV exports show the area too.
+
+### Workspaces, finalised
+
+- Every role's workspace now includes its **DESK** and the SESSION tab.
+- The **IC** starts at the desk: decisions waiting, and whatever falls to them.
+- A test checks every role has a workspace whose focus and board are among its panels, a desk, voice channels, and (for playing roles) functions of its own.
+
+**Tests:** `MultiplayerCompletionTests`.
 
 ## Local setup
 

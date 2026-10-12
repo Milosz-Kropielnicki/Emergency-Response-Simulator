@@ -79,10 +79,11 @@ public sealed partial class AarAnalyzer
             Metrics = metrics,
             Branches = branches,
             Outcomes = [SessionOutcome()],
-            Findings = [.. Findings(metrics, branches), .. HandoverFindings(), .. PoliticalFindings()],
+            Findings = [.. Findings(metrics, branches), .. HandoverFindings(), .. PoliticalFindings(), .. MediaFindings()],
             Participants = Participants(),
             Instructor = _instructor,
             Notes = Notes(),
+            Competencies = Competencies(),
         };
     }
 
@@ -124,6 +125,9 @@ public sealed partial class AarAnalyzer
                 break;
             case PoliticalCallReceived or PoliticalCallAnswered or PoliticalFallout:
                 TrackPolitical(simEvent);
+                break;
+            case PublicConfidenceChanged or PoliticalVisitDecided:
+                TrackMedia(simEvent);
                 break;
             case InjectFired or InjectHeld or InjectReleased or InjectSkipped or InstructorRolePlay or AiRoleTakenOver or AiRoleHandedBack or InstructorBookmarked:
                 TrackInstructor(simEvent);

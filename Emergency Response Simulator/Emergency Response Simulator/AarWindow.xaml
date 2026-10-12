@@ -150,6 +150,7 @@
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="70" />
                                     <DataGridTextColumn Header="Participant" Binding="{Binding Participant}" Width="120" />
+                                    <DataGridTextColumn Header="Area" Binding="{Binding Area}" Width="140" />
                                     <DataGridTextColumn Header="Rating" Binding="{Binding Rating}" Width="120" />
                                     <DataGridTemplateColumn Header="Note" Width="*">
                                         <DataGridTemplateColumn.CellTemplate>
@@ -162,6 +163,20 @@
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
                                     <DataGridTextColumn Header="By" Binding="{Binding By}" Width="140" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+
+                        <!-- Observer ratings by competency area (Phase 12) -->
+                        <StackPanel Visibility="{Binding HasCompetencies, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="COMPETENCIES (observer ratings by area)" Style="{StaticResource PanelHeader}" />
+                            <DataGrid ItemsSource="{Binding Competencies}" Margin="0,0,0,12">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Participant" Binding="{Binding Participant}" Width="140" />
+                                    <DataGridTextColumn Header="Area" Binding="{Binding Area}" Width="180" />
+                                    <DataGridTextColumn Header="Ratings" Binding="{Binding Ratings}" Width="70" />
+                                    <DataGridTextColumn Header="Score" Binding="{Binding Score}" Width="90" />
+                                    <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="*" />
                                 </DataGrid.Columns>
                             </DataGrid>
                         </StackPanel>

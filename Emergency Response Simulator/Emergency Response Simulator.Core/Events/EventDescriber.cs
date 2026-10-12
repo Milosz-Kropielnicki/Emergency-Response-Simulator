@@ -218,7 +218,8 @@ public static class EventDescriber
             AgencyRequestAnswered e => Entry("MULTI-AGENCY", $"{Agency(e.AgencyId)} answers: {(e.Approve ? "yes" : "no")}" +
                 (e.Quantity is { } n ? $", {n} unit(s)" : "") + (string.IsNullOrWhiteSpace(e.Text) ? "" : $" — \"{e.Text}\"")),
             // Observer mode (Phase 11 M6)
-            AssessmentNoteRecorded e => Entry("ASSESSMENT", $"{Participant(e.ParticipantId)}" + (e.Rating is { } rating ? $": {Rubric.Name(rating)}" : "") +
+            AssessmentNoteRecorded e => Entry("ASSESSMENT", $"{Participant(e.ParticipantId)}" + (e.Area is { } area ? $" [{Rubric.Name(area)}]" : "") +
+                (e.Rating is { } rating ? $": {Rubric.Name(rating)}" : "") +
                 (string.IsNullOrWhiteSpace(e.Note) ? "" : $" — {e.Note}") + (e.AboutSequence is { } about ? $" (on event #{about})" : ""), important: true),
             // Voice (Phase 11 M7)
             RadioAudioRecorded e => Entry("COMMS", $"Voice: {e.Speaker} on {e.ChannelId} ({e.DurationSeconds:0.#} s" + (e.Quality == CommsQuality.Clear ? ")" : $", {e.Quality.ToString().ToLowerInvariant()})") +
@@ -228,6 +229,11 @@ public static class EventDescriber
             AiRoleTakenOver e => Entry("INSTRUCTOR", $"Instructor takes over {e.Name}"),
             AiRoleHandedBack e => Entry("INSTRUCTOR", $"{e.Name} handed back to the simulation"),
             InstructorBookmarked e => Entry("INSTRUCTOR", $"Bookmark{(e.ParticipantId is { } who ? $" ({Participant(who)})" : "")}: {e.Note}", important: true),
+            // Multiplayer completion (Phase 12)
+            ExerciseControlMessage e => Entry("EXERCISE", $"Exercise control{(e.ToParticipantId is { } to ? $" to {Participant(to)}" : "")}: {e.Text}"),
+            PublicConfidenceChanged e => Entry("TRUTH", $"Public confidence {e.Confidence} ({(e.Change >= 0 ? "+" : "")}{e.Change}): {e.Reason}", important: Math.Abs(e.Change) >= 8),
+            PoliticalVisitDecided e => Entry("TRUTH", $"{e.Visitor}'s visit to the scene {(e.Approved ? "approved" : "declined")}" +
+                (e.HazardLive ? " while the hazard was live" : ""), e.IncidentId, important: e.Approved && e.HazardLive),
             UnitPositionReported => null, // dozens per minute; shown on the map instead
             _ => Entry(simEvent.Type.ToUpperInvariant(), simEvent.Type),
         };

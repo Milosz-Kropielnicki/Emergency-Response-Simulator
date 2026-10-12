@@ -18,8 +18,22 @@ public sealed partial class AarAnalyzer
         var described = _timeline.ToDictionary(t => t.Sequence, t => t.Text);
         return [.. _notes.Select(n => new AarNote(n.Event.SimTime, n.Note.ParticipantId, _people.GetValueOrDefault(n.Note.ParticipantId)?.Name ?? "A participant",
             n.Note.Rating, n.Note.Note, ActorLabel(n.Event), n.Note.AboutSequence,
-            n.Note.AboutSequence is { } about ? described.GetValueOrDefault(about) : null))];
+            n.Note.AboutSequence is { } about ? described.GetValueOrDefault(about) : null, n.Note.Area))];
     }
+
+    /// <summary>Each participant's rated notes area by area (Phase 12), in the rubric's order of areas.</summary>
+    private List<AarCompetency> Competencies() =>
+    [
+        .. _notes.Where(n => n.Note.Rating is not null && n.Note.Area is not null)
+            .GroupBy(n => (n.Note.ParticipantId, Area: n.Note.Area!.Value))
+            .Select(g =>
+            {
+                var score = (int)Math.Round(g.Average(n => Rubric.Score(n.Note.Rating!.Value)));
+                return new AarCompetency(g.Key.ParticipantId, _people.GetValueOrDefault(g.Key.ParticipantId)?.Name ?? "A participant", g.Key.Area,
+                    g.Count(), score, Rubric.Level(score));
+            })
+            .OrderBy(c => c.Participant).ThenBy(c => c.Area),
+    ];
 
     /// <summary>
     /// A participant's observer ratings, and their score combining how their decisions rated with how observers rated

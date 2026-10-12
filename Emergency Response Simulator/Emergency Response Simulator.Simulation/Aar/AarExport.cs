@@ -119,10 +119,21 @@ public static class AarExport
         // Observers' notes (Phase 11 M6).
         if (report.Notes.Count > 0)
         {
-            html.Append("<h2>Observer notes</h2><table><tr><th>Time</th><th>Participant</th><th>Rating</th><th>Note</th><th>About</th><th>By</th></tr>");
+            html.Append("<h2>Observer notes</h2><table><tr><th>Time</th><th>Participant</th><th>Area</th><th>Rating</th><th>Note</th><th>About</th><th>By</th></tr>");
             foreach (var note in report.Notes)
-                html.Append($"<tr><td>{Clock(note.At)}</td><td><b>{E(note.Participant)}</b></td><td>{(note.Rating is { } rating ? E(Rubric.Name(rating)) : "—")}</td>" +
+                html.Append($"<tr><td>{Clock(note.At)}</td><td><b>{E(note.Participant)}</b></td><td>{(note.Area is { } area ? E(Rubric.Name(area)) : "—")}</td>" +
+                            $"<td>{(note.Rating is { } rating ? E(Rubric.Name(rating)) : "—")}</td>" +
                             $"<td>{E(note.Note)}</td><td class=\"muted\">{(note.About is { } about ? E(about) : "")}</td><td class=\"muted\">{E(note.By ?? "")}</td></tr>");
+            html.Append("</table>");
+        }
+
+        // Ratings by competency area (Phase 12).
+        if (report.Competencies.Count > 0)
+        {
+            html.Append("<h2>Competencies</h2><table><tr><th>Participant</th><th>Area</th><th class=\"num\">Ratings</th><th class=\"num\">Score</th><th>Level</th></tr>");
+            foreach (var competency in report.Competencies)
+                html.Append($"<tr><td><b>{E(competency.Participant)}</b></td><td>{E(Rubric.Name(competency.Area))}</td><td class=\"num\">{competency.Ratings}</td>" +
+                            $"<td class=\"num\">{competency.Score}</td><td>{E(Rubric.Name(competency.Level))}</td></tr>");
             html.Append("</table>");
         }
 
@@ -289,8 +300,12 @@ public static class AarExport
                 $"Good {person.Good}, fair {person.Fair}, poor {person.Poor}. {person.Focus}. Decisions {person.Score?.ToString(CultureInfo.InvariantCulture) ?? "—"}; observers: {ObserverRatings(person)}" +
                 (person.Level is { } level ? $"; overall {Rubric.Name(level)}." : "."));
         foreach (var note in report.Notes)
-            Row("Observer note", note.At, note.Rating is { } rating ? Rubric.Name(rating) : "", note.Participant, note.Note, "", "",
+            Row("Observer note", note.At, note.Area is { } area ? Rubric.Name(area) : "", note.Participant, note.Note, "",
+                note.Rating is { } rating ? Rubric.Name(rating) : "",
                 $"{(note.About is { } about ? $"About: {about}. " : "")}By {note.By}");
+        foreach (var competency in report.Competencies)
+            Row("Competency", null, Rubric.Name(competency.Area), competency.Participant, $"{competency.Ratings} rating(s)", "",
+                competency.Score.ToString(CultureInfo.InvariantCulture), Rubric.Name(competency.Level));
         foreach (var unit in report.Units)
             Row("Unit", null, unit.Type, unit.Callsign, unit.Committed.ToString("P0", CultureInfo.InvariantCulture), "", "",
                 unit.DelayedEnRoute is { } delayed ? $"Delayed en route {AarAnalyzer.Duration(delayed)}" : "");

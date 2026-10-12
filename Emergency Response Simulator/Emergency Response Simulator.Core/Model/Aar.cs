@@ -78,7 +78,13 @@ public sealed record AarParticipant(Guid Id, string Name, string Roles, DateTime
 /// </summary>
 /// <param name="About">What the event it was tagged to said, e.g. "Engine 4 dispatched to INC-00001".</param>
 public sealed record AarNote(DateTimeOffset At, Guid ParticipantId, string Participant, AssessmentRating? Rating, string Note, string? By,
-    long? AboutSequence, string? About);
+    long? AboutSequence, string? About, Competency? Area = null);
+
+/// <summary>
+/// How observers rated one participant in one competency area (Phase 12): the rated notes in that area, averaged on the
+/// rubric's scale and put back on it.
+/// </summary>
+public sealed record AarCompetency(Guid ParticipantId, string Participant, Competency Area, int Ratings, int Score, AssessmentRating Level);
 
 /// <summary>A unit's status over the session, for the commitment chart.</summary>
 public sealed record AarStatusSpan(DateTimeOffset From, DateTimeOffset To, UnitStatus Status);
@@ -176,6 +182,9 @@ public sealed class AarReport
 
     /// <summary>Observers' notes and ratings (Phase 11 M6), in time order.</summary>
     public IReadOnlyList<AarNote> Notes { get; init; } = [];
+
+    /// <summary>Observers' ratings by participant and competency area (Phase 12).</summary>
+    public IReadOnlyList<AarCompetency> Competencies { get; init; } = [];
 
     /// <summary>The decisions one participant made (everyone's with null).</summary>
     public IEnumerable<AarDecision> DecisionsOf(Guid? participantId) =>

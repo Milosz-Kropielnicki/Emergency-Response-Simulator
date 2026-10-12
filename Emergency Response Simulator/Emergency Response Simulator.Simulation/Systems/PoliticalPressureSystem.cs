@@ -40,8 +40,19 @@ public sealed class PoliticalPressureSystem : ISimulationSystem
         public DateTimeOffset QuietUntil { get; set; }
     }
 
+    /// <summary>
+    /// A serious incident running this long brings a request to visit the scene (Phase 12): a Critical one sooner than a
+    /// High one. Approved, the party arrives <see cref="VisitArrivesAfter"/> later.
+    /// </summary>
+    public static readonly TimeSpan VisitAfterCritical = TimeSpan.FromMinutes(25), VisitAfterHigh = TimeSpan.FromMinutes(40);
+
+    public static readonly TimeSpan VisitArrivesAfter = TimeSpan.FromMinutes(15);
+
     private readonly Dictionary<Guid, Pressure> _incidents = [];
     private readonly HashSet<Guid> _eased = [];
+    private readonly HashSet<Guid> _visitAsked = [];
+    private readonly Dictionary<Guid, (Guid IncidentId, string Visitor)> _visits = [];
+    private readonly List<(DateTimeOffset At, Guid IncidentId, string Visitor, bool Live)> _arrivals = [];
 
     public int Order => 21;
 
@@ -51,6 +62,7 @@ public sealed class PoliticalPressureSystem : ISimulationSystem
         var byInstructor = world.PlayedByHuman(Instructor.AiRoles.Politicians);
         Answered(context, byInstructor);
         Ignored(context, byInstructor);
+        Visits(context, byInstructor);
         if (byInstructor) return;
 
         foreach (var (incidentId, facts) in world.Interagency.Incidents)
@@ -131,6 +143,70 @@ public sealed class PoliticalPressureSystem : ISimulationSystem
         }
     }
 
+    /// <summary>
+    /// Requests to visit the scene (Phase 12). Once a serious incident has run a while, the minister (if the pressure has
+    /// reached her office) or the local TD asks to come and see the response. It is an approval for the IC: a visit while
+    /// the hazard is live puts a VIP party where the crews work and takes an officer to escort them; declining it then is
+    /// the right call. Approved, the party turns up at the cordon a little later.
+    /// </summary>
+    private void Visits(SimulationContext context, bool byInstructor)
+    {
+        var world = context.World;
+
+        // Command's answers.
+        foreach (var (approvalId, visit) in _visits.ToList())
+        {
+            if (!world.ApprovalDecisions.TryGetValue(approvalId, out var approved)) continue;
+            _visits.Remove(approvalId);
+            var live = HazardLive(world, visit.IncidentId);
+            context.EmitTruth(new PoliticalVisitDecided(approvalId, visit.IncidentId, visit.Visitor, approved, live));
+            if (approved) _arrivals.Add((context.SimTime + VisitArrivesAfter, visit.IncidentId, visit.Visitor, live));
+        }
+
+        // Arrivals.
+        foreach (var arrival in _arrivals.Where(a => context.SimTime >= a.At).ToList())
+        {
+            _arrivals.Remove(arrival);
+            var live = HazardLive(world, arrival.IncidentId);
+            var place = world.Interagency.Incidents.GetValueOrDefault(arrival.IncidentId)?.Place ?? "the scene";
+            context.EmitPerceived(new AlertRaised(Guid.NewGuid(), live ? AlertCategory.Safety : AlertCategory.SituationChange,
+                live ? AlertSeverity.Warning : AlertSeverity.Info, $"{arrival.Visitor} at the cordon",
+                live
+                    ? $"{arrival.Visitor}'s party has arrived at {place} and wants to go forward. The hazard is still live: they need a Garda escort and a safety briefing, and an officer to host them."
+                    : $"{arrival.Visitor}'s party has arrived at {place} to meet the crews. An officer is needed to host them at the command post.",
+                arrival.IncidentId, null), EventSources.Comms);
+        }
+
+        if (byInstructor) return; // the instructor can ask as an official whenever they like
+        foreach (var (incidentId, facts) in world.Interagency.Incidents)
+        {
+            if (facts.Closed || facts.Priority < IncidentPriority.High || _visitAsked.Contains(incidentId)) continue;
+            var after = facts.Priority == IncidentPriority.Critical ? VisitAfterCritical : VisitAfterHigh;
+            if (context.SimTime - facts.CreatedAt < after) continue;
+            _visitAsked.Add(incidentId);
+
+            var minister = For(incidentId).Level >= 3;
+            var visitor = minister ? "The Minister" : "Deputy Nolan";
+            var caller = minister ? MinistersOffice : Td;
+            var details = $"{visitor} would like to visit {facts.Place} within the hour to see the response for herself and thank the crews. Can you facilitate it?";
+            var approval = new ApprovalRequested(Guid.NewGuid(), incidentId, $"Visit to the scene: {visitor}", details, caller);
+            _visits[approval.ApprovalId] = (incidentId, visitor);
+            CommsNet.Chat(context, caller, $"{caller}: {details}", approval);
+        }
+    }
+
+    /// <summary>
+    /// Whether the incident's hazard is still live (Phase 12): a fire, release or flood near it not yet over, or people
+    /// still told to evacuate or shelter around it.
+    /// </summary>
+    public static bool HazardLive(WorldState world, Guid incidentId)
+    {
+        if (!world.Interagency.Incidents.TryGetValue(incidentId, out var facts)) return false;
+        if (world.Hazards.Values.Any(h => !h.Ended && GeoMath.DistanceMeters(h.Origin, facts.Location) < 800)) return true;
+        return world.Interagency.IncidentZones.TryGetValue(incidentId, out var zones)
+               && world.ProtectiveActions.Values.Any(a => zones.Any(z => z.Intersects(a.Area)));
+    }
+
     private static void Ring(SimulationContext context, Guid incidentId, IncidentFacts facts, PoliticalOffice office, string? chasing)
     {
         var caller = Caller(office);
@@ -157,9 +233,9 @@ public sealed class PoliticalPressureSystem : ISimulationSystem
         _ => MinistersOffice,
     };
 
-    /// <summary>The PIO once command has one, else the Incident Commander.</summary>
+    /// <summary>The PIO once command has one (on the chart, or a participant playing the role), else the Incident Commander.</summary>
     public static string To(WorldState world, Guid? incidentId) =>
-        incidentId is { } id && world.Commands.TryGetValue(id, out var command) && command.IsStaffed(IcsRole.PublicInformation)
+        (incidentId is { } id ? world.Staffed(IcsRole.PublicInformation, id) : world.PlayedByParticipant(UserRole.PublicInformation))
             ? "Public Information Officer"
             : "Incident Commander";
 

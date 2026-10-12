@@ -8,8 +8,43 @@ public enum AssessmentRating
     NotYetCompetent,
 }
 
+/// <summary>
+/// What an assessment note is about (Phase 12): the competency areas incident command training assesses, so a
+/// participant's ratings can be read area by area as well as overall.
+/// </summary>
+public enum Competency
+{
+    /// <summary>Taking and keeping command: structure, delegation, span of control, handovers.</summary>
+    CommandAndControl,
+
+    /// <summary>Knowing what is going on, and what it is likely to do next.</summary>
+    SituationalAwareness,
+
+    /// <summary>Timely, sound decisions: priorities, resources, approvals.</summary>
+    DecisionMaking,
+
+    /// <summary>Radio discipline, orders and read-backs, briefings, the public and the media.</summary>
+    Communication,
+
+    /// <summary>Working with the team and the other agencies.</summary>
+    Teamwork,
+
+    /// <summary>Responder and public safety: zones, PARs, Maydays, protective actions.</summary>
+    Safety,
+}
+
 public static class Rubric
 {
+    public static string Name(Competency area) => area switch
+    {
+        Competency.CommandAndControl => "Command & control",
+        Competency.SituationalAwareness => "Situational awareness",
+        Competency.DecisionMaking => "Decision making",
+        Competency.Communication => "Communication",
+        Competency.Teamwork => "Teamwork & liaison",
+        _ => "Safety",
+    };
+
     public static string Name(AssessmentRating rating) => rating switch
     {
         AssessmentRating.Competent => "Competent",

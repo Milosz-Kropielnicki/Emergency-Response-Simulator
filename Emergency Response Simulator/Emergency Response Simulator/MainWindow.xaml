@@ -122,6 +122,14 @@
                     <TextBlock Text="{Binding ObserverBanner}" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"
                                Visibility="{Binding IsObserving, Converter={StaticResource BoolToVisibility}}" />
                     <TextBlock Text="{Binding IncidentSubtitle}" Foreground="{StaticResource MutedTextBrush}" />
+                    <!-- Exercise control (Phase 12): the instructor speaking outside the world, until dismissed. -->
+                    <Border DataContext="{Binding ExerciseControl}" Background="{StaticResource WarningBrush}" CornerRadius="3" Padding="6,2" Margin="0,3,0,0"
+                            HorizontalAlignment="Left" Visibility="{Binding HasMessage, Converter={StaticResource BoolToVisibility}}">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="✕" Command="{Binding DismissCommand}" Padding="4,0" Margin="8,0,0,0" ToolTip="Dismiss" />
+                            <TextBlock Text="{Binding Message}" FontWeight="SemiBold" Foreground="Black" TextWrapping="Wrap" MaxWidth="700" VerticalAlignment="Center" />
+                        </DockPanel>
+                    </Border>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -1219,6 +1227,8 @@
 
                                 <TextBlock Text="NOTE AND RATE" Style="{StaticResource PanelHeader}" />
                                 <ComboBox ItemsSource="{Binding Players}" SelectedItem="{Binding NoteFor}" DisplayMemberPath="Label" Margin="0,0,0,4" ToolTip="Who the note is about" />
+                                <ComboBox ItemsSource="{Binding Areas}" SelectedItem="{Binding Area}" Margin="0,0,0,4"
+                                          ToolTip="The competency area the note assesses; the review scores each area separately" />
                                 <ComboBox ItemsSource="{Binding Ratings}" SelectedItem="{Binding Rating}" Margin="0,0,0,4" ToolTip="Competent / Developing / Not yet competent" />
                                 <TextBox Text="{Binding NoteText, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="54" Margin="0,0,0,4" />
                                 <CheckBox IsChecked="{Binding TagLatest}" Margin="0,0,0,2">
@@ -1238,6 +1248,7 @@
                                                         <Run Text="{Binding Time, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
                                                         <Run Text="{Binding Participant, Mode=OneWay}" FontWeight="SemiBold" />
                                                         <Run x:Name="Rating" Text="{Binding Rating, Mode=OneWay}" />
+                                                        <Run Text="{Binding Area, Mode=OneWay}" Foreground="{StaticResource AccentBrush}" />
                                                         <Run Text="{Binding About, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
                                                     </TextBlock>
                                                     <TextBlock Text="{Binding Note}" TextWrapping="Wrap" />
@@ -1260,6 +1271,44 @@
                                 </ItemsControl>
                             </StackPanel>
                         </ScrollViewer>
+                    </TabItem>
+                    <!-- The role's desk (Phase 12): what waits for this role to act on, most urgent first. Last, so tab indices match WorkspacePanel. -->
+                    <TabItem DataContext="{Binding Desk}" Visibility="{Binding DataContext.ShowDesk, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
+                        <TabItem.Header>
+                            <TextBlock Text="{Binding TabHeader}" />
+                        </TabItem.Header>
+                        <DockPanel Margin="2">
+                            <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,2" />
+                            <TextBlock DockPanel.Dock="Top" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,6"
+                                       Text="Everything here needs your role's decision. Choose an item to go to its incident." />
+                            <ListBox ItemsSource="{Binding Items}" BorderThickness="0" Background="Transparent" Foreground="{StaticResource TextBrush}"
+                                     HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:DeskRow}">
+                                        <Border x:Name="Row" BorderBrush="{StaticResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,3" Cursor="Hand">
+                                            <Border.InputBindings>
+                                                <MouseBinding MouseAction="LeftClick" CommandParameter="{Binding}"
+                                                              Command="{Binding DataContext.OpenCommand, RelativeSource={RelativeSource AncestorType=ListBox}}" />
+                                            </Border.InputBindings>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                                                <TextBlock FontSize="10" Foreground="{StaticResource MutedTextBrush}">
+                                                    <Run Text="{Binding Function, Mode=OneWay}" /> · <Run Text="{Binding Age, Mode=OneWay}" />
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Border>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding Urgency}" Value="Overdue">
+                                                <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource WarningBrush}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Urgency}" Value="Urgent">
+                                                <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource CriticalBrush}" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
                     </TabItem>
                 </TabControl>
             </Border>

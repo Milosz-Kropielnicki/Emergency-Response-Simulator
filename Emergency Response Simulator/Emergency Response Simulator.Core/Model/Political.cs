@@ -35,6 +35,14 @@ public sealed class PoliticalCall
     public bool Waiting => AnsweredAt is null;
 }
 
+/// <summary>How the media cover the response (Phase 12), from the public's confidence in it.</summary>
+public enum MediaTone
+{
+    Supportive,
+    Mixed,
+    Critical,
+}
+
 /// <summary>Who runs an agency's control room (Phase 11 M5: the role-player registry).</summary>
 public enum AgencyController
 {

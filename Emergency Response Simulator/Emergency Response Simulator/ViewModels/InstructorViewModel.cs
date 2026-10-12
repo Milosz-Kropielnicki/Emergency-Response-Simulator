@@ -8,6 +8,7 @@ using Emergency_Response_Simulator.Core.Model;
 using Emergency_Response_Simulator.Simulation.Engine;
 using Emergency_Response_Simulator.Simulation.Routing;
 using Emergency_Response_Simulator.Simulation.State;
+using Emergency_Response_Simulator.Simulation.Systems;
 
 namespace Emergency_Response_Simulator.ViewModels;
 
@@ -76,6 +77,8 @@ public partial class InstructorViewModel : ObservableObject
     private IEnumerable<WorldFact> BuildFacts(WorldSnapshot snapshot)
     {
         yield return new WorldFact("Wind (true)", $"From {snapshot.Weather.WindFromDegrees:F0}° at {snapshot.Weather.WindSpeedMps:F1} m/s");
+        if (snapshot.PublicConfidence is { } confidence)
+            yield return new WorldFact("Public confidence", $"{confidence} / 100: coverage {MediaCoverageSystem.Tone(confidence).ToString().ToLowerInvariant()}");
 
         foreach (var hazard in snapshot.Hazards)
         {

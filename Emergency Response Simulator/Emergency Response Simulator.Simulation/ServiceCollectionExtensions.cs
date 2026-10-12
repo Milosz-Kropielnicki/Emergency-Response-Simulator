@@ -94,6 +94,8 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<ISimulationSystem>(_ => new InteragencySystem());
         if (configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.PoliticalPressure)}", true))
             services.AddSingleton<ISimulationSystem>(_ => new PoliticalPressureSystem());
+        if (configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.MediaCoverage)}", true))
+            services.AddSingleton<ISimulationSystem>(_ => new MediaCoverageSystem());
         services.AddSingleton<ISimulationSystem>(sp => new AttentionMonitor(
             sp.GetRequiredService<ICopService>(), sp.GetRequiredService<AttentionOptions>(), sp.GetRequiredService<IRoutingService>()));
         if (configuration[$"{SimulationOptions.SectionName}:Scenario"] == BarrowStreetScenario.Key)

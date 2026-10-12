@@ -27,7 +27,8 @@ public sealed record WorldSnapshot(
     WorldSnapshot.CommsView Comms,
     IReadOnlyList<WorldSnapshot.CrewView> Crews,
     IReadOnlyList<WorldSnapshot.DistressView> Distress,
-    IReadOnlyList<WorldSnapshot.HeldView>? Held = null)
+    IReadOnlyList<WorldSnapshot.HeldView>? Held = null,
+    int? PublicConfidence = null)
 {
     /// <summary>Something an agency knows and has not told command (Phase 10: information silos).</summary>
     public sealed record HeldView(string Agency, string Claim, DateTimeOffset KnownAt, bool Urgent, string Standing);
@@ -126,7 +127,8 @@ public sealed record WorldSnapshot(
             d.RescueUnitId is { } rescuer ? world.Units.GetValueOrDefault(rescuer)?.Callsign : null, d.RescueProgress)).ToList(),
         world.Interagency.Held.Values.Where(h => h.SharedAt is null).Select(h => new HeldView(
             world.Agencies.GetValueOrDefault(h.Info.AgencyId)?.Name ?? "Agency", h.Info.Claim, h.KnownAt, h.Info.Urgent,
-            world.Interagency.StandingOf(h.Info.AgencyId).ToString())).ToList());
+            world.Interagency.StandingOf(h.Info.AgencyId).ToString())).ToList(),
+        world.PublicConfidence);
 
     private static string Activity(WorldUnit unit, DateTimeOffset at) => unit switch
     {

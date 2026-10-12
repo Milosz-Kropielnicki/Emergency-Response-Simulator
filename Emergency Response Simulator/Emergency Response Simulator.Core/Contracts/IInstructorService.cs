@@ -61,4 +61,12 @@ public interface IInstructorService
     // ---- Debrief ----
 
     Task<CommandResult> BookmarkAsync(string note, Guid? participantId = null, CancellationToken cancellationToken = default);
+
+    // ---- Exercise control (Phase 12) ----
+
+    /// <summary>
+    /// Speaks to the players as the exercise's controller, outside the world: to everyone, or to one participant. Their
+    /// screens show it at once; nobody in the simulation hears it, and the review lists it.
+    /// </summary>
+    Task<CommandResult> SendExerciseMessageAsync(string text, Guid? participantId = null, CancellationToken cancellationToken = default);
 }

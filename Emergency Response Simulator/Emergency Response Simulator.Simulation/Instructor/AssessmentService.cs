@@ -12,7 +12,7 @@ namespace Emergency_Response_Simulator.Simulation.Instructor;
 public sealed class AssessmentService(ICopService cop, IEventPublisher publisher) : IAssessmentService
 {
     public async Task<CommandResult> RecordNoteAsync(Guid participantId, string note, AssessmentRating? rating = null, long? aboutSequence = null,
-        CancellationToken cancellationToken = default)
+        Competency? area = null, CancellationToken cancellationToken = default)
     {
         if (cop.Participants.FirstOrDefault(p => p.Id == participantId) is not { } participant)
             return CommandResult.Fail("That person isn't in the session.");
@@ -25,7 +25,7 @@ public sealed class AssessmentService(ICopService cop, IEventPublisher publisher
         if (CommandContext.Ambient.Actor?.ParticipantId == participantId)
             return CommandResult.Fail("Nobody assesses themselves.");
 
-        var recorded = await publisher.PublishAsync(new AssessmentNoteRecorded(Guid.NewGuid(), participantId, rating, note?.Trim() ?? "", aboutSequence),
+        var recorded = await publisher.PublishAsync(new AssessmentNoteRecorded(Guid.NewGuid(), participantId, rating, note?.Trim() ?? "", aboutSequence, area),
             EventVisibility.Truth, EventSources.Assessment, cancellationToken);
         return CommandResult.Ok(recorded.Sequence);
     }

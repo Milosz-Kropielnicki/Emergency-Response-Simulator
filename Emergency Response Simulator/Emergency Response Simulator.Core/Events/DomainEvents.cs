@@ -139,6 +139,10 @@ namespace Emergency_Response_Simulator.Core.Events;
 // Voice (Phase 11 M7)
 [JsonDerivedType(typeof(RadioAudioRecorded), nameof(RadioAudioRecorded))]
 [JsonDerivedType(typeof(VoiceConsentRecorded), nameof(VoiceConsentRecorded))]
+// Multiplayer completion (Phase 12)
+[JsonDerivedType(typeof(ExerciseControlMessage), nameof(ExerciseControlMessage))]
+[JsonDerivedType(typeof(PublicConfidenceChanged), nameof(PublicConfidenceChanged))]
+[JsonDerivedType(typeof(PoliticalVisitDecided), nameof(PoliticalVisitDecided))]
 // Truth: multi-agency (Phase 10)
 [JsonDerivedType(typeof(InformationHeld), nameof(InformationHeld))]
 // Truth: the world as it really is
@@ -875,8 +879,9 @@ public sealed record AgencyRequestAnswered(Guid ItemId, Guid AgencyId, bool Appr
 /// event it is about. Ground truth: trainees never see it during the exercise; assessors all do.
 /// </summary>
 /// <param name="AboutSequence">The event the note is about, e.g. the participant's command; null for a general note.</param>
-public sealed record AssessmentNoteRecorded(Guid NoteId, Guid ParticipantId, AssessmentRating? Rating, string Note, long? AboutSequence = null)
-    : DomainEvent;
+/// <param name="Area">The competency area it assesses (Phase 12); null for an overall impression.</param>
+public sealed record AssessmentNoteRecorded(Guid NoteId, Guid ParticipantId, AssessmentRating? Rating, string Note, long? AboutSequence = null,
+    Competency? Area = null) : DomainEvent;
 
 /// <summary>The instructor let an observer see ground truth, or took it away.</summary>
 public sealed record ObserverTruthChanged(Guid ParticipantId, bool Granted) : DomainEvent;
@@ -894,3 +899,25 @@ public sealed record RadioAudioRecorded(Guid ClipId, string ChannelId, Guid? Spe
 
 /// <summary>A participant agreed to have what they say on the radio recorded (kept for <paramref name="RetentionDays"/>), or didn't.</summary>
 public sealed record VoiceConsentRecorded(Guid ParticipantId, bool Consented, int RetentionDays) : DomainEvent;
+
+// ---- Multiplayer completion (Phase 12) ----
+
+/// <summary>
+/// The instructor speaking to the players as the exercise's controller, outside the world ("EXERCISE: pause for a
+/// teaching point", "Alex, you're the IC now"): to everyone, or to one participant. It is not radio traffic and nobody
+/// in the simulation hears it.
+/// </summary>
+/// <param name="ToParticipantId">One participant; null for everyone.</param>
+public sealed record ExerciseControlMessage(Guid MessageId, string Text, Guid? ToParticipantId = null) : DomainEvent;
+
+/// <summary>
+/// Ground truth: how far the public trusts the response (0–100), and what moved it: timely statements and clear
+/// protective advice raise it; journalists left waiting, contradictions and a minister going public lower it.
+/// </summary>
+public sealed record PublicConfidenceChanged(int Confidence, int Change, string Reason) : DomainEvent;
+
+/// <summary>
+/// Ground truth: command answered a politician's request to visit the scene, and whether the hazard there was still
+/// live (a visit inside a live cordon puts a VIP party where the crews need to work).
+/// </summary>
+public sealed record PoliticalVisitDecided(Guid ApprovalId, Guid? IncidentId, string Visitor, bool Approved, bool HazardLive) : DomainEvent;
