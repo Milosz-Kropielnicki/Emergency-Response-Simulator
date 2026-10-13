@@ -87,6 +87,9 @@ public sealed class WorldCasualty
 {
     public Guid Id { get; init; }
     public Guid? IncidentId { get; init; }
+
+    /// <summary>The person they were, when a civilian (Phase 14: a relative's enquiry is traced to them).</summary>
+    public int? CivilianId { get; init; }
     public GeoPoint Location { get; set; }
     public Triage Triage { get; set; }
     public CasualtyState State { get; set; }
@@ -189,6 +192,29 @@ public sealed class Civilian
 
     /// <summary>The evacuation order they ignore (non-compliance), so they are not asked again.</summary>
     public Guid? IgnoredOrder { get; set; }
+
+    // ---- Phase 14: vulnerable people ----
+
+    /// <summary>Why they need more than a warning (none for most people).</summary>
+    public Vulnerability Vulnerability { get; init; }
+
+    public bool Is(Vulnerability vulnerability) => (Vulnerability & vulnerability) != 0;
+
+    /// <summary>Where they live (or sleep): pet owners go back here, and a relative names it when they ring.</summary>
+    public GeoPoint Home { get; init; }
+
+    /// <summary>Told to leave but can't on their own: waiting for an assisted evacuation.</summary>
+    public bool WaitingForHelp { get; set; }
+
+    /// <summary>A pet owner who will go back past the cordon for the animal at this time.</summary>
+    public DateTimeOffset? ReturnForPetAt { get; set; }
+
+    /// <summary>Who they are in one phrase, for a casualty and the review: "an elderly resident"…</summary>
+    public string? Who => Is(Vulnerability.MobilityImpaired) ? "a resident who could not leave unaided"
+        : Is(Vulnerability.Elderly) ? "an elderly resident"
+        : Is(Vulnerability.Homeless) ? "a rough-sleeper"
+        : ReturnForPetAt is not null ? "a pet owner who went back in"
+        : null;
 }
 
 /// <summary>A private car on the road network, e.g. evacuees driving out of a declared zone.</summary>

@@ -127,6 +127,24 @@ public static class AarExport
             html.Append("</table>");
         }
 
+        // Legal and liability (Phase 14).
+        if (report.Liabilities.Count > 0 || report.Documentation.Significant > 0)
+        {
+            html.Append("<h2>Legal &amp; liability</h2>");
+            var log = report.Documentation;
+            if (log.Significant > 0)
+                html.Append($"<p>Decision log: <b>{log.Documented} of {log.Significant}</b> significant decisions documented with their reasons ({log.Percent}%).</p>" +
+                            (log.Undocumented.Count > 0 ? $"<p class=\"muted\">Not logged: {E(string.Join("; ", log.Undocumented))}</p>" : ""));
+            if (report.Liabilities.Count > 0)
+            {
+                html.Append("<table><tr><th>Time</th><th>Exposure</th><th>What happened</th><th></th></tr>");
+                foreach (var item in report.Liabilities)
+                    html.Append($"<tr><td>{Clock(item.At)}</td><td><b>{E(item.Kind)}</b></td><td>{E(item.Text)}</td>" +
+                                $"<td>{(item.Mitigated ? "mitigated" : "")}</td></tr>");
+                html.Append("</table>");
+            }
+        }
+
         // Ratings by competency area (Phase 12).
         if (report.Competencies.Count > 0)
         {
@@ -303,6 +321,11 @@ public static class AarExport
             Row("Observer note", note.At, note.Area is { } area ? Rubric.Name(area) : "", note.Participant, note.Note, "",
                 note.Rating is { } rating ? Rubric.Name(rating) : "",
                 $"{(note.About is { } about ? $"About: {about}. " : "")}By {note.By}");
+        foreach (var item in report.Liabilities)
+            Row("Liability", item.At, item.Kind, item.Text, item.Mitigated ? "mitigated" : "", "", "", "");
+        if (report.Documentation.Significant > 0)
+            Row("Decision log", null, "Documentation", $"{report.Documentation.Documented} of {report.Documentation.Significant} significant decisions logged",
+                report.Documentation.Percent.ToString(CultureInfo.InvariantCulture) + "%", "", "", string.Join("; ", report.Documentation.Undocumented));
         foreach (var competency in report.Competencies)
             Row("Competency", null, Rubric.Name(competency.Area), competency.Participant, $"{competency.Ratings} rating(s)", "",
                 competency.Score.ToString(CultureInfo.InvariantCulture), Rubric.Name(competency.Level));

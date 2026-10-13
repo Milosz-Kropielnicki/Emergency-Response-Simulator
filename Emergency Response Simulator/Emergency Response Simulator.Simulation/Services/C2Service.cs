@@ -808,6 +808,103 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher, IPlume
         return result with { EntityId = statementId };
     }
 
+    // ---- Public, media, political & legal (Phase 14) ----
+
+    /// <summary>Press conferences closer together than this are refused: the cameras need something new.</summary>
+    public static readonly TimeSpan PressConferenceInterval = TimeSpan.FromMinutes(10);
+
+    public async Task<CommandResult> HoldPressConferenceAsync(string statement, Guid? incidentId = null, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(statement))
+            return CommandResult.Fail("Write what you will tell them.");
+        var incident = incidentId is { } id ? cop.FindIncident(id) : null;
+        if (incidentId is not null && incident is null)
+            return CommandResult.Fail("Unknown incident.");
+        if (cop.Public.PressConferences.LastOrDefault() is var last && last != default && cop.AsOf - last < PressConferenceInterval)
+            return CommandResult.Fail($"The last press conference was at {last:HH:mm}: give it until {last + PressConferenceInterval:HH:mm}, or put out a statement.");
+
+        // Who stands up: the PIO, and the IC beside them.
+        var command = incident?.Command ?? cop.Incidents.Select(i => i.Command).FirstOrDefault(c => c.Positions.Count > 0);
+        List<string> spokespeople =
+        [
+            .. new[] { (IcsRole.PublicInformation, "PIO"), (IcsRole.IncidentCommander, "Incident Commander") }
+                .Select(p => command?.Positions.GetValueOrDefault(p.Item1) is { } name ? $"{p.Item2} {name}" : null)
+                .OfType<string>(),
+        ];
+        if (spokespeople.Count == 0) spokespeople.Add("Incident Commander");
+
+        var conferenceId = Guid.NewGuid();
+        await PublishAsync(new PressConferenceHeld(conferenceId, incidentId, statement.Trim(), spokespeople), cancellationToken);
+        // It is a public statement too: it answers the journalists, carries any warning, and reaches the public.
+        var result = await PublishAsync(new PublicStatementIssued(Guid.NewGuid(), incidentId, string.Join(" and ", spokespeople), statement.Trim(),
+            cop.JointInformationCentre(incidentId)), cancellationToken);
+        var dealt = cop.Public.Rumours.Count(r => r.RebuttedAt is not null && r.Rebuttal == statement.Trim());
+        return result with
+        {
+            EntityId = conferenceId,
+            Detail = "Press conference held" + (dealt > 0 ? $"; it dealt with {dealt} rumour(s)" : ""),
+        };
+    }
+
+    public async Task<CommandResult> RebutRumourAsync(Guid rumourId, string text, CancellationToken cancellationToken = default)
+    {
+        if (cop.Public.Rumours.FirstOrDefault(r => r.Id == rumourId) is not { } rumour)
+            return CommandResult.Fail("Unknown rumour.");
+        if (!rumour.Spreading)
+            return CommandResult.Fail("That rumour has already been answered.");
+        if (string.IsNullOrWhiteSpace(text))
+            return CommandResult.Fail("Write the rebuttal.");
+        return await PublishAsync(new RumourRebutted(rumourId, text.Trim()), cancellationToken);
+    }
+
+    public async Task<CommandResult> RequestAssistedEvacuationAsync(Guid zoneId, CancellationToken cancellationToken = default)
+    {
+        if (cop.Zones.FirstOrDefault(z => z.Id == zoneId) is not { } zone)
+            return CommandResult.Fail("Unknown zone.");
+        if (zone.Type != ZoneType.EvacuationZone)
+            return CommandResult.Fail("Assisted evacuation is for an evacuation zone.");
+        if (cop.Public.AssistedEvacuations.ContainsKey(zoneId))
+            return CommandResult.Fail($"Assisted evacuation of {zone.Name} has already been asked for.");
+        return await PublishAsync(new AssistedEvacuationRequested(zoneId), cancellationToken);
+    }
+
+    public async Task<CommandResult> ManageVolunteersAsync(Guid incidentId, VolunteerDecision decision, CancellationToken cancellationToken = default)
+    {
+        if (cop.Public.Volunteers.FirstOrDefault(v => v.IncidentId == incidentId) is not { } group)
+            return CommandResult.Fail("There are no volunteers at that incident.");
+        if (!group.Waiting)
+            return CommandResult.Fail($"The volunteers there were already {(group.Decision == VolunteerDecision.Register ? "registered" : "turned away")}.");
+        return await PublishAsync(new VolunteersManaged(incidentId, decision), cancellationToken);
+    }
+
+    public async Task<CommandResult> OpenFamilyAssistanceCentreAsync(string name, GeoPoint location, Guid? incidentId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (cop.Public.AssistanceCentres.Count > 0)
+            return CommandResult.Fail($"{cop.Public.AssistanceCentres[0].Name} is already open.");
+        if (string.IsNullOrWhiteSpace(name))
+            return CommandResult.Fail("Name the centre (e.g. the community hall it is in).");
+        if (incidentId is { } id && cop.FindIncident(id) is null)
+            return CommandResult.Fail("Unknown incident.");
+        var centreId = Guid.NewGuid();
+        var result = await PublishAsync(new FamilyAssistanceCentreOpened(centreId, incidentId, name.Trim(), location), cancellationToken);
+        return result with { EntityId = centreId };
+    }
+
+    public async Task<CommandResult> RecordDecisionAsync(string decision, string rationale, long? aboutSequence = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(decision))
+            return CommandResult.Fail("Say what was decided.");
+        if (string.IsNullOrWhiteSpace(rationale))
+            return CommandResult.Fail("Say why: a decision log entry without its reasons is no defence.");
+        if (aboutSequence is { } about && (about < 1 || about > cop.LastSequence))
+            return CommandResult.Fail("That event isn't in the session.");
+        var entryId = Guid.NewGuid();
+        var result = await PublishAsync(new DecisionLogged(entryId, decision.Trim(), rationale.Trim(), aboutSequence), cancellationToken);
+        return result with { EntityId = entryId };
+    }
+
     /// <summary>The new value if it differs from the current one, otherwise null (no change).</summary>
     private static T? Changed<T>(T? requested, T current) where T : struct =>
         requested is { } value && !EqualityComparer<T>.Default.Equals(value, current) ? value : null;

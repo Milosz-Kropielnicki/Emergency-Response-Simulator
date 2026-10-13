@@ -167,6 +167,24 @@
                             </DataGrid>
                         </StackPanel>
 
+                        <!-- Legal and liability (Phase 14) -->
+                        <StackPanel Visibility="{Binding HasLegal, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="LEGAL &amp; LIABILITY" Style="{StaticResource PanelHeader}" />
+                            <TextBlock Text="{Binding DocumentationSummary}" Style="{StaticResource Wrap}" Margin="0,0,0,4" />
+                            <DataGrid ItemsSource="{Binding Liabilities}" Margin="0,0,0,12">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="70" />
+                                    <DataGridTextColumn Header="Exposure" Binding="{Binding Kind}" Width="190" />
+                                    <DataGridTemplateColumn Header="What happened" Width="*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate><TextBlock Text="{Binding Text}" Style="{StaticResource Wrap}" /></DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="" Binding="{Binding Mitigated}" Width="80" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+
                         <!-- Observer ratings by competency area (Phase 12) -->
                         <StackPanel Visibility="{Binding HasCompetencies, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="COMPETENCIES (observer ratings by area)" Style="{StaticResource PanelHeader}" />

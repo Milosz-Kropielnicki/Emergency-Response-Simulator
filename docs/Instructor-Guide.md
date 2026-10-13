@@ -70,7 +70,11 @@ Open it with **🎛 Console** in the header. To run it on a second screen or mac
   - **Fire now:** early, whatever its time or condition.
   - **Hold:** keeps it from going off; **Release** puts it back on the script.
   - **Skip:** drops it from this run.
-- **Ad-hoc injects** from the template library: wind shift, escalation, secondary incident, 999 call, unit breakdown, radio failure, road blocked, hospital under pressure, social-media rumour. Each has sensible defaults and places itself near the largest live incident.
+- **Ad-hoc injects** from the template library. Each has sensible defaults and places itself near the largest live incident.
+  - wind shift, escalation, secondary incident, 999 call
+  - unit breakdown, radio failure, road blocked, hospital under pressure
+  - hazardous release and release rate changes (Phase 13)
+  - **social-media rumour:** you say whether it's true. A true one the PIO denies backfires on them.
 
 > **Tip:** Hold an inject when the team is already saturated, and fire one early when they are coasting. The review shows every inject that fired early, was held, or was fired ad hoc, so the debrief can account for the difficulty.
 
@@ -161,6 +165,23 @@ These are the parts the simulation plays:
 
 > **Steering tip:** If the team is ignoring the PIO function, role-play a journalist with a pointed question, or fire the **social media rumour** template.
 
+**The public** (Phase 14). Most of this arrives as reports and calls; the PUBLIC tab is where the team works it.
+- **Vulnerable people in every zone:**
+  - Some can't leave without help, and wait.
+  - Rough-sleepers are never reached by door-knocking.
+  - Pet owners stay, or go back in, unless somewhere takes animals (the team notifies an animal welfare service).
+  - The council's register comes back after 8 minutes and misses people. **Assisted evacuation** gets them out.
+  - Anyone still there after 30 minutes is a liability in the review.
+- **Community leaders** ring when their area is put under an order. Called back, people listen to them and they say who needs help.
+- **The Garda:** an evacuation ordered without consulting the Garda brings a call from the Chief Superintendent, and a legal exposure unless it is answered quickly.
+- **Looting** happens in evacuated streets with no gardaí there or cordon over them.
+- **Volunteers** gather at the cordon. Left alone, they go in, and some get hurt.
+- **Families:** relatives ring for news. Nothing is traced until someone opens a **family assistance centre**.
+- **Rumours** spread until answered, some true and some not. The PIO should check before denying. A **press conference** answers the journalists and deals with the rumours it names.
+- **The decision log:** the review checks that significant decisions were logged with their reasons.
+
+> **Steering tip:** On a hazmat or fire exercise, the public side is easy to forget. If the team is all tactics, let a rumour run, or fire a true one and watch whether the PIO checks before denying it. If they're overloaded, take over the politicians (which also silences community leaders and agency heads) or turn the public side down with `Simulation:PublicPressures=false` for a first run.
+
 ---
 
 ## 5. Voice radio
@@ -182,6 +203,7 @@ These are the parts the simulation plays:
    - **Findings:** strengths and weaknesses, including political calls, public confidence (where it ended, its lowest point and the biggest drops), visit decisions, and role handovers.
    - **Participants:** roles over time, commands, decision ratings, observer ratings, and combined score and level.
    - **Observer notes and Competencies:** each player's ratings by competency area.
+   - **Legal & liability:** how many significant decisions were logged with their reasons, and each exposure an inquiry would ask about. Some will be marked mitigated: an evacuation without the Garda, vulnerable people left behind, an unguarded zone, a volunteer hurt, an untrue denial, families waiting over an hour.
    - **Instructor:** what you injected, held, skipped and role-played. This shows how hard you made it.
    - **Timeline:** filter to one participant, play the recorded radio (▶), and find your bookmarks and exercise-control messages.
 4. **Export** to HTML or CSV for the training record.

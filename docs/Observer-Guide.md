@@ -80,6 +80,7 @@ In the **After-Action Review**:
 
 - **Observer notes:** every note, with time, player, area, rating, the event it was about, and who recorded it. Notes also appear on the timeline (category ASSESSMENT) and in the player's own filtered timeline.
 - **Competencies:** each player's rated notes **per area**, averaged and put back on the rubric (Competent = 100, Developing = 50, Not yet competent = 0; 75+ is competent, 40+ developing).
+- **Legal & liability** (Phase 14): the decision log's coverage and the exposures an inquiry would ask about. Notes that tie a player to them (Communication for an untrue denial, Safety for people left behind) make the debrief concrete.
 - **Participants:** each player's **observer score** (all their ratings, areas and overall) combined evenly with how their own decisions rated in the simulation. Either one stands alone if the other is missing. The **overall level** goes back onto the rubric.
 - **Exports:** the HTML and CSV exports include the notes, the competency table and the scores.
 

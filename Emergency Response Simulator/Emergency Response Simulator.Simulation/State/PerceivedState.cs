@@ -47,6 +47,7 @@ public sealed class PerceivedState : ICopService
     private readonly Dictionary<Guid, MediaEnquiry> _enquiries = [];
     private readonly Dictionary<Guid, PoliticalCall> _politicalCalls = [];
     private readonly Dictionary<Guid, PlumeProjection> _projections = [];
+    private readonly PublicSituation _public = new();
     private readonly Dictionary<Guid, Participant> _participants = [];
 
     /// <summary>The comms log keeps this many messages; older ones are in the event stream.</summary>
@@ -151,6 +152,11 @@ public sealed class PerceivedState : ICopService
         get { lock (_lock) return _projections.Values.OrderByDescending(p => p.RunAt).ToList(); }
     }
 
+    public PublicSituation Public
+    {
+        get { lock (_lock) return _public.Copy(); }
+    }
+
     public IReadOnlyList<MediaEnquiry> MediaEnquiries
     {
         get { lock (_lock) return _enquiries.Values.OrderBy(m => m.ReceivedAt).ToList(); }
@@ -191,7 +197,7 @@ public sealed class PerceivedState : ICopService
             if (simEvent.Sequence <= LastSequence)
                 return; // already applied
 
-            ApplyPayload(simEvent.Payload, simEvent.SimTime);
+            ApplyPayload(simEvent.Payload, simEvent.SimTime, simEvent.ActorId);
             LastSequence = simEvent.Sequence;
             AsOf = simEvent.SimTime;
         }
@@ -199,7 +205,8 @@ public sealed class PerceivedState : ICopService
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    private void ApplyPayload(DomainEvent payload, DateTimeOffset at)
+    /// <param name="actorId">Who gave the command that recorded it, when someone did (for the decision log's author).</param>
+    private void ApplyPayload(DomainEvent payload, DateTimeOffset at, Guid? actorId = null)
     {
         switch (payload)
         {
@@ -595,6 +602,84 @@ public sealed class PerceivedState : ICopService
                 if (_eoc.Requested == e.Level) _eoc.Requested = null;
                 _eoc.Seats.RemoveAll(s => s.From > e.Level);
                 if (EocLevels.SitrepInterval(e.Level) is null) _eoc.SitrepDue = null;
+                break;
+
+            // ---- Public, media, political & legal (Phase 14) ----
+            case VulnerableResidentsReported e:
+                // One report per zone and source; a later one from the same source replaces it.
+                var register = _public.Vulnerable.FirstOrDefault(v => v.ZoneId == e.ZoneId && v.Source == e.Source);
+                if (register is null)
+                    _public.Vulnerable.Add(register = new VulnerableReport
+                    {
+                        ZoneId = e.ZoneId, Source = e.Source,
+                        AssistanceRequestedAt = _public.AssistedEvacuations.TryGetValue(e.ZoneId, out var askedEarlier) ? askedEarlier : null,
+                    });
+                (register.Elderly, register.MobilityImpaired, register.PetOwners, register.Homeless, register.ReportedAt) =
+                    (e.Elderly, e.MobilityImpaired, e.PetOwners, e.Homeless, at);
+                break;
+            case AssistedEvacuationRequested e:
+                _public.AssistedEvacuations.TryAdd(e.ZoneId, at);
+                foreach (var report in _public.Vulnerable.Where(v => v.ZoneId == e.ZoneId)) report.AssistanceRequestedAt ??= at;
+                break;
+            case AssistedEvacuationProgress e:
+                foreach (var report in _public.Vulnerable.Where(v => v.ZoneId == e.ZoneId)) report.Helped = e.Helped;
+                break;
+            case VolunteersArrived e:
+                if (_public.Volunteers.FirstOrDefault(v => v.IncidentId == e.IncidentId) is { } group)
+                    group.Count += e.Count;
+                else
+                    _public.Volunteers.Add(new VolunteerGroup { IncidentId = e.IncidentId, Count = e.Count, Location = e.Location, ArrivedAt = at });
+                break;
+            case VolunteersManaged e when _public.Volunteers.FirstOrDefault(v => v.IncidentId == e.IncidentId) is { } managed:
+                (managed.Decision, managed.DecidedAt) = (e.Decision, at);
+                if (e.Decision == VolunteerDecision.Register && _public.AssistanceCentres.FirstOrDefault() is { } centre) centre.Volunteers += managed.Count;
+                break;
+            case VolunteersSelfDeployed e when _public.Volunteers.FirstOrDefault(v => v.IncidentId == e.IncidentId) is { } loose:
+                loose.SelfDeployed += e.Count;
+                break;
+            case MissingPersonReported e:
+                _public.MissingPersons.Add(new MissingPersonEnquiry
+                {
+                    Id = e.EnquiryId, IncidentId = e.IncidentId, Caller = e.Caller, Missing = e.Missing, LastKnown = e.LastKnown, ReceivedAt = at,
+                });
+                break;
+            case FamilyAssistanceCentreOpened e:
+                _public.AssistanceCentres.Add(new FamilyAssistanceCentre
+                {
+                    Id = e.CentreId, IncidentId = e.IncidentId, Name = e.Name, Location = e.Location, OpenedAt = at,
+                    Volunteers = _public.Volunteers.Where(v => v.Decision == VolunteerDecision.Register).Sum(v => v.Count),
+                });
+                break;
+            case MissingPersonTraced e when _public.MissingPersons.FirstOrDefault(m => m.Id == e.EnquiryId) is { } traced:
+                (traced.TracedAt, traced.Outcome, traced.Detail, traced.Supported) = (at, e.Outcome, e.Detail, e.Supported);
+                break;
+            case RumourSpreading e:
+                if (_public.Rumours.FirstOrDefault(r => r.Id == e.RumourId) is { } seen)
+                    seen.ReachThousands = e.ReachThousands;
+                else
+                    _public.Rumours.Add(new Rumour
+                    {
+                        Id = e.RumourId, IncidentId = e.IncidentId, Claim = e.Claim, Topic = e.Topic, FirstSeenAt = at, ReachThousands = e.ReachThousands,
+                    });
+                break;
+            case RumourRebutted e when _public.Rumours.FirstOrDefault(r => r.Id == e.RumourId) is { } rebutted:
+                (rebutted.RebuttedAt, rebutted.Rebuttal) = (at, e.Text);
+                break;
+            case DenialExposed e when _public.Rumours.FirstOrDefault(r => r.Id == e.RumourId) is { } exposed:
+                exposed.DenialExposedAt = at;
+                break;
+            case PressConferenceHeld e:
+                _public.PressConferences.Add(at);
+                // Every rumour the statement speaks to is dealt with, as a rebuttal would.
+                foreach (var addressed in _public.Rumours.Where(r => r.Spreading && e.Statement.Contains(r.Topic, StringComparison.OrdinalIgnoreCase)))
+                    (addressed.RebuttedAt, addressed.Rebuttal) = (at, e.Statement);
+                break;
+            case DecisionLogged e:
+                _public.DecisionLog.Add(new DecisionLogEntry
+                {
+                    Id = e.EntryId, At = at, Decision = e.Decision, Rationale = e.Rationale, AboutSequence = e.AboutSequence,
+                    By = actorId is { } author && _participants.TryGetValue(author, out var writer) ? writer.DisplayName : null,
+                });
                 break;
 
             // A plume projection command ran (Phase 13); it replaces the one it was run from.

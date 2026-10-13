@@ -55,6 +55,7 @@ public partial class MainViewModel : ObservableObject
         ZoneDrawing = new ZoneDrawingViewModel(c2, this);
         IncidentDetail = new IncidentDetailViewModel(this, c2);
         Plume = new PlumeViewModel(this, c2, cop);
+        Public = new PublicViewModel(this, c2, cop);
         LayerGroups = BuildLayerGroups();
         Workspaces = RoleWorkspaces.Choices();
         assessment.Attach(
@@ -124,7 +125,7 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     private void OnPermissionsChanged()
     {
-        foreach (var viewModel in new object[] { this, Command, CommsHub, Crews, Agencies, Ics, Iap, ZoneDrawing, IncidentDetail, Plume })
+        foreach (var viewModel in new object[] { this, Command, CommsHub, Crews, Agencies, Ics, Iap, ZoneDrawing, IncidentDetail, Plume, Public })
             Permissions.Requery(viewModel);
         Ics.Requery();
         if (Permissions.Role is { } role && role != _workspaceRole)
@@ -151,6 +152,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _showCrews = true;
     [ObservableProperty] private bool _showAgencies = true;
     [ObservableProperty] private bool _showDesk = true;
+    [ObservableProperty] private bool _showPublic = true;
     [ObservableProperty] private bool _showCommandBoard = true;
     [ObservableProperty] private bool _showInstructorBoard = true;
 
@@ -179,6 +181,7 @@ public partial class MainViewModel : ObservableObject
         ShowCrews = Shows(WorkspacePanel.Crews);
         ShowAgencies = Shows(WorkspacePanel.Agencies);
         ShowDesk = Shows(WorkspacePanel.Desk);
+        ShowPublic = Shows(WorkspacePanel.Public);
         ShowAssess = Assessment.IsAssessor && Shows(WorkspacePanel.Assess);
         ShowCommandBoard = value.Boards.Contains(WorkspaceBoard.Command);
         ShowInstructorBoard = value.Boards.Contains(WorkspaceBoard.Instructor);
@@ -199,6 +202,9 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>The selected incident's plume projection (Phase 13).</summary>
     public PlumeViewModel Plume { get; }
+
+    /// <summary>Rumours, the press, vulnerable people, volunteers, families and the decision log (Phase 14).</summary>
+    public PublicViewModel Public { get; }
 
     public UnitDetailViewModel UnitDetail { get; }
 
@@ -697,6 +703,7 @@ public partial class MainViewModel : ObservableObject
         Permissions.Refresh();
         Assessment.Refresh();
         Desk.Refresh();
+        Public.Refresh();
         Radio.Refresh();
         RefreshObserving();
         RefreshZones();

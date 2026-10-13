@@ -94,6 +94,37 @@ public static class RoleDesk
                 items.Add(new(Function<IC2Service>(nameof(IC2Service.IssuePublicStatementAsync)), $"{enquiry.Outlet} asks: {enquiry.Question}",
                     enquiry.ReceivedAt, After(enquiry.ReceivedAt, TimeSpan.FromMinutes(8)), enquiry.IncidentId, enquiry.Id));
 
+        // ---- Phase 14: the public ----
+        var pub = cop.Public;
+        if (Can<IC2Service>(nameof(IC2Service.RebutRumourAsync)))
+            foreach (var rumour in pub.Rumours.Where(r => r.Spreading))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.RebutRumourAsync)),
+                    $"Rumour (~{rumour.ReachThousands}k): \"{rumour.Claim}\" — check it, then answer it", rumour.FirstSeenAt,
+                    rumour.ReachThousands >= 100 ? DeskUrgency.Urgent : rumour.ReachThousands >= 20 ? DeskUrgency.Overdue : DeskUrgency.Routine,
+                    rumour.IncidentId, rumour.Id));
+
+        if (Can<IC2Service>(nameof(IC2Service.ManageVolunteersAsync)))
+            foreach (var group in pub.Volunteers.Where(v => v.Waiting))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.ManageVolunteersAsync)),
+                    $"{group.Count} volunteers at the cordon: register them or turn them away", group.ArrivedAt,
+                    group.SelfDeployed > 0 ? DeskUrgency.Urgent : After(group.ArrivedAt, TimeSpan.FromMinutes(5)), group.IncidentId));
+
+        if (Can<IC2Service>(nameof(IC2Service.RequestAssistedEvacuationAsync)))
+            foreach (var report in pub.Vulnerable.Where(v => v.AssistanceRequestedAt is null && v.MobilityImpaired + v.Homeless > 0)
+                         .Where(v => cop.Zones.Any(z => z.Id == v.ZoneId && z.Type == ZoneType.EvacuationZone))
+                         .GroupBy(v => v.ZoneId).Select(g => g.MaxBy(v => v.MobilityImpaired + v.Homeless)!))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.RequestAssistedEvacuationAsync)),
+                    $"{report.MobilityImpaired} can't leave unaided" + (report.Homeless > 0 ? $", {report.Homeless} sleeping rough" : "") +
+                    $" in {cop.Zones.First(z => z.Id == report.ZoneId).Name}: arrange an assisted evacuation", report.ReportedAt, DeskUrgency.Urgent, EntityId: report.ZoneId));
+
+        if (Can<IC2Service>(nameof(IC2Service.OpenFamilyAssistanceCentreAsync)) && pub.AssistanceCentres.Count == 0 && pub.MissingPersons.Count(m => m.Waiting) is > 0 and var waitingFamilies)
+        {
+            var since = pub.MissingPersons.Where(m => m.Waiting).Min(m => m.ReceivedAt);
+            items.Add(new(Function<IC2Service>(nameof(IC2Service.OpenFamilyAssistanceCentreAsync)),
+                $"{waitingFamilies} famil{(waitingFamilies == 1 ? "y" : "ies")} waiting for news: open a family assistance centre", since,
+                After(since, TimeSpan.FromMinutes(15))));
+        }
+
         if (Can<IC2Service>(nameof(IC2Service.AnswerPoliticalCallAsync)))
             foreach (var call in cop.PoliticalCalls.Where(c => c.Waiting))
                 items.Add(new(Function<IC2Service>(nameof(IC2Service.AnswerPoliticalCallAsync)), $"Call back {call.Caller} (for the {call.To})",

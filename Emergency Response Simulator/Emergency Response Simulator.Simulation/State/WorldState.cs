@@ -107,6 +107,12 @@ public sealed class WorldState
 
     public WorldInteragency Interagency { get; } = new();
 
+    /// <summary>Garda cordons in force (Phase 14): they turn back people going back in, and deter looting.</summary>
+    public Dictionary<Guid, Geometry> PoliceCordons { get; } = [];
+
+    /// <summary>The public side of the response (Phase 14): rumours, volunteers, vulnerable people, families, the press.</summary>
+    public WorldPublic Public { get; } = new();
+
     /// <summary>
     /// Roles people play instead of the simulation, by role key (Phase 11 M4–M5): the instructor (null) or a participant
     /// (their id, for an agency they run). The systems that play those roles leave their decisions to them.
@@ -160,6 +166,8 @@ public sealed class WorldState
     public void Apply(SimEvent simEvent)
     {
         Interagency.Apply(simEvent.Payload, simEvent.SimTime);
+        Public.Apply(simEvent.Payload, simEvent.SimTime,
+            callId => PoliticalCalls.TryGetValue(callId, out var call) && call.Call.Office == PoliticalOffice.CommunityLeader ? call.Call.ZoneId : null);
 
         switch (simEvent.Payload)
         {
@@ -435,6 +443,11 @@ public sealed class WorldState
                 ProtectiveActions[e.ZoneId] = new ProtectiveAction(e.ZoneId, e.Type, Wgs84.CreatePolygon(e.Boundary), simEvent.SimTime);
                 break;
 
+            // Phase 14: a garda cordon keeps people (and looters) out of what it covers.
+            case ZoneDeclared e when e.Type == ZoneType.PoliceCordon && e.Boundary.Count >= 3:
+                PoliceCordons[e.ZoneId] = Wgs84.CreatePolygon(e.Boundary);
+                break;
+
             case IncidentCreated e:
                 ReportedIncidentLocations[e.IncidentId] = e.Location;
                 ReportedIncidentPriorities[e.IncidentId] = e.Priority;
@@ -571,6 +584,7 @@ public sealed class WorldState
 
             case ZoneLifted e:
                 ProtectiveActions.Remove(e.ZoneId);
+                PoliceCordons.Remove(e.ZoneId);
                 if (DeclaredNoGoAreas.Remove(e.ZoneId))
                     NoGoVersion++;
                 break;

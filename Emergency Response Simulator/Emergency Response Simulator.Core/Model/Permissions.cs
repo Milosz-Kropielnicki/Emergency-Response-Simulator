@@ -145,6 +145,14 @@ public static class PermissionMatrix
         C2(nameof(IC2Service.SubmitSitrepAsync), "Situation reports", Planning, IC);
         C2(nameof(IC2Service.IssuePublicStatementAsync), "Public information", Pio);
 
+        // Phase 14: the public, the media and the record.
+        C2(nameof(IC2Service.HoldPressConferenceAsync), "Public information", Pio);
+        C2(nameof(IC2Service.RebutRumourAsync), "Public information", Pio);
+        C2(nameof(IC2Service.RequestAssistedEvacuationAsync), "Evacuation support", Ops, Logistics);
+        C2(nameof(IC2Service.ManageVolunteersAsync), "Volunteers", Logistics);
+        C2(nameof(IC2Service.OpenFamilyAssistanceCentreAsync), "Family assistance", Liaison, Logistics);
+        Anyone(typeof(IC2Service), nameof(IC2Service.RecordDecisionAsync), "Decision log"); // everyone in command keeps one
+
         // AI role players (Phase 11 M5): politicians ring the IC or the PIO; an agency chief answers for the agency they run.
         C2(nameof(IC2Service.AnswerPoliticalCallAsync), "Political calls", IC, Pio);
         C2(nameof(IC2Service.AnswerAgencyRequestAsync), "Answering for your agency", Chief);

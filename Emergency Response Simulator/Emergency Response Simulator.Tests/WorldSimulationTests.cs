@@ -187,7 +187,12 @@ public class WorldSimulationTests
     [Fact]
     public async Task People_inside_a_declared_evacuation_zone_are_warned_and_most_leave()
     {
-        var options = new CivilianOptions { PopulationPerIncident = 150, CarOwnership = 0, LimitedEnglish = 0 }; // language is tested separately
+        // Language and vulnerable people (Phase 14) are tested separately.
+        var options = new CivilianOptions
+        {
+            PopulationPerIncident = 150, CarOwnership = 0, LimitedEnglish = 0,
+            ElderlyShare = 0, MobilityImpairedShare = 0, HomelessShare = 0, PetOwnerShare = 0,
+        };
         var harness = new TestHarness(new CivilianSystem(new UniformTerrain(0.2), options));
         await harness.Truth(new WorldIncidentStarted(Guid.NewGuid(), IncidentType.Other, Dublin, 0.2, 0)); // no hazard: only the order moves people
         await harness.RunAsync(TimeSpan.FromSeconds(5));

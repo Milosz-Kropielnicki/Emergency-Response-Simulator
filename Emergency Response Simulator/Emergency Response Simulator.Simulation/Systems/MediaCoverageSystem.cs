@@ -96,8 +96,60 @@ public sealed class MediaCoverageSystem : ISimulationSystem
                     ? $"{visit.Visitor}'s visit took officers away while the hazard was live"
                     : $"{visit.Visitor} visited the scene and thanked the crews");
 
+        PublicPressures(context, Change);
+
         Coverage(context, confidence);
     }
+
+    /// <summary>A false rumour that reaches this many people (thousands) unanswered costs trust.</summary>
+    public const int RumourDamageReach = 50;
+
+    /// <summary>A family left this long without news, with no family assistance centre, says so publicly.</summary>
+    public static readonly TimeSpan FamiliesWaitFor = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// The pressures from outside the response (Phase 14): rumours and how command answered them, press conferences,
+    /// looting, families waiting for news, and community leaders nobody called back.
+    /// </summary>
+    private void PublicPressures(SimulationContext context, Action<int, string> change)
+    {
+        var world = context.World;
+        var pub = world.Public;
+
+        foreach (var rumour in pub.Rumours.Values.Where(r => r.IsTrue == false))
+        {
+            if (rumour.Spreading && rumour.ReachThousands >= RumourDamageReach && _counted.Add(Salt(rumour.Id, 1)))
+                change(-5, $"A false rumour ({rumour.Topic}) reached {rumour.ReachThousands}k people unanswered");
+            if (!rumour.Spreading && _counted.Add(Salt(rumour.Id, 2)))
+                change(3, $"Command put the record straight on a false rumour ({rumour.Topic})");
+        }
+        foreach (var rumour in pub.Rumours.Values.Where(r => r.DenialExposed))
+            if (_counted.Add(Salt(rumour.Id, 3)))
+                change(-15, $"Command denied something that turned out to be true ({rumour.Topic})");
+
+        for (var i = 0; i < pub.PressConferences.Count; i++)
+        {
+            if (!_counted.Add(Salt(Guid.Empty, 100 + i))) continue;
+            var recent = i > 0 && pub.PressConferences[i] - pub.PressConferences[i - 1] < TimeSpan.FromMinutes(20);
+            change(recent ? 3 : 10, recent ? "Another press conference" : "A press conference put the authorities in front of the public");
+        }
+
+        for (var i = 0; i < pub.Looting.Count; i++)
+            if (!pub.Looting[i].Policed && _counted.Add(Salt(pub.Looting[i].ZoneId, 200 + i)))
+                change(-6, "Homes looted in an evacuation zone with no gardaí there");
+
+        if (pub.AssistanceCentre is null)
+            foreach (var (id, (at, _)) in pub.Enquiries)
+                if (context.SimTime - at >= FamiliesWaitFor && _counted.Add(Salt(id, 4)))
+                    change(-2, "A family waited half an hour for news, with nowhere to go for it");
+
+        foreach (var call in world.PoliticalCalls.Values.Where(c => c.Call.Office == PoliticalOffice.CommunityLeader && c.Escalated && c.AnsweredAt is null))
+            if (!world.PlayedByHuman(Instructor.AiRoles.Politicians) && _counted.Add(Salt(call.Call.CallId, 5)))
+                change(-4, $"{call.Call.Caller} told the media nobody had spoken to them");
+    }
+
+    /// <summary>A distinct key per thing counted, so each costs or earns once.</summary>
+    private static Guid Salt(Guid id, int kind) => SimRandom.Derive(id, 7000 + kind);
 
     private void Coverage(SimulationContext context, int confidence)
     {

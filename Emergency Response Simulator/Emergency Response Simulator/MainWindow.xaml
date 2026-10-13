@@ -1385,6 +1385,150 @@
                             </ListBox>
                         </DockPanel>
                     </TabItem>
+                    <!-- The public, the media and the record (Phase 14). Last, so tab indices match WorkspacePanel. -->
+                    <TabItem DataContext="{Binding Public}" Visibility="{Binding DataContext.ShowPublic, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
+                        <TabItem.Header>
+                            <TextBlock Text="{Binding TabHeader}" />
+                        </TabItem.Header>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="2">
+                                <!-- Press and rumours -->
+                                <TextBlock Text="PRESS &amp; RUMOURS" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Text="{Binding PressSummary}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,2" />
+                                <TextBox Text="{Binding PressStatement, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="44"
+                                         ToolTip="What you will say. It answers every journalist waiting, and deals with each rumour it speaks to (name the subject)." />
+                                <Button Content="🎤 Hold press conference" Command="{Binding HoldPressConferenceCommand}" HorizontalAlignment="Left" Margin="0,4,0,6" Padding="8,2" />
+                                <ItemsControl ItemsSource="{Binding Rumours}" Margin="0,0,0,10">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:RumourRow}">
+                                            <Border x:Name="Row" BorderBrush="{StaticResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,3" Margin="0,0,0,2">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Claim, StringFormat='“{0}”'}" TextWrapping="Wrap" />
+                                                    <TextBlock x:Name="Status" Text="{Binding Status}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <DockPanel Margin="0,2,0,0" Visibility="{Binding Spreading, Converter={StaticResource BoolToVisibility}}">
+                                                        <Button DockPanel.Dock="Right" Content="Rebut" Padding="6,0" Margin="4,0,0,0" CommandParameter="{Binding}"
+                                                                Command="{Binding DataContext.RebutCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                ToolTip="Say publicly it isn't true. Check first: denying something true backfires." />
+                                                        <TextBox Text="{Binding Rebuttal, UpdateSourceTrigger=PropertyChanged}" FontSize="11" />
+                                                    </DockPanel>
+                                                </StackPanel>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Spreading}" Value="True">
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Contradicted}" Value="True">
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Status" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Vulnerable people -->
+                                <TextBlock Text="VULNERABLE PEOPLE IN ZONES" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Style="{StaticResource EmptyHint}" FontSize="11" Margin="0,0,0,2"
+                                           Text="The council's register comes back a few minutes after a zone is declared. It misses people; a community leader knows more." />
+                                <ItemsControl ItemsSource="{Binding Vulnerable}" Margin="0,0,0,10">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:VulnerableRow}">
+                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,3">
+                                                <DockPanel>
+                                                    <Button DockPanel.Dock="Right" Content="Assisted evacuation" Padding="6,0" FontSize="11" VerticalAlignment="Center"
+                                                            Visibility="{Binding CanRequest, Converter={StaticResource BoolToVisibility}}" CommandParameter="{Binding ZoneId}"
+                                                            Command="{Binding DataContext.AssistCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            ToolTip="Ambulance transport, care staff and outreach to get out those who can't leave alone" />
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Zone}" FontWeight="SemiBold" />
+                                                        <TextBlock Text="{Binding Counts}" TextWrapping="Wrap" />
+                                                        <TextBlock Text="{Binding Assistance}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                                        <TextBlock Text="{Binding Source}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                </DockPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Volunteers -->
+                                <TextBlock Text="VOLUNTEERS AT THE CORDON" Style="{StaticResource PanelHeader}" />
+                                <ItemsControl ItemsSource="{Binding Volunteers}" Margin="0,0,0,10">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:VolunteerRow}">
+                                            <DockPanel Margin="0,1">
+                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Visibility="{Binding Waiting, Converter={StaticResource BoolToVisibility}}">
+                                                    <Button Content="Register" Padding="6,0" FontSize="11" CommandParameter="{Binding IncidentId}"
+                                                            Command="{Binding DataContext.RegisterVolunteersCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            ToolTip="Sign them in and give them work away from the hazard (the family assistance centre)" />
+                                                    <Button Content="Turn away" Padding="6,0" FontSize="11" Margin="4,0,0,0" CommandParameter="{Binding IncidentId}"
+                                                            Command="{Binding DataContext.TurnAwayVolunteersCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                                                </StackPanel>
+                                                <TextBlock TextWrapping="Wrap">
+                                                    <Run Text="{Binding Incident, Mode=OneWay}" FontWeight="SemiBold" />
+                                                    <Run Text="{Binding Count, Mode=OneWay, StringFormat='· {0} people ·'}" />
+                                                    <Run Text="{Binding Status, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                </TextBlock>
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Families -->
+                                <TextBlock Text="FAMILIES &amp; MISSING PERSONS" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Text="{Binding CentreStatus}" TextWrapping="Wrap" Margin="0,0,0,2" />
+                                <DockPanel Margin="0,0,0,4" Visibility="{Binding CentreOpen, Converter={x:Static vm:Converters.FalseToVisible}}">
+                                    <Button DockPanel.Dock="Right" Content="Open centre" Command="{Binding OpenCentreCommand}" Padding="6,0" Margin="4,0,0,0"
+                                            ToolTip="A family assistance centre a kilometre upwind of the selected incident: enquiries are traced, families supported" />
+                                    <TextBox Text="{Binding CentreName, UpdateSourceTrigger=PropertyChanged}" />
+                                </DockPanel>
+                                <ItemsControl ItemsSource="{Binding Enquiries}" Margin="0,0,0,10">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:MissingPersonRow}">
+                                            <StackPanel Margin="0,1">
+                                                <TextBlock TextWrapping="Wrap">
+                                                    <Run Text="{Binding Missing, Mode=OneWay}" FontWeight="SemiBold" />
+                                                    <Run Text="{Binding LastKnown, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                </TextBlock>
+                                                <TextBlock x:Name="Status" FontSize="11" TextWrapping="Wrap">
+                                                    <Run Text="{Binding Caller, Mode=OneWay, StringFormat='{}{0} asked ·'}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <Run Text="{Binding Status, Mode=OneWay}" />
+                                                </TextBlock>
+                                            </StackPanel>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Alarm}" Value="True">
+                                                    <Setter TargetName="Status" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Decision log -->
+                                <TextBlock Text="DECISION LOG" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Style="{StaticResource EmptyHint}" FontSize="11" Margin="0,0,0,2"
+                                           Text="Write down significant decisions and why, as you make them: zones, approvals, denials. The review checks; an inquiry would too." />
+                                <TextBox Text="{Binding Decision, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,2" ToolTip="What was decided" />
+                                <TextBox Text="{Binding Rationale, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="36"
+                                         ToolTip="Why: what you knew, what you weighed, who you consulted" />
+                                <Button Content="📒 Log decision" Command="{Binding RecordDecisionCommand}" HorizontalAlignment="Left" Margin="0,4,0,4" Padding="8,2" />
+                                <ItemsControl ItemsSource="{Binding Log}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:LogRow}">
+                                            <StackPanel Margin="0,1">
+                                                <TextBlock TextWrapping="Wrap">
+                                                    <Run Text="{Binding Time, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <Run Text="{Binding Decision, Mode=OneWay}" FontWeight="SemiBold" />
+                                                </TextBlock>
+                                                <TextBlock Text="{Binding Rationale}" FontSize="11" TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding By}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
                 </TabControl>
             </Border>
         </Grid>

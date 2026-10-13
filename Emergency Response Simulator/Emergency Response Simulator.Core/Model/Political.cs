@@ -11,6 +11,17 @@ public enum PoliticalOffice
 
     /// <summary>The minister's office, for the government.</summary>
     MinistersOffice = 3,
+
+    // Phase 14: outside the TD → council → minister ladder; each rings about its own concerns.
+
+    /// <summary>
+    /// A community leader (residents' association, parish, local councillor) whose area is under an evacuation or
+    /// shelter order. Engaged, they get the message to people who don't listen to officials, and say who needs help.
+    /// </summary>
+    CommunityLeader = 10,
+
+    /// <summary>The head of another agency (the Garda Chief Superintendent, the HSE's emergency manager) asking about their own responsibilities.</summary>
+    AgencyHead = 11,
 }
 
 /// <summary>A politician's call to command, as the COP holds it.</summary>

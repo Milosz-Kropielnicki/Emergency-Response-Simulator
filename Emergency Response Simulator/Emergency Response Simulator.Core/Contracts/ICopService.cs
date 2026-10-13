@@ -99,6 +99,12 @@ public interface ICopService
     /// </summary>
     IReadOnlyList<PlumeProjection> PlumeProjections { get; }
 
+    /// <summary>
+    /// The pressures from outside the response (Phase 14): rumours, volunteers, vulnerable residents in protective zones,
+    /// missing-person enquiries, the family assistance centre, press conferences and the decision log. A copy.
+    /// </summary>
+    PublicSituation Public { get; }
+
     // Networked sessions (Phase 11)
 
     /// <summary>Everyone who has joined the session, present or not, in the order they joined.</summary>

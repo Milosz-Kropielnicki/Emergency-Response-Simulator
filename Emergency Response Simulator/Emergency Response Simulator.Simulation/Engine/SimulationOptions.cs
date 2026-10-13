@@ -71,4 +71,11 @@ public sealed class SimulationOptions
     /// or with the service not running, the in-engine Gaussian plume models them instead.
     /// </summary>
     public bool DispersionService { get; set; } = true;
+
+    /// <summary>
+    /// The public around the response (Phase 14): the vulnerable-persons register, looting, spontaneous volunteers,
+    /// relatives' enquiries and the family assistance centre, and rumours. Vulnerable people themselves are part of
+    /// the civilian population and are always modelled.
+    /// </summary>
+    public bool PublicPressures { get; set; } = true;
 }

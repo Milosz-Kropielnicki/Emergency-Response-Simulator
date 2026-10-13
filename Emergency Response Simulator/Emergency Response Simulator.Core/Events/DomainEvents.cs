@@ -160,6 +160,26 @@ namespace Emergency_Response_Simulator.Core.Events;
 // Plume & hazard models (Phase 13)
 [JsonDerivedType(typeof(PlumePredicted), nameof(PlumePredicted))]
 [JsonDerivedType(typeof(PlumeProjected), nameof(PlumeProjected))]
+// Public, media, political & legal (Phase 14)
+[JsonDerivedType(typeof(VulnerableResidentsReported), nameof(VulnerableResidentsReported))]
+[JsonDerivedType(typeof(AssistedEvacuationRequested), nameof(AssistedEvacuationRequested))]
+[JsonDerivedType(typeof(AssistedEvacuationProgress), nameof(AssistedEvacuationProgress))]
+[JsonDerivedType(typeof(VulnerableStranded), nameof(VulnerableStranded))]
+[JsonDerivedType(typeof(PetOwnersReturned), nameof(PetOwnersReturned))]
+[JsonDerivedType(typeof(LootingOccurred), nameof(LootingOccurred))]
+[JsonDerivedType(typeof(VolunteersArrived), nameof(VolunteersArrived))]
+[JsonDerivedType(typeof(VolunteersManaged), nameof(VolunteersManaged))]
+[JsonDerivedType(typeof(VolunteersSelfDeployed), nameof(VolunteersSelfDeployed))]
+[JsonDerivedType(typeof(MissingPersonReported), nameof(MissingPersonReported))]
+[JsonDerivedType(typeof(FamilyAssistanceCentreOpened), nameof(FamilyAssistanceCentreOpened))]
+[JsonDerivedType(typeof(MissingPersonTraced), nameof(MissingPersonTraced))]
+[JsonDerivedType(typeof(RumourSpreading), nameof(RumourSpreading))]
+[JsonDerivedType(typeof(RumourTruth), nameof(RumourTruth))]
+[JsonDerivedType(typeof(RumourRebutted), nameof(RumourRebutted))]
+[JsonDerivedType(typeof(DenialExposed), nameof(DenialExposed))]
+[JsonDerivedType(typeof(PressConferenceHeld), nameof(PressConferenceHeld))]
+[JsonDerivedType(typeof(DecisionLogged), nameof(DecisionLogged))]
+[JsonDerivedType(typeof(LegalExposure), nameof(LegalExposure))]
 [JsonDerivedType(typeof(HazardEnded), nameof(HazardEnded))]
 [JsonDerivedType(typeof(HazardSitePlaced), nameof(HazardSitePlaced))]
 [JsonDerivedType(typeof(CasualtyInjured), nameof(CasualtyInjured))]
@@ -793,7 +813,8 @@ public sealed record HazardSitePlaced(
     double ServiceRadiusMeters = 0) : DomainEvent;
 
 /// <summary>Someone is really hurt. Command knows only what callers, crews and hospitals tell it.</summary>
-public sealed record CasualtyInjured(Guid CasualtyId, Guid? WorldIncidentId, GeoPoint Location, Triage Triage, string Cause) : DomainEvent;
+/// <param name="Who">Who they were, when it matters to the review (Phase 14): "an elderly resident", "a rough-sleeper", "a volunteer".</param>
+public sealed record CasualtyInjured(Guid CasualtyId, Guid? WorldIncidentId, GeoPoint Location, Triage Triage, string Cause, string? Who = null) : DomainEvent;
 
 public sealed record CasualtyChanged(Guid CasualtyId, Triage Triage, CasualtyState State, Guid? HospitalId = null) : DomainEvent;
 
@@ -856,8 +877,9 @@ public sealed record TimeScaleChanged(double TimeScale) : DomainEvent;
 /// minister's office. <paramref name="Pressure"/> 1–3 rises each time a call goes unanswered.
 /// </summary>
 /// <param name="To">Who they asked for: the Incident Commander, or the PIO once there is one.</param>
-public sealed record PoliticalCallReceived(Guid CallId, Guid? IncidentId, PoliticalOffice Office, string Caller, string Message, int Pressure, string To)
-    : DomainEvent;
+/// <param name="ZoneId">The protective zone a community leader rings about (Phase 14); engaging them helps there.</param>
+public sealed record PoliticalCallReceived(Guid CallId, Guid? IncidentId, PoliticalOffice Office, string Caller, string Message, int Pressure, string To,
+    Guid? ZoneId = null) : DomainEvent;
 
 /// <summary>Command called a politician back (C2).</summary>
 public sealed record PoliticalCallAnswered(Guid CallId, string Answer) : DomainEvent;
@@ -979,3 +1001,76 @@ public sealed record PlumeProjected(
 /// <param name="Kind">What they are, for the message: "School", "Hospital", "Home"…</param>
 /// <param name="Names">Up to a handful of names, for the alert and the panel; empty when they have none.</param>
 public sealed record PlumeImpact(string Level, string LayerKey, string Kind, int Count, IReadOnlyList<string> Names);
+
+// ---- Public, media, political & legal (Phase 14) ----
+
+/// <summary>
+/// What a register or a local source says about the vulnerable people in a protective zone: the council's
+/// vulnerable-persons register (elderly and disabled people who asked to be on it), or a community leader who knows
+/// the area (rough-sleepers, pet owners). Nobody's register is complete.
+/// </summary>
+public sealed record VulnerableResidentsReported(Guid ZoneId, string Source, int Elderly, int MobilityImpaired, int PetOwners, int Homeless)
+    : DomainEvent;
+
+/// <summary>Command asked for the people who can't get out of a zone on their own to be got out: ambulance transport, care staff, a bus, outreach.</summary>
+public sealed record AssistedEvacuationRequested(Guid ZoneId) : DomainEvent;
+
+/// <summary>How the assisted evacuation of a zone is going, as the teams doing it report.</summary>
+public sealed record AssistedEvacuationProgress(Guid ZoneId, int Helped, int Remaining) : DomainEvent;
+
+/// <summary>Ground truth: people who can't leave on their own are still in an evacuation zone long after the order.</summary>
+public sealed record VulnerableStranded(Guid ZoneId, int Count, string Who) : DomainEvent;
+
+/// <summary>Ground truth: evacuated pet owners went back past the cordon for their animals.</summary>
+public sealed record PetOwnersReturned(Guid ZoneId, int Count) : DomainEvent;
+
+/// <summary>Ground truth: empty homes in an evacuation zone are being broken into.</summary>
+/// <param name="Policed">A garda unit was there or a police cordon covered it: it was stopped quickly.</param>
+public sealed record LootingOccurred(Guid ZoneId, GeoPoint Location, bool Policed) : DomainEvent;
+
+/// <summary>Members of the public have turned up at the cordon wanting to help.</summary>
+public sealed record VolunteersArrived(Guid IncidentId, int Count, GeoPoint Location) : DomainEvent;
+
+/// <summary>Command registered the volunteers at an incident, or turned them away.</summary>
+public sealed record VolunteersManaged(Guid IncidentId, VolunteerDecision Decision) : DomainEvent;
+
+/// <summary>Volunteers nobody took charge of went past the cordon on their own.</summary>
+public sealed record VolunteersSelfDeployed(Guid IncidentId, int Count) : DomainEvent;
+
+/// <summary>A relative rings the public enquiry line about someone they can't reach.</summary>
+public sealed record MissingPersonReported(Guid EnquiryId, Guid? IncidentId, string Caller, string Missing, string LastKnown) : DomainEvent;
+
+/// <summary>Command opened a family assistance centre: news for relatives, registration for evacuees, support for families.</summary>
+public sealed record FamilyAssistanceCentreOpened(Guid CentreId, Guid? IncidentId, string Name, GeoPoint Location) : DomainEvent;
+
+/// <summary>The centre traced someone a relative asked about, and whether the family was supported (Phase 14: victim assistance).</summary>
+public sealed record MissingPersonTraced(Guid EnquiryId, TraceOutcome Outcome, string Detail, bool Supported) : DomainEvent;
+
+/// <summary>Social-media monitoring picked up a rumour, or saw it spread further.</summary>
+public sealed record RumourSpreading(Guid RumourId, Guid? IncidentId, string Claim, string Topic, int ReachThousands) : DomainEvent;
+
+/// <summary>Ground truth: whether a rumour is true. Command never sees this; denying a true one backfires.</summary>
+public sealed record RumourTruth(Guid RumourId, bool IsTrue) : DomainEvent;
+
+/// <summary>Command put out a rebuttal of a rumour.</summary>
+public sealed record RumourRebutted(Guid RumourId, string Text) : DomainEvent;
+
+/// <summary>It came out that the authorities denied something that was true: misinformation, from command.</summary>
+public sealed record DenialExposed(Guid RumourId, string What) : DomainEvent;
+
+/// <summary>
+/// A press conference: the spokespeople in front of the cameras, a statement, questions. It answers every journalist
+/// waiting, deals with the rumours it addresses, and carries more weight than a written statement.
+/// </summary>
+public sealed record PressConferenceHeld(Guid ConferenceId, Guid? IncidentId, string Statement, IReadOnlyList<string> Spokespeople) : DomainEvent;
+
+/// <summary>An entry in command's decision log: what was decided, and why, at the time (Phase 14: legal).</summary>
+/// <param name="AboutSequence">The recorded command it explains, when tied to one.</param>
+public sealed record DecisionLogged(Guid EntryId, string Decision, string Rationale, long? AboutSequence = null) : DomainEvent;
+
+/// <summary>
+/// Ground truth: something command did (or didn't) that would be hard to defend afterwards (Phase 14: legal and
+/// liability), e.g. ordering an evacuation without the authority that the Major Emergency framework gives the Garda.
+/// </summary>
+/// <param name="SubjectId">What it is about: the call that raised it, so the review can see whether it was answered.</param>
+public sealed record LegalExposure(string Kind, string Detail, Guid? SubjectId = null) : DomainEvent;

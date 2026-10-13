@@ -114,7 +114,7 @@ public static class EventDescriber
             HazardRateChanged e => Entry("TRUTH", $"Hazard rate now {e.Rate:0.##}: {e.Reason}"),
             HazardEnded e => Entry("TRUTH", $"Hazard ended: {e.Reason}"),
             HazardSitePlaced e => Entry("TRUTH", $"{Humanize(e.Kind)} at risk if a hazard reaches it: {e.Name}"),
-            CasualtyInjured e => Entry("TRUTH", $"Casualty ({TriageLabel(e.Triage)}): {e.Cause}"),
+            CasualtyInjured e => Entry("TRUTH", $"Casualty ({TriageLabel(e.Triage)}{(e.Who is { } who ? $", {who}" : "")}): {e.Cause}"),
             CasualtyChanged e => Entry("TRUTH", $"Casualty now {TriageLabel(e.Triage)}, {Humanize(e.State).ToLowerInvariant()}"),
             HospitalCapacityChanged e => Entry("TRUTH", $"Hospital capacity now {e.Capacity}: {e.Reason}"),
             PowerOutageStarted e => Entry("TRUTH", $"Power out within {e.RadiusMeters:F0} m: {e.Cause}"),
@@ -238,6 +238,31 @@ public static class EventDescriber
                 $"{e.Substance} at {e.ReleaseRateKgPerSecond:0.##} kg/s, wind from {e.WindFromDegrees:F0}° at {e.WindSpeedMps:0.#} m/s" +
                 (e.Zones.Count > 0 ? $" — reaches {e.Zones.Max(z => z.MaxDistanceMeters):F0} m" : " — no zones above the thresholds") +
                 (e.Impacts.Count > 0 ? $"; {Impacts(e.Impacts)} inside" : ""), e.IncidentId, important: e.Impacts.Any(i => i.Level != PlumeLevels.Low)),
+            // Public, media, political & legal (Phase 14)
+            VulnerableResidentsReported e => Entry("PUBLIC", $"{e.Source}: {e.Elderly} elderly, {e.MobilityImpaired} unable to leave unaided" +
+                (e.PetOwners > 0 ? $", {e.PetOwners} with pets" : "") + (e.Homeless > 0 ? $", {e.Homeless} sleeping rough" : "") + " in the zone",
+                important: e.MobilityImpaired + e.Homeless > 0),
+            AssistedEvacuationRequested => Entry("PUBLIC", "Assisted evacuation requested: transport, care staff and outreach for those who can't leave alone"),
+            AssistedEvacuationProgress e => Entry("PUBLIC", $"Assisted evacuation: {e.Helped} helped out, {e.Remaining} still to reach"),
+            VulnerableStranded e => Entry("TRUTH", $"{e.Count} vulnerable people still in an evacuation zone ({e.Who})", important: true),
+            PetOwnersReturned e => Entry("TRUTH", $"{e.Count} pet owner(s) went back into the evacuation zone for their animals"),
+            LootingOccurred e => Entry("TRUTH", e.Policed ? "Looting attempt in the evacuation zone stopped by gardaí" : "Looting in the evacuation zone, no gardaí present",
+                important: !e.Policed),
+            VolunteersArrived e => Entry("PUBLIC", $"{e.Count} volunteers arrived at the cordon", e.IncidentId),
+            VolunteersManaged e => Entry("PUBLIC", e.Decision == VolunteerDecision.Register ? "Volunteers registered and tasked away from the hazard" : "Volunteers turned away",
+                e.IncidentId),
+            VolunteersSelfDeployed e => Entry("PUBLIC", $"{e.Count} volunteers went past the cordon on their own", e.IncidentId, important: true),
+            MissingPersonReported e => Entry("PUBLIC", $"Enquiry: {e.Caller} can't reach {e.Missing}, last known {e.LastKnown}", e.IncidentId),
+            FamilyAssistanceCentreOpened e => Entry("PUBLIC", $"Family assistance centre opened: {e.Name}", e.IncidentId, important: true),
+            MissingPersonTraced e => Entry("PUBLIC", $"Traced: {EventDescriberPublic.Outcome(e.Outcome)} — {e.Detail}" + (e.Supported ? "; family liaison officer assigned" : ""),
+                important: e.Outcome is TraceOutcome.Deceased or TraceOutcome.StillInArea),
+            RumourSpreading e => Entry("MEDIA", $"Rumour ({e.Topic}, ~{e.ReachThousands}k seen): \"{e.Claim}\"", e.IncidentId),
+            RumourTruth e => Entry("TRUTH", $"That rumour is {(e.IsTrue ? "true" : "false")}"),
+            RumourRebutted e => Entry("MEDIA", $"Rumour rebutted: \"{e.Text}\""),
+            DenialExposed e => Entry("MEDIA", e.What, important: true),
+            PressConferenceHeld e => Entry("MEDIA", $"Press conference ({string.Join(", ", e.Spokespeople)}): \"{e.Statement}\"", e.IncidentId, important: true),
+            DecisionLogged e => Entry("LOG", $"Decision: {e.Decision} — because {e.Rationale}"),
+            LegalExposure e => Entry("TRUTH", $"Legal exposure ({e.Kind}): {e.Detail}", important: true),
             // Multiplayer completion (Phase 12)
             ExerciseControlMessage e => Entry("EXERCISE", $"Exercise control{(e.ToParticipantId is { } to ? $" to {Participant(to)}" : "")}: {e.Text}"),
             PublicConfidenceChanged e => Entry("TRUTH", $"Public confidence {e.Confidence} ({(e.Change >= 0 ? "+" : "")}{e.Change}): {e.Reason}", important: Math.Abs(e.Change) >= 8),
@@ -287,4 +312,16 @@ public static class EventDescriber
         var name = value.ToString();
         return string.Concat(name.Select((c, i) => i > 0 && char.IsUpper(c) ? " " + char.ToLowerInvariant(c) : c.ToString()));
     }
+}
+
+/// <summary>Words for the public side of the response (Phase 14).</summary>
+public static class EventDescriberPublic
+{
+    public static string Outcome(TraceOutcome outcome) => outcome switch
+    {
+        TraceOutcome.Safe => "safe",
+        TraceOutcome.InHospital => "injured",
+        TraceOutcome.Deceased => "died",
+        _ => "still in the zone",
+    };
 }

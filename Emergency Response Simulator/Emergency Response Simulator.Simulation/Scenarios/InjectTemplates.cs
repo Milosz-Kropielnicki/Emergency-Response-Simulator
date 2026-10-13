@@ -151,11 +151,26 @@ public static class InjectTemplates
                 : [],
             v => Number(v, "rate", 2) <= 0 ? $"Release stops: {v["reason"]}" : $"Release rate now {Number(v, "rate", 2):0.###} kg/s: {v["reason"]}"),
 
-        new(new("rumour", "Social media rumour", "A post spreading something wrong (or right) about the incident.",
-            [new("text", "Post", InjectParameterKind.Text, "Hearing there's a second explosion and gas spreading towards the schools!!")]),
-            (context, v) => [Perceived(new ReportReceived(Guid.NewGuid(), null, ReportSource.Media, "Social media post", v["text"], Confidence.Low,
-                VerificationStatus.Suspected, GeoMath.Destination(Near(context), 45, 500), 800))],
-            v => $"Social media rumour: {v["text"]}"),
+        // Phase 14: a rumour that spreads until answered. Whether it is true is the instructor's to decide, and denying a
+        // true one backfires on command.
+        new(new("rumour", "Social media rumour", "A post spreading something wrong (or right) about the incident; it spreads until command answers it.",
+            [
+                new("text", "Post", InjectParameterKind.Text, "Hearing there's a second explosion and gas spreading towards the schools!!"),
+                new("topic", "About (one word)", InjectParameterKind.Text, "explosion"),
+                new("true", "Is it true?", InjectParameterKind.Choice, "No", ["No", "Yes"]),
+            ]),
+            (context, v) =>
+            {
+                var incident = context.World.Interagency.Incidents.Where(i => !i.Value.Closed).OrderByDescending(i => i.Value.Priority)
+                    .Select(i => (Guid?)i.Key).FirstOrDefault();
+                var id = Guid.NewGuid();
+                return
+                [
+                    Perceived(new RumourSpreading(id, incident, v["text"], v["topic"].ToLowerInvariant(), 5)),
+                    Truth(new RumourTruth(id, v["true"] == "Yes")),
+                ];
+            },
+            v => $"Social media rumour ({(v["true"] == "Yes" ? "true" : "false")}): {v["text"]}"),
     ];
 
     public static IReadOnlyList<InjectTemplate> All => [.. Library.Select(t => t.Info)];

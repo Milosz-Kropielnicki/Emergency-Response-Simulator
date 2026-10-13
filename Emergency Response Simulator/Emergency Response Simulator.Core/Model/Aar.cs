@@ -86,6 +86,20 @@ public sealed record AarNote(DateTimeOffset At, Guid ParticipantId, string Parti
 /// </summary>
 public sealed record AarCompetency(Guid ParticipantId, string Participant, Competency Area, int Ratings, int Score, AssessmentRating Level);
 
+/// <summary>
+/// Something that would be hard to defend at an inquiry (Phase 14): an evacuation ordered without the authority to
+/// order it, vulnerable people left behind, looting in an unguarded zone, a denial that was untrue…
+/// </summary>
+/// <param name="Mitigated">Command put it right in time (e.g. consulted the Garda as soon as they rang).</param>
+public sealed record AarLiability(DateTimeOffset At, string Kind, string Text, bool Mitigated = false);
+
+/// <summary>The decision log against the decisions that needed one (Phase 14).</summary>
+/// <param name="Undocumented">The significant decisions with no log entry, described.</param>
+public sealed record AarDocumentation(int Significant, int Documented, IReadOnlyList<string> Undocumented)
+{
+    public int Percent => Significant == 0 ? 100 : (int)Math.Round(100.0 * Documented / Significant);
+}
+
 /// <summary>A unit's status over the session, for the commitment chart.</summary>
 public sealed record AarStatusSpan(DateTimeOffset From, DateTimeOffset To, UnitStatus Status);
 
@@ -185,6 +199,12 @@ public sealed class AarReport
 
     /// <summary>Observers' ratings by participant and competency area (Phase 12).</summary>
     public IReadOnlyList<AarCompetency> Competencies { get; init; } = [];
+
+    /// <summary>What would be hard to defend afterwards (Phase 14: legal and liability), in time order.</summary>
+    public IReadOnlyList<AarLiability> Liabilities { get; init; } = [];
+
+    /// <summary>How well the significant decisions were documented in the decision log (Phase 14).</summary>
+    public AarDocumentation Documentation { get; init; } = new(0, 0, []);
 
     /// <summary>The decisions one participant made (everyone's with null).</summary>
     public IEnumerable<AarDecision> DecisionsOf(Guid? participantId) =>

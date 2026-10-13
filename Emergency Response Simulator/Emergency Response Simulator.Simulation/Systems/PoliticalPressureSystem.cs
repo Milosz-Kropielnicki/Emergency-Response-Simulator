@@ -82,11 +82,129 @@ public sealed class PoliticalPressureSystem : ISimulationSystem
             }
             if (context.SimTime < pressure.NextCallAt || context.SimTime < pressure.QuietUntil) continue;
             // One call at a time: while one is waiting, its fate decides what happens next.
-            if (world.PoliticalCalls.Values.Any(c => c.Call.IncidentId == incidentId && c.AnsweredAt is null && !c.Escalated)) continue;
+            if (world.PoliticalCalls.Values.Any(c => c.Call.IncidentId == incidentId && OnLadder(c.Call.Office) && c.AnsweredAt is null && !c.Escalated)) continue;
 
             Ring(context, incidentId, facts, (PoliticalOffice)pressure.Level, chasing: null);
             pressure.NextCallAt = context.SimTime + Interval(world, incidentId, facts);
         }
+
+        CommunityLeaders(context);
+        AgencyHeads(context);
+    }
+
+    /// <summary>The TD → council → minister ladder (Phase 11 M5); community leaders and agency heads stand outside it (Phase 14).</summary>
+    public static bool OnLadder(PoliticalOffice office) => office <= PoliticalOffice.MinistersOffice;
+
+    // ---- Phase 14: community leaders and agency heads ----
+
+    /// <summary>A community leader rings this long after their area is put under an evacuation or shelter order.</summary>
+    public static readonly TimeSpan CommunityCallAfter = TimeSpan.FromMinutes(6);
+
+    /// <summary>An evacuation ordered without the Garda: the Chief Superintendent rings this long after.</summary>
+    public static readonly TimeSpan GardaConsultationWindow = TimeSpan.FromMinutes(5);
+
+    public const string GardaChief = "Chief Superintendent, Garda Dublin Metropolitan Region";
+    public const string HseLead = "Emergency management lead, HSE Dublin & North East";
+
+    private static readonly string[] CommunityLeadersNames =
+    [
+        "Chair, Ringsend & Irishtown Residents' Association",
+        "Fr Brendan Lacey, St Andrew's parish",
+        "Cllr Aoife Doyle, local councillor",
+        "Manager, Pearse Street community centre",
+    ];
+
+    private readonly HashSet<Guid> _communityCalled = [];
+    private readonly HashSet<Guid> _gardaCalled = [];
+    private readonly HashSet<Guid> _hseCalled = [];
+
+    /// <summary>
+    /// A community leader whose area is under an order rings: who is old, who won't leave the dog, who sleeps rough.
+    /// Called back, they are engaged (Phase 14): people listen to them who don't listen to officials, and they say who
+    /// needs help. Ignored, they say so to the media.
+    /// </summary>
+    private void CommunityLeaders(SimulationContext context)
+    {
+        var world = context.World;
+        foreach (var zone in world.ProtectiveActions.Values)
+        {
+            if (context.SimTime - zone.DeclaredAt < CommunityCallAfter || !_communityCalled.Add(zone.ZoneId)) continue;
+            var centre = GeoPoint.FromPoint(zone.Area.Centroid);
+            var incident = world.Interagency.Incidents.Where(i => !i.Value.Closed)
+                .OrderBy(i => GeoMath.DistanceMeters(i.Value.Location, centre)).Select(i => (Guid?)i.Key).FirstOrDefault();
+            var caller = CommunityLeadersNames[(_communityCalled.Count - 1) % CommunityLeadersNames.Length];
+            var order = zone.Type == ZoneType.EvacuationZone ? "evacuation" : "shelter-in-place order";
+            var message = $"People here are frightened about the {order}. We have elderly residents who won't open the door to a stranger, " +
+                          "people asking what to do with their dogs, and a few who sleep rough by the canal. Tell me what you need and I'll help.";
+            var to = To(world, incident);
+            CommsNet.Chat(context, caller, $"{caller} for the {to}: {message}",
+                new PoliticalCallReceived(Guid.NewGuid(), incident, PoliticalOffice.CommunityLeader, caller, message, 1, to, zone.ZoneId));
+        }
+    }
+
+    /// <summary>
+    /// Heads of other agencies ring about their own responsibilities (Phase 14):
+    /// <list type="bullet">
+    /// <item>The Garda, when command orders an evacuation without them: under the Framework for Major Emergency
+    /// Management the decision to evacuate is the Garda's, with the other principal response agencies. Command
+    /// consulted them if the Garda is in unified command, or was notified, by the time the zone had been in force a few
+    /// minutes. Otherwise it is a legal exposure, which answering the call (consulting them now) mitigates.</item>
+    /// <item>The HSE's emergency manager, once an incident has many casualties, for numbers and destinations.</item>
+    /// </list>
+    /// </summary>
+    private void AgencyHeads(SimulationContext context)
+    {
+        var world = context.World;
+        foreach (var zone in world.ProtectiveActions.Values.Where(a => a.Type == ZoneType.EvacuationZone))
+        {
+            if (context.SimTime - zone.DeclaredAt < GardaConsultationWindow || !_gardaCalled.Add(zone.ZoneId)) continue;
+            var centre = GeoPoint.FromPoint(zone.Area.Centroid);
+            var incident = world.Interagency.Incidents.Where(i => !i.Value.Closed)
+                .OrderBy(i => GeoMath.DistanceMeters(i.Value.Location, centre)).Select(i => (Guid?)i.Key).FirstOrDefault();
+            if (GardaConsulted(world, incident, zone.DeclaredAt + GardaConsultationWindow)) continue;
+
+            var message = "I'm told an evacuation has been ordered without us. Under the Framework for Major Emergency Management the decision to " +
+                          "evacuate rests with An Garda Síochána, with the other principal response agencies. Who authorised this, and on what basis?";
+            var call = new PoliticalCallReceived(Guid.NewGuid(), incident, PoliticalOffice.AgencyHead, GardaChief, message, 1, "Incident Commander", zone.ZoneId);
+            CommsNet.Chat(context, GardaChief, $"{GardaChief} for the Incident Commander: {message}", call);
+            context.EmitTruth(new LegalExposure("Evacuation authority",
+                "An evacuation was ordered without consulting An Garda Síochána, whose decision it is under the Major Emergency framework.", call.CallId));
+        }
+
+        foreach (var (incidentId, facts) in world.Interagency.Incidents)
+        {
+            if (facts.Closed || facts.Casualties < 8 || !_hseCalled.Add(incidentId)) continue;
+            var message = $"We need casualty numbers from {facts.Place}, by priority, and where they're being taken, so the hospitals can open their major emergency plans.";
+            CommsNet.Chat(context, HseLead, $"{HseLead} for the Incident Commander: {message}",
+                new PoliticalCallReceived(Guid.NewGuid(), incidentId, PoliticalOffice.AgencyHead, HseLead, message, 1, "Incident Commander"));
+        }
+    }
+
+    /// <summary>The Garda had a say: they are in unified command at the incident, or command notified them.</summary>
+    public static bool GardaConsulted(WorldState world, Guid? incidentId, DateTimeOffset by)
+    {
+        if (world.Notified.Any(n => n.Value <= by && (n.Key.Contains("garda", StringComparison.OrdinalIgnoreCase)
+                                                       || n.Key.Contains("police", StringComparison.OrdinalIgnoreCase))))
+            return true;
+        return incidentId is { } id && world.Commands.TryGetValue(id, out var command)
+               && command.Unified.Any(m => m.AgencyId is { } agency && world.Agencies.TryGetValue(agency, out var owner) && owner.Type == AgencyType.Police);
+    }
+
+    /// <summary>A community leader or agency head nobody called back.</summary>
+    private static void Unheard(SimulationContext context, PoliticalCallState call)
+    {
+        var world = context.World;
+        var incidentId = call.Call.IncidentId;
+        var facts = incidentId is { } id ? world.Interagency.Incidents.GetValueOrDefault(id) : null;
+        if (call.Call.Office == PoliticalOffice.CommunityLeader)
+        {
+            context.EmitTruth(new PoliticalFallout(call.Call.CallId, incidentId, 1, $"{call.Call.Caller} went to the media: nobody from the authorities had spoken to them"));
+            context.EmitPerceived(new ReportReceived(Guid.NewGuid(), incidentId, ReportSource.Media, "Dublin Live",
+                $"{call.Call.Caller}: \"Nobody from the authorities has spoken to us. Elderly people here don't know what to do.\"",
+                Confidence.High, VerificationStatus.Confirmed, facts?.Location, facts is null ? null : 500), EventSources.Comms);
+        }
+        else
+            context.EmitTruth(new PoliticalFallout(call.Call.CallId, incidentId, 1, $"{call.Call.Caller}'s call went unreturned"));
     }
 
     private Pressure For(Guid incidentId) => _incidents.TryGetValue(incidentId, out var pressure) ? pressure : _incidents[incidentId] = new Pressure();
@@ -97,6 +215,15 @@ public sealed class PoliticalPressureSystem : ISimulationSystem
         var world = context.World;
         foreach (var call in world.PoliticalCalls.Values.Where(c => c.AnsweredAt is not null && _eased.Add(c.Call.CallId)))
         {
+            // Phase 14: a community leader engaged gets to work; an agency head has what they needed.
+            if (!OnLadder(call.Call.Office))
+            {
+                if (!byInstructor)
+                    CommsNet.Chat(context, call.Call.Caller, call.Call.Office == PoliticalOffice.CommunityLeader
+                        ? $"{call.Call.Caller}: Thank you. We'll go door to door with your people, and I'll tell you who needs help getting out."
+                        : $"{call.Call.Caller}: Understood. Keep me informed.", null);
+                continue;
+            }
             if (call.Call.IncidentId is not { } incidentId || !world.Interagency.Incidents.TryGetValue(incidentId, out var facts)) continue;
             var pressure = For(incidentId);
             pressure.Level = Math.Max(1, call.Call.Pressure - 1);
@@ -114,6 +241,11 @@ public sealed class PoliticalPressureSystem : ISimulationSystem
         {
             call.Escalated = true;
             if (byInstructor) continue; // the instructor decides what silence costs
+            if (!OnLadder(call.Call.Office))
+            {
+                Unheard(context, call);
+                continue;
+            }
             var incidentId = call.Call.IncidentId;
             var facts = incidentId is { } id ? world.Interagency.Incidents.GetValueOrDefault(id) : null;
             var pressure = incidentId is { } key ? For(key) : new Pressure();

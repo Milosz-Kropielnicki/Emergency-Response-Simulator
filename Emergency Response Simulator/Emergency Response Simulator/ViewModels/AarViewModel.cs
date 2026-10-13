@@ -35,6 +35,9 @@ public sealed record AarParticipantRow(string Name, string Roles, string Time, i
 /// <summary>An observer's note in the review (Phase 11 M6).</summary>
 public sealed record AarNoteRow(string Time, string Participant, string Rating, string Note, string About, string By, string Area = "");
 
+/// <summary>Something that would be hard to defend at an inquiry (Phase 14).</summary>
+public sealed record AarLiabilityRow(string Time, string Kind, string Text, string Mitigated);
+
 /// <summary>One participant's observer ratings in one competency area (Phase 12).</summary>
 public sealed record AarCompetencyRow(string Participant, string Area, int Ratings, string Score, string Level);
 
@@ -125,6 +128,11 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
     [ObservableProperty] private bool _hasNotes;
 
     public ObservableCollection<AarCompetencyRow> Competencies { get; } = [];
+
+    public ObservableCollection<AarLiabilityRow> Liabilities { get; } = [];
+
+    [ObservableProperty] private bool _hasLegal;
+    [ObservableProperty] private string _documentationSummary = "";
 
     [ObservableProperty] private bool _hasCompetencies;
     [ObservableProperty] private string _instructorNote = "";
@@ -345,6 +353,12 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
         HasNotes = report.Notes.Count > 0;
         Replace(Notes, report.Notes.Select(n => new AarNoteRow(Clock(n.At), n.Participant, n.Rating is { } rating ? Rubric.Name(rating) : "—", n.Note,
             n.About ?? "", n.By ?? "", n.Area is { } area ? Rubric.Name(area) : "—")));
+        HasLegal = report.Liabilities.Count > 0 || report.Documentation.Significant > 0;
+        var log = report.Documentation;
+        DocumentationSummary = log.Significant == 0 ? "No significant decisions needed logging."
+            : $"Decision log: {log.Documented} of {log.Significant} significant decisions documented with their reasons ({log.Percent}%)." +
+              (log.Undocumented.Count > 0 ? $" Not logged: {string.Join("; ", log.Undocumented)}." : "");
+        Replace(Liabilities, report.Liabilities.Select(l => new AarLiabilityRow(Clock(l.At), l.Kind, l.Text, l.Mitigated ? "mitigated" : "")));
         HasCompetencies = report.Competencies.Count > 0;
         Replace(Competencies, report.Competencies.Select(c => new AarCompetencyRow(c.Participant, Rubric.Name(c.Area), c.Ratings, $"{c.Score} / 100",
             Rubric.Name(c.Level))));

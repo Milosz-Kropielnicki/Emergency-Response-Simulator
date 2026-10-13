@@ -86,6 +86,14 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<LiveTraffic>(), sp.GetRequiredService<TrafficFeed>()));
             services.AddSingleton<ISimulationSystem>(sp => new HazardReportingSystem(sp.GetRequiredService<IRoutingService>()));
 
+            // Phase 14: the public around the response, families looking for their own, and rumour.
+            if (configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.PublicPressures)}", true))
+            {
+                services.AddSingleton<ISimulationSystem>(_ => new PublicOrderSystem());
+                services.AddSingleton<ISimulationSystem>(sp => new ReunificationSystem(sp.GetRequiredService<IRoutingService>()));
+                services.AddSingleton<ISimulationSystem>(_ => new RumourSystem());
+            }
+
             // Phase 13: the Python dispersion model drives real releases, and keeps command's projections current.
             // Without the service (or with this off) the in-engine Gaussian plume carries the session.
             if (configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.DispersionService)}", true))

@@ -53,6 +53,37 @@ public sealed class CivilianOptions
 
     /// <summary>Compliance is multiplied by this while another agency's statement contradicts the official line.</summary>
     public double ConflictingMessageFactor { get; set; } = 0.7;
+
+    // ---- Phase 14: vulnerable people ----
+
+    public double ElderlyShare { get; set; } = 0.14;
+
+    /// <summary>People who can't leave without help: wheelchair users, the bed-bound, people on oxygen.</summary>
+    public double MobilityImpairedShare { get; set; } = 0.04;
+
+    public double HomelessShare { get; set; } = 0.015;
+    public double PetOwnerShare { get; set; } = 0.25;
+
+    /// <summary>Compliance is multiplied by this for elderly people, many of whom won't leave home on an official's say-so.</summary>
+    public double ElderlyComplianceFactor { get; set; } = 0.7;
+
+    /// <summary>And by this for pet owners, unless somewhere takes animals (command has notified an animal welfare service).</summary>
+    public double PetOwnerComplianceFactor { get; set; } = 0.6;
+
+    /// <summary>Share of evacuated pet owners who go back in for the animal when nobody has arranged for pets.</summary>
+    public double PetReturnShare { get; set; } = 0.3;
+
+    /// <summary>Added to compliance where command has engaged the area's community leader.</summary>
+    public double CommunityEngagementBoost { get; set; } = 0.15;
+
+    /// <summary>Compliance is multiplied by this while a false rumour runs unanswered (Phase 14).</summary>
+    public double RumourConfusionFactor { get; set; } = 0.85;
+
+    /// <summary>How long an assisted evacuation takes to get teams and vehicles to a zone.</summary>
+    public TimeSpan AssistanceLeadTime { get; set; } = TimeSpan.FromMinutes(12);
+
+    /// <summary>People the assisted-evacuation teams get out per minute, per zone.</summary>
+    public double AssistedPerMinute { get; set; } = 2;
 }
 
 /// <summary>
@@ -109,16 +140,42 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
 
             var count = Math.Min(_options.PopulationPerIncident, _options.MaxPopulation - world.Civilians.Count);
             for (var i = 0; i < count; i++)
+            {
+                // Phase 14: who needs more than a warning. Rough-sleepers are outdoors and have no car.
+                var vulnerability = Vulnerability.None;
+                var roll = _random.NextDouble();
+                if (roll < _options.HomelessShare) vulnerability |= Vulnerability.Homeless;
+                else if (roll < _options.HomelessShare + _options.MobilityImpairedShare) vulnerability |= Vulnerability.MobilityImpaired | Vulnerability.Elderly;
+                else if (roll < _options.HomelessShare + _options.MobilityImpairedShare + _options.ElderlyShare) vulnerability |= Vulnerability.Elderly;
+                if (_random.NextDouble() < _options.PetOwnerShare) vulnerability |= Vulnerability.PetOwner;
+                var homeless = (vulnerability & Vulnerability.Homeless) != 0;
+
+                var home = homeless ? PlaceOutdoors(incident.Location) : PlacePerson(incident.Location);
                 world.Civilians.Add(new Civilian
                 {
                     Id = _nextId++,
-                    Location = PlacePerson(incident.Location),
-                    HasCar = _random.NextDouble() < _options.CarOwnership,
+                    Location = home,
+                    Home = home,
+                    Vulnerability = vulnerability,
+                    HasCar = !homeless && (vulnerability & Vulnerability.MobilityImpaired) == 0 && _random.NextDouble() < _options.CarOwnership,
                     Language = _random.NextDouble() < _options.LimitedEnglish
                         ? CallerLanguages.Other[_random.Next(CallerLanguages.Other.Count)]
                         : null,
                 });
+            }
         }
+    }
+
+    /// <summary>Somewhere outside: a doorway, a park, under a bridge (Phase 14: rough-sleepers).</summary>
+    private GeoPoint PlaceOutdoors(GeoPoint centre)
+    {
+        GeoPoint point = centre;
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            point = GeoMath.Destination(centre, _random!.NextDouble() * 360, Math.Sqrt(_random.NextDouble()) * _options.PopulationRadiusMeters);
+            if (!_terrain.IsBuilding(point)) break;
+        }
+        return point;
     }
 
     /// <summary>A random spot in the area, preferring buildings (most people are indoors).</summary>
@@ -179,15 +236,16 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
                 }
             }
             else if (person.State == CivilianState.Aware && order is { } zone && person.WarnedAt is { } at && context.SimTime >= at
-                     && person.IgnoredOrder != zone.ZoneId)
+                     && person.IgnoredOrder != zone.ZoneId && !person.WaitingForHelp)
             {
                 // Already aware, now told to leave or shelter by the authorities.
                 Decide(context, person, exposures, zone);
             }
 
-            // Real danger overrides whatever they had decided: run.
-            if (worst >= HazardLevel.Moderate && person.State is not (CivilianState.Evacuating or CivilianState.Sheltering)
-                || worst == HazardLevel.High && person.State == CivilianState.Sheltering && exposures.Any(e => e.Hazard.Kind == HazardKind.Fire))
+            // Real danger overrides whatever they had decided: run. Someone who can't walk can't run either (Phase 14).
+            if (!person.Is(Vulnerability.MobilityImpaired)
+                && (worst >= HazardLevel.Moderate && person.State is not (CivilianState.Evacuating or CivilianState.Sheltering)
+                    || worst == HazardLevel.High && person.State == CivilianState.Sheltering && exposures.Any(e => e.Hazard.Kind == HazardKind.Fire)))
             {
                 person.Panicking = true;
                 StartEvacuating(context, person, exposures, order, allowCar: false);
@@ -195,6 +253,11 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
 
             Move(world, person, seconds);
         }
+
+        // Phase 14: the people who need more than a warning.
+        AssistEvacuations(context, seconds);
+        ReturnForPets(context);
+        Stranded(context);
 
         // Cars that have arrived let their occupants out.
         foreach (var car in world.Vehicles.Values.Where(v => v.Arrived).ToList())
@@ -245,6 +308,15 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
                 compliance = Math.Min(0.97, compliance + _options.PublicWarningBoost);
             if (publicInfo.ConflictingSince is not null)
                 compliance *= _options.ConflictingMessageFactor;
+
+            // Phase 14: who they are, who told them, and what else they have heard.
+            var world = context.World;
+            if (person.Is(Vulnerability.Elderly)) compliance *= _options.ElderlyComplianceFactor;
+            var petsCatered = AnimalWelfareArranged(world);
+            if (person.Is(Vulnerability.PetOwner) && !petsCatered) compliance *= _options.PetOwnerComplianceFactor;
+            if (world.Public.EngagedZones.Contains(order.ZoneId)) compliance = Math.Min(0.97, compliance + _options.CommunityEngagementBoost);
+            if (world.Public.Confused) compliance *= _options.RumourConfusionFactor;
+
             if (random.NextDouble() >= compliance)
             {
                 person.IgnoredOrder = order.ZoneId; // "it's not that bad", stays put
@@ -256,6 +328,14 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
                 person.Target = null;
                 return;
             }
+            // Willing, but unable: they wait for someone to come and get them.
+            if (person.Is(Vulnerability.MobilityImpaired))
+            {
+                person.WaitingForHelp = true;
+                return;
+            }
+            if (person.Is(Vulnerability.PetOwner) && !petsCatered && random.NextDouble() < _options.PetReturnShare)
+                person.ReturnForPetAt = context.SimTime + TimeSpan.FromMinutes(15 + random.NextDouble() * 15);
             StartEvacuating(context, person, exposures, order, allowCar: true);
             return;
         }
@@ -326,7 +406,8 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
         if (person.Target is not { } target) return;
 
         var distance = GeoMath.DistanceMeters(person.Location, target);
-        if (person.State == CivilianState.Converging)
+        // Onlookers stop to watch; a pet owner going back in walks all the way home (Phase 14).
+        if (person.State == CivilianState.Converging && person.ReturnForPetAt != DateTimeOffset.MaxValue)
         {
             // Onlookers stop once they have a view: about 60 m from the fire, or 80 m from anything else.
             var stopAt = world.Hazards.Values.Where(h => !h.Ended && h.Model is FireSpreadModel)
@@ -336,6 +417,7 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
         }
 
         var speed = person.Panicking ? RunMps : person.State == CivilianState.Converging ? 1.2 : WalkMps;
+        if (person.Is(Vulnerability.Elderly)) speed = Math.Min(speed, 0.8); // Phase 14: slower on foot, and can't run
         var step = speed * seconds;
         if (step >= distance)
         {
@@ -380,6 +462,16 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
                 if (person.WarnedAt is { } due && (due <= context.SimTime || broadcast is null)) continue;
                 var point = person.Location.ToPoint();
                 if (!action.Area.Contains(point) || !world.Interagency.Enforced(action.ZoneId, point, context.SimTime)) continue;
+
+                // Phase 14: there's no door to knock for a rough-sleeper, and no radio. Only people who know where they
+                // sleep reach them: the assisted-evacuation outreach teams, or a community leader command has engaged.
+                if (person.Is(Vulnerability.Homeless))
+                {
+                    DateTimeOffset? reached = world.Public.AssistedEvacuations.TryGetValue(action.ZoneId, out var asked) ? asked + _options.AssistanceLeadTime
+                        : world.Public.EngagedZones.Contains(action.ZoneId) ? context.SimTime + TimeSpan.FromMinutes(5) : null;
+                    if (reached is { } outreach) person.WarnedAt = person.WarnedAt is { } earlier && earlier < outreach ? earlier : outreach;
+                    continue;
+                }
                 var start = action.DeclaredAt > context.SimTime - Step ? action.DeclaredAt : context.SimTime;
                 var warned = person.WarnedAt ?? start + TimeSpan.FromMinutes(2 + _random!.NextDouble() * 8);
                 if (broadcast is { } said && said >= action.DeclaredAt - TimeSpan.FromMinutes(15))
@@ -392,6 +484,135 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
             }
         }
     }
+
+    // ---- Phase 14: assisted evacuation, pets, and the people left behind ----
+
+    private readonly Dictionary<Guid, double> _assistBudget = [];
+    private readonly Dictionary<Guid, int> _helped = [];
+    private readonly Dictionary<Guid, DateTimeOffset> _progressReported = [];
+    private readonly Dictionary<Guid, DateTimeOffset> _strandedReported = [];
+    private readonly Dictionary<Guid, DateTimeOffset> _returnsReported = [];
+
+    /// <summary>Someone the assisted-evacuation teams go for: can't leave alone, wasn't reached, or wouldn't go for an official.</summary>
+    private static bool NeedsAssistance(Civilian person, Guid zoneId) =>
+        person.State is not (CivilianState.Injured or CivilianState.Safe or CivilianState.Evacuating) && person.VehicleId is null
+        && (person.WaitingForHelp
+            || person.Is(Vulnerability.MobilityImpaired)
+            || person.Is(Vulnerability.Homeless)
+            || person.Is(Vulnerability.Elderly) && person.IgnoredOrder == zoneId);
+
+    /// <summary>
+    /// Once command has asked for it and the teams have arrived, the people who can't get out of an evacuation zone on
+    /// their own are taken out by vehicle, a couple a minute. Their progress is reported back every few minutes.
+    /// </summary>
+    private void AssistEvacuations(SimulationContext context, double seconds)
+    {
+        var world = context.World;
+        foreach (var (zoneId, requestedAt) in world.Public.AssistedEvacuations)
+        {
+            if (!world.ProtectiveActions.TryGetValue(zoneId, out var zone) || zone.Type != ZoneType.EvacuationZone) continue;
+            if (context.SimTime < requestedAt + _options.AssistanceLeadTime) continue;
+
+            var budget = _assistBudget.GetValueOrDefault(zoneId) + _options.AssistedPerMinute * seconds / 60;
+            var inside = world.Civilians.Where(p => zone.Area.Contains(p.Location.ToPoint()) && NeedsAssistance(p, zoneId)).ToList();
+            var batch = inside.Take((int)budget).ToList();
+            _assistBudget[zoneId] = budget - batch.Count;
+            if (batch.Count > 0)
+            {
+                // A minibus or ambulance takes them out together.
+                var target = EscapePoint(world, batch[0].Location, [], zone);
+                var vehicle = new WorldVehicle { Id = Guid.NewGuid(), Location = batch[0].Location, Destination = target, Occupants = [.. batch.Select(p => p.Id)] };
+                world.Vehicles[vehicle.Id] = vehicle;
+                foreach (var person in batch)
+                {
+                    person.State = CivilianState.Evacuating;
+                    person.WaitingForHelp = false;
+                    person.Panicking = false;
+                    person.Target = target;
+                    person.VehicleId = vehicle.Id;
+                }
+                _helped[zoneId] = _helped.GetValueOrDefault(zoneId) + batch.Count;
+            }
+
+            if (_progressReported.GetValueOrDefault(zoneId) is var last && last != default && context.SimTime - last < TimeSpan.FromMinutes(5)) continue;
+            if (_helped.GetValueOrDefault(zoneId) == 0 && inside.Count == 0) continue;
+            _progressReported[zoneId] = context.SimTime;
+            context.EmitPerceived(new AssistedEvacuationProgress(zoneId, _helped.GetValueOrDefault(zoneId), inside.Count - batch.Count), EventSources.Comms);
+        }
+    }
+
+    /// <summary>
+    /// Evacuated pet owners who couldn't take the animal go back for it, if nobody has arranged somewhere for pets. A
+    /// garda cordon turns them back; otherwise they walk back into the zone, and the gardaí at the edge report it.
+    /// </summary>
+    private void ReturnForPets(SimulationContext context)
+    {
+        var world = context.World;
+        var returned = new Dictionary<Guid, int>();
+        foreach (var person in world.Civilians.Where(p => p.ReturnForPetAt is { } due && context.SimTime >= due))
+        {
+            person.ReturnForPetAt = DateTimeOffset.MaxValue; // once
+            if (person.State is CivilianState.Injured || person.VehicleId is not null) continue;
+            if (ZoneAt(world, person.Home, context.SimTime) is not { Type: ZoneType.EvacuationZone } zone) continue;
+
+            var home = person.Home.ToPoint();
+            var cordoned = world.PoliceCordons.Values.Any(c => c.Contains(home));
+            if (!cordoned)
+            {
+                person.State = CivilianState.Converging; // walking back in, towards home
+                person.Target = person.Home;
+                person.Panicking = false;
+            }
+            returned[zone.ZoneId] = returned.GetValueOrDefault(zone.ZoneId) + 1;
+            if (cordoned) continue;
+        }
+
+        foreach (var (zoneId, count) in returned)
+        {
+            context.EmitTruth(new PetOwnersReturned(zoneId, count));
+            if (_returnsReported.GetValueOrDefault(zoneId) is var last && last != default && context.SimTime - last < TimeSpan.FromMinutes(10)) continue;
+            _returnsReported[zoneId] = context.SimTime;
+            var at = world.ProtectiveActions.TryGetValue(zoneId, out var area) ? GeoPoint.FromPoint(area.Area.Centroid) : (GeoPoint?)null;
+            context.EmitPerceived(new ReportReceived(Guid.NewGuid(), null, ReportSource.FieldUnit, "Gardaí at the evacuation cordon",
+                "Residents are trying to get back into the evacuation zone for their pets. Some have got past us.",
+                Confidence.High, VerificationStatus.Reported, at, 300), EventSources.Comms);
+        }
+
+        // Back home with the animal: out again, on foot.
+        foreach (var person in world.Civilians.Where(p => p.State == CivilianState.Converging && p.ReturnForPetAt == DateTimeOffset.MaxValue
+                                                          && p.Target is null && GeoMath.DistanceMeters(p.Location, p.Home) < 5))
+            StartEvacuating(context, person, [], ZoneAt(world, person.Location, context.SimTime), allowCar: false);
+    }
+
+    /// <summary>
+    /// People who can't leave on their own still inside an evacuation zone half an hour after the order: ground truth
+    /// for the review (Phase 14: negligence), recorded once, and again every half hour while it lasts.
+    /// </summary>
+    private void Stranded(SimulationContext context)
+    {
+        var world = context.World;
+        foreach (var zone in world.ProtectiveActions.Values.Where(a => a.Type == ZoneType.EvacuationZone))
+        {
+            if (context.SimTime - zone.DeclaredAt < TimeSpan.FromMinutes(30)) continue;
+            if (_strandedReported.GetValueOrDefault(zone.ZoneId) is var last && last != default && context.SimTime - last < TimeSpan.FromMinutes(30)) continue;
+
+            var left = world.Civilians.Where(p => zone.Area.Contains(p.Location.ToPoint())
+                                                  && p.State is not (CivilianState.Injured or CivilianState.Safe or CivilianState.Evacuating)
+                                                  && (p.WaitingForHelp || p.Is(Vulnerability.MobilityImpaired) || p.Is(Vulnerability.Homeless))).ToList();
+            if (left.Count == 0) continue;
+            _strandedReported[zone.ZoneId] = context.SimTime;
+            var who = string.Join(", ", new[]
+            {
+                (left.Count(p => p.Is(Vulnerability.MobilityImpaired)), "who can't leave unaided"),
+                (left.Count(p => p.Is(Vulnerability.Homeless)), "rough-sleeping"),
+            }.Where(g => g.Item1 > 0).Select(g => $"{g.Item1} {g.Item2}"));
+            context.EmitTruth(new VulnerableStranded(zone.ZoneId, left.Count, who));
+        }
+    }
+
+    /// <summary>Somewhere takes pets (Phase 14): command has notified an animal welfare or veterinary service.</summary>
+    public static bool AnimalWelfareArranged(WorldState world) =>
+        world.Notified.Keys.Any(k => new[] { "animal", "dspca", "ispca", "veterinar", "pets" }.Any(w => k.Contains(w, StringComparison.OrdinalIgnoreCase)));
 
     private static bool MultilingualWarnings(WorldState world) =>
         world.Notified.Keys.Any(k => k.Contains("translat", StringComparison.OrdinalIgnoreCase)
@@ -429,7 +650,8 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
             if (hazard.Kind == HazardKind.Plume)
             {
                 person.Dose += exposure.Value * seconds / 60;
-                if (person.State == CivilianState.Sheltering) rate *= 0.15; // indoors, windows shut
+                // Indoors, windows shut; a rough-sleeper has nowhere to shelter (Phase 14).
+                if (person.State == CivilianState.Sheltering && !person.Is(Vulnerability.Homeless)) rate *= 0.15;
             }
             if (rate <= 0 || random.NextDouble() >= 1 - Math.Exp(-rate * seconds)) continue;
 
@@ -450,11 +672,11 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
             person.State = CivilianState.Injured;
             person.Target = null;
             var incidentId = hazard.IncidentId ?? NearestIncident(context.World, person.Location);
-            var injured = new CasualtyInjured(Guid.NewGuid(), incidentId, person.Location, triage, cause);
+            var injured = new CasualtyInjured(Guid.NewGuid(), incidentId, person.Location, triage, cause, person.Who);
             context.World.Casualties.TryAdd(injured.CasualtyId, new WorldCasualty
             {
                 Id = injured.CasualtyId, IncidentId = incidentId, Location = person.Location, Triage = triage,
-                State = CasualtyState.AwaitingTreatment, Cause = cause, InjuredAt = context.SimTime,
+                State = CasualtyState.AwaitingTreatment, Cause = cause, InjuredAt = context.SimTime, CivilianId = person.Id,
             });
             context.EmitTruth(injured);
             return true;

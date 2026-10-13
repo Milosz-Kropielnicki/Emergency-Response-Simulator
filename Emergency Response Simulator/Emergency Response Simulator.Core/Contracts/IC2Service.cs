@@ -197,6 +197,43 @@ public interface IC2Service
     /// </summary>
     Task<CommandResult> IssuePublicStatementAsync(string text, Guid? incidentId = null, CancellationToken cancellationToken = default);
 
+    // ---- Public, media, political & legal (Phase 14) ----
+
+    /// <summary>
+    /// A press conference: the PIO (and the IC, if there is one) in front of the cameras with a statement. It answers
+    /// every journalist waiting, deals with each rumour the statement speaks to, and carries more weight than a written
+    /// statement. It is also a public statement, with everything that follows from one.
+    /// </summary>
+    Task<CommandResult> HoldPressConferenceAsync(string statement, Guid? incidentId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Says publicly that a rumour isn't true, which stops it spreading. Be sure: denying something that turns out to
+    /// be true is misinformation from the authorities, and comes out.
+    /// </summary>
+    Task<CommandResult> RebutRumourAsync(Guid rumourId, string text, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Asks for the people who can't leave an evacuation zone on their own to be got out: ambulance transport, care
+    /// staff and outreach workers, who arrive after a while and work through the zone.
+    /// </summary>
+    Task<CommandResult> RequestAssistedEvacuationAsync(Guid zoneId, CancellationToken cancellationToken = default);
+
+    /// <summary>Registers the volunteers at an incident's cordon (to work away from the hazard), or turns them away.</summary>
+    Task<CommandResult> ManageVolunteersAsync(Guid incidentId, VolunteerDecision decision, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Opens a family assistance centre: relatives' enquiries are traced from then on, evacuees register there, and
+    /// families of the hurt and the dead get a family liaison officer.
+    /// </summary>
+    Task<CommandResult> OpenFamilyAssistanceCentreAsync(string name, GeoPoint location, Guid? incidentId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// An entry in the decision log: what was decided, and why, written at the time. The review checks the significant
+    /// decisions (protective zones, approvals, rumours denied) were logged.
+    /// </summary>
+    /// <param name="aboutSequence">The recorded command it explains, if any.</param>
+    Task<CommandResult> RecordDecisionAsync(string decision, string rationale, long? aboutSequence = null, CancellationToken cancellationToken = default);
+
     // ---- AI role players (Phase 11 M5) ----
 
     /// <summary>

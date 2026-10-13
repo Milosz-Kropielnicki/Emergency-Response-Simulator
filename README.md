@@ -996,6 +996,110 @@ Any other name is treated as a toxic gas with chlorine-like thresholds, keeping 
 - `PlumeContractTests`: the wire format both ways.
 - `PlumeServiceTests`: against the real Python service; these skip unless it is running.
 
+## Public, media, political & legal (Phase 14)
+
+The pressures from outside the response. Most of what command learns arrives as reports, calls and registers; the truth behind them is ground truth, and the review judges what command did with it. Work it from the new **PUBLIC** tab. The PIO starts on it; the IC, Operations, Logistics, Liaison and observers have it too.
+
+`Simulation:PublicPressures = false` turns off the register, looting, volunteers, families and rumours. Vulnerable people are part of the civilian population and are always modelled.
+
+### Vulnerable people (`CivilianSystem`)
+
+Civilians now carry a `Vulnerability`. Shares are set in the `Civilians` settings section.
+
+| Who | Share | What changes |
+|---|---|---|
+| Elderly | 14% | Walk at 0.8 m/s and can't run; compliance × 0.7 (many won't leave on an official's say-so). |
+| Unable to leave unaided | 4% (also elderly) | Willing, but can't go: they wait for help (`WaitingForHelp`), and can't flee danger either. |
+| Rough-sleepers | 1.5% | Outdoors, with no door to knock and no car. A warning never reaches them; sheltering doesn't protect them. |
+| Pet owners | 25% | Compliance × 0.6, and 30% of those who leave go back in for the animal 15–30 min later. Neither applies once command notifies an animal welfare service (the DSPCA). A garda cordon turns returners back. |
+
+- **Assisted evacuation** (`RequestAssistedEvacuationAsync`, the "Evacuation support" function: Operations and Logistics).
+  - Teams arrive 12 minutes after the request and take people out by vehicle, two a minute.
+  - Who they take: those who can't leave unaided, rough-sleepers, and elderly people who refused.
+  - Progress is reported every 5 minutes.
+- **Reaching rough-sleepers:** only outreach (the assisted-evacuation teams) or an engaged community leader warns them.
+- **Left behind:** anyone vulnerable still in an evacuation zone 30 minutes after the order is recorded as truth (`VulnerableStranded`), and the review lists it as a liability.
+- **Other effects on compliance:**
+  - an engaged community leader adds 15 points in their zone;
+  - a false rumour that has gone far unanswered multiplies compliance by 0.85.
+
+### The register, looting and volunteers (`PublicOrderSystem`)
+
+- **The vulnerable-persons register:** 8 minutes after an evacuation or shelter zone, the council reports the elderly and disabled people on its register. That is 70% of them, and no rough-sleepers or pets.
+- **The community leader's report:** an engaged community leader reports all of them, rough-sleepers and pet owners included.
+- **Looting:**
+  - **Unguarded:** an evacuation zone in force 20 minutes with homes empty gets broken into. There is a 45% chance every 10 minutes, at most three times, and a resident who stayed rings 999.
+  - **Guarded:** a garda unit at the zone, or a police cordon over it, catches most attempts. The chance drops to 10%, and each one ends in an arrest report.
+- **Spontaneous volunteers:**
+  - A Critical incident, or a High one with casualties, brings people to the cordon after 15 minutes, and more every 5 minutes.
+  - Left alone 10 minutes, some go past the cordon. Near a live hazard 1 in 5 of those gets hurt.
+  - `ManageVolunteersAsync` (Logistics) registers them, which stops that and staffs the family assistance centre, or turns them away.
+
+### Families (`ReunificationSystem`)
+
+- **Enquiries:** once people have been hurt or moved, relatives ring the public enquiry line, one every 4 minutes, up to 12. Each is about a real person, the hurt and the elderly first.
+- **Tracing:** nothing is traced until command opens a **family assistance centre** (`OpenFamilyAssistanceCentreAsync`, the "Family assistance" function: Liaison and Logistics).
+  - **How fast:** each enquiry is then traced in 8–16 minutes, faster with registered volunteers.
+  - **What it finds:** what really happened — safe, in hospital (which one), died, or still at home in the zone. The last raises an alert.
+  - **Family support:** families of the hurt and the dead get a family liaison officer.
+
+### Rumours and the press (`RumourSystem`)
+
+- **How they start:**
+  - A rumour per newsworthy incident after 12 minutes, then every 15 (slower once command has said something), up to four.
+  - They are drawn from a library mixing true and false: a second explosion, contaminated water, gas heading for the schools, a hidden death toll, a hospital turning people away, a cover-up.
+  - Whether each is true is decided from the world when it starts (ground truth, `RumourTruth`). Looting nobody stopped becomes a true rumour.
+- **Spreading:** reach grows ×1.6 every 5 minutes.
+  - Frightening ones over 20k bring worried 999 calls.
+  - False ones confuse people.
+- **Answering:**
+  - **Rebutting** (`RebutRumourAsync`, PIO) stops a rumour. But **denying one that is true** comes out 15 minutes later: an RTÉ report, a "Denial contradicted" alert, and −15 confidence. Check before you deny.
+  - **A press conference** (`HoldPressConferenceAsync`, PIO; at most one every 10 minutes) answers every journalist waiting, deals with each rumour whose subject it names (without denying it), counts as a public statement, and is worth +10 confidence.
+- **Public confidence** (Phase 12) now also moves with:
+
+  | Event | Change |
+  |---|---|
+  | A false rumour past 50k unanswered | −5 |
+  | A false rumour put straight | +3 |
+  | Unguarded looting | −6 |
+  | Each family waiting 30 minutes with no centre | −2 |
+  | A community leader who goes to the press | −4 |
+
+### Community leaders and agency heads (`PoliticalPressureSystem`)
+
+These callers sit outside the TD → council → minister ladder.
+
+- **Community leaders:** a community leader rings 6 minutes after their area is put under an order.
+  - **Called back:** they are **engaged**. People in their zone listen (+15 compliance), outreach reaches rough-sleepers there, and they report who needs help.
+  - **Ignored:** they go to the press.
+- **The Garda:** an **evacuation ordered without the Garda** brings a call from the Chief Superintendent. Under the Framework for Major Emergency Management, the decision to evacuate is the Garda's, with the other principal response agencies.
+  - **When there's no call:** a notification to the Garda, or the Garda in unified command, by 5 minutes after the order.
+  - **Otherwise:** a `LegalExposure` is recorded. Answering the call within 10 minutes mitigates it.
+- **The HSE:** the HSE's emergency manager rings once an incident has 8 or more casualties.
+
+### The decision log, and liability in the review
+
+- **The decision log:** `RecordDecisionAsync` (anyone) records what was decided and why; an entry without reasons is refused.
+  - **Significant decisions:** protective zones declared or lifted, approvals, rumours denied, volunteers managed.
+  - **Documented:** a significant decision is documented by an entry tied to it, or by one written within 10 minutes after it.
+- **In the review**, under **Legal & liability**:
+  - **Coverage:** the decision log's coverage (what wasn't logged, by name), and a finding.
+  - **Liabilities**, each marked mitigated or not:
+    - evacuation without authority;
+    - vulnerable people left behind;
+    - an unguarded evacuation zone;
+    - a volunteer hurt;
+    - a vulnerable person hurt;
+    - misinformation;
+    - families left without news for over an hour.
+  - **Findings:** findings on each rumour (answered, never answered, or a true one denied), on volunteers, and on the family assistance centre.
+  - **Exports:** the HTML and CSV exports include it all.
+- **The desk:** rumours go to the PIO, volunteers to Logistics, people who can't leave to Operations and Logistics, and families with no centre to Liaison and Logistics.
+
+**Injects:** the **Social media rumour** inject now starts a real rumour, and the instructor says whether it is true.
+
+**Tests:** `PublicPressureTests`.
+
 ## Local setup
 
 ```powershell
