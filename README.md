@@ -1102,6 +1102,24 @@ These callers sit outside the TD → council → minister ladder.
 
 ## Local setup
 
+### Prerequisites: PostgreSQL and PostGIS
+
+The database needs PostgreSQL 17 with the PostGIS 3.6 extension.
+
+1. Install PostgreSQL 17 with the [EDB Windows installer](https://www.postgresql.org/download/windows/). Keep the default port (5432) and note the password you set for the `postgres` superuser, because step 1 below asks for it.
+2. When the installer finishes, let it launch **Stack Builder**. Choose your PostgreSQL 17 install, then under **Spatial Extensions** pick **PostGIS 3.6 Bundle for PostgreSQL 17**. You don't need the installer's option to create a sample spatial database.
+3. Check the install from PowerShell:
+
+   ```powershell
+   & "C:\Program Files\PostgreSQL\17\bin\psql.exe" -U postgres -c "SELECT name, default_version FROM pg_available_extensions WHERE name = 'postgis';"
+   ```
+
+   It should list `postgis`. `Setup-Database.ps1` creates the extension in the `ers` and `ers_test` databases, so you never need to run `CREATE EXTENSION` yourself.
+
+If PostgreSQL is installed somewhere else, pass its `bin` folder to the setup script, for example `-PgBin "D:\PostgreSQL\17\bin"`. `-PgHost`, `-Port` and `-SuperUser` work the same way.
+
+### Steps
+
 ```powershell
 # 1. Database (prompts for the postgres superuser password; writes appsettings.Local.json, which is git-ignored)
 powershell -ExecutionPolicy Bypass -File database\Setup-Database.ps1
@@ -1111,7 +1129,10 @@ cd "Emergency Response Simulator"
 dotnet tool restore
 dotnet tool run dotnet-ef database update --project "Emergency Response Simulator.Data"
 
-# 3. Hazard-model service (Phase 13; optional: without it the in-engine plume is used and projections are refused)
+# 3. GIS data (needs internet the first time; downloads are cached in gis-data\cache\ and re-imports run offline)
+dotnet run --project "Emergency Response Simulator.GisImport"
+
+# 4. Hazard-model service (Phase 13; optional: without it the in-engine plume is used and projections are refused)
 cd ..\hazard-models
 py -3.14 -m venv .venv                                  # once
 .venv\Scripts\python -m pip install -r requirements.txt  # once
@@ -1120,5 +1141,7 @@ py -3.14 -m venv .venv                                  # once
 ```
 
 If no connection string is configured, the app runs with an in-memory event store.
+
+Step 3 fills the map's Base geography, Emergency facilities and Population & infrastructure layers. Until it has run, those layers show as "not imported" and can't be toggled on. If a layer fails (public Overpass servers sometimes throttle requests), re-run just that one, for example `-- --layers hospitals`. See [Static layers](#static-layers) for the options.
 
 The simulator looks for the hazard-model service at `HazardModels:BaseUrl` (`http://127.0.0.1:8765/`). In a networked session only the **server** needs it. The `PlumeServiceTests` run against it when it is up and skip otherwise (`ERS_HAZARD_MODELS` points them elsewhere).
