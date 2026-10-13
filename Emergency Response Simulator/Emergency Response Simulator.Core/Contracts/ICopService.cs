@@ -93,6 +93,12 @@ public interface ICopService
     /// <summary>Politicians' calls to command (Phase 11 M5), oldest first.</summary>
     IReadOnlyList<PoliticalCall> PoliticalCalls { get; }
 
+    /// <summary>
+    /// Plume projections command has run (Phase 13), newest first, superseded ones included. These are predictions from
+    /// reported information, not where the cloud really is.
+    /// </summary>
+    IReadOnlyList<PlumeProjection> PlumeProjections { get; }
+
     // Networked sessions (Phase 11)
 
     /// <summary>Everyone who has joined the session, present or not, in the order they joined.</summary>

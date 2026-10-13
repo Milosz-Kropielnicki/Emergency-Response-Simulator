@@ -1,3 +1,4 @@
+using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
@@ -19,11 +20,13 @@ internal sealed class TestHarness
     }
 
     /// <summary>For systems that need the live COP, such as the attention monitor.</summary>
-    public TestHarness(Func<PerceivedState, ISimulationSystem[]> systems)
+    /// <param name="plume">The hazard-model service C2 runs plume projections through (Phase 13); null: none available.</param>
+    /// <param name="gis">The GIS database the projection's overlay reads; null: no overlay.</param>
+    public TestHarness(Func<PerceivedState, ISimulationSystem[]> systems, IPlumeService? plume = null, IGisService? gis = null)
     {
         Engine = new SimulationEngine(Store, World, systems(Cop), new SimulationOptions { StartTime = Start });
         Cop.Follow(Store, Engine.SessionId);
-        C2 = new C2Service(Cop, Engine);
+        C2 = new C2Service(Cop, Engine, plume, gis);
         Iap = new IapService(Cop, Engine, C2, Engine);
         Aar = new AarService(Store);
     }

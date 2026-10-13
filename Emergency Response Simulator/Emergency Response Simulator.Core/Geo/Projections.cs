@@ -141,6 +141,12 @@ public static class GeoMath
         return (ToDegrees(Math.Atan2(y, x)) + 360.0) % 360.0;
     }
 
+    /// <summary>
+    /// The smaller angle between two bearings, −180 to 180 degrees: positive when <paramref name="to"/> is clockwise of
+    /// <paramref name="from"/>. Used for "how far has the wind backed since we last looked?".
+    /// </summary>
+    public static double BearingDifference(double from, double to) => ((to - from + 540.0) % 360.0) - 180.0;
+
     /// <summary>The point reached by travelling <paramref name="meters"/> along <paramref name="bearingDegrees"/>.</summary>
     public static GeoPoint Destination(GeoPoint start, double bearingDegrees, double meters)
     {

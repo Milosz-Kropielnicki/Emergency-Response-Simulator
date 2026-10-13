@@ -20,6 +20,12 @@ public static class InjectTemplates
 
     private static readonly string[] Compass = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
+    /// <summary>What can be released (Phase 13): one of each material class the dispersion model knows, and the common gases.</summary>
+    private static readonly string[] Materials =
+        ["chlorine", "ammonia", "sulphur dioxide", "hydrogen sulphide", "smoke", "toxic gas", "biological aerosol", "radioactive material"];
+
+    private static string Capitalise(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
+
     private static readonly List<Template> Library =
     [
         new(new("wind-shift", "Wind shift", "The wind really changes; the met service reports it if asked to.",
@@ -111,6 +117,39 @@ public static class InjectTemplates
                 ];
             },
             v => $"Nearest hospital loses {Number(v, "places", 4):0} places: {v["reason"]}"),
+
+        // Plume & hazard models (Phase 13): a release of any material the dispersion model knows, and revising one.
+        new(new("release", "Hazardous release", "Something toxic, smoky, biological or radioactive really starts escaping near the incident.",
+            [
+                new("material", "Material", InjectParameterKind.Choice, "chlorine", Materials),
+                new("rate", "Release rate (kg/s)", InjectParameterKind.Number, "0.5"),
+                new("quantity", "Inventory (kg)", InjectParameterKind.Number, "1500"),
+                new("distance", "Metres from the incident", InjectParameterKind.Number, "200"),
+                new("casualties", "Casualties", InjectParameterKind.Number, "0"),
+            ]),
+            (context, v) =>
+            {
+                var incidentId = Guid.NewGuid();
+                var at = GeoMath.Destination(Near(context), 120, Number(v, "distance", 200));
+                var material = v["material"];
+                return
+                [
+                    Truth(new WorldIncidentStarted(incidentId, IncidentType.HazmatRelease, at, 0.5, (int)Number(v, "casualties", 0))),
+                    Truth(new HazardStarted(Guid.NewGuid(), incidentId, HazardKind.Plume, at, $"{Capitalise(material)} release",
+                        Math.Max(0.001, Number(v, "rate", 0.5)), material, Math.Max(0, Number(v, "quantity", 1500)))),
+                ];
+            },
+            v => $"{Capitalise(v["material"])} release, {Number(v, "rate", 0.5):0.###} kg/s, {Number(v, "distance", 200):0} m from the incident"),
+
+        new(new("release-rate", "Release rate changes", "The latest live release gets worse, eases or stops: a valve fails, a crew plugs the leak, the store runs dry.",
+            [
+                new("rate", "New rate (kg/s, 0 stops it)", InjectParameterKind.Number, "2"),
+                new("reason", "Why", InjectParameterKind.Text, "a second valve has failed"),
+            ]),
+            (context, v) => context.World.Hazards.Values.Where(h => h.Kind == HazardKind.Plume && !h.Ended).OrderByDescending(h => h.StartedAt).FirstOrDefault() is { } release
+                ? [Truth(new HazardRateChanged(release.Id, Math.Max(0, Number(v, "rate", 2)), v["reason"]))]
+                : [],
+            v => Number(v, "rate", 2) <= 0 ? $"Release stops: {v["reason"]}" : $"Release rate now {Number(v, "rate", 2):0.###} kg/s: {v["reason"]}"),
 
         new(new("rumour", "Social media rumour", "A post spreading something wrong (or right) about the incident.",
             [new("text", "Post", InjectParameterKind.Text, "Hearing there's a second explosion and gas spreading towards the schools!!")]),

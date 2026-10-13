@@ -52,7 +52,7 @@ public sealed class HazardSystem(IHazardTerrain? terrain = null) : ISimulationSy
                 DrawDownInventory(context, hazard);
 
             model.Step(new HazardStepInput(context.SimTime, world.Weather, hazard.Rate,
-                hazard.Kind == HazardKind.Fire ? Suppression(world, context.SimTime) : null), context.Delta);
+                hazard.Kind == HazardKind.Fire ? Suppression(world, context.SimTime) : null, hazard.Prediction), context.Delta);
 
             switch (model)
             {

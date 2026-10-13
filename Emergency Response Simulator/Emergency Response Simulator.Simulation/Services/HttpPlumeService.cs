@@ -17,6 +17,14 @@ public sealed class HttpPlumeService(HttpClient http) : IPlumeService
         return await response.Content.ReadFromJsonAsync<PlumePrediction>(Json, cancellationToken)
             ?? throw new InvalidOperationException("The hazard-model service returned an empty prediction.");
     }
+
+    public async Task<IReadOnlyList<SubstanceInfo>> GetSubstancesAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await http.GetAsync("v1/substances", cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<IReadOnlyList<SubstanceInfo>>(Json, cancellationToken) ?? [];
+    }
 }
 
 /// <summary>Bound from the "HazardModels" configuration section.</summary>

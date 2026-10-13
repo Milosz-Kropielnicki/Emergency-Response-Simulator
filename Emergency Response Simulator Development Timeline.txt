@@ -353,7 +353,6 @@ M1 ─► M2 ─► M3 ─┬─► M4 ─► M5
 ---
 
 ## Phase 14 — Public, Media, Political & Legal
-**Weeks 95–100 | 6 weeks**
 
 **Focus:** External pressures.
 
@@ -370,7 +369,6 @@ M1 ─► M2 ─► M3 ─┬─► M4 ─► M5
 ---
 
 ## Phase 15 — Logistics & Resource Sustainment
-**Weeks 101–106 | 6 weeks**
 
 **Focus:** Supporting the operation over time.
 
@@ -386,7 +384,6 @@ M1 ─► M2 ─► M3 ─┬─► M4 ─► M5
 ---
 
 ## Phase 16 — Medical, Mass Casualty & Public Health
-**Weeks 107–112 | 6 weeks**
 
 **Focus:** Health and medical surge.
 
@@ -402,7 +399,6 @@ M1 ─► M2 ─► M3 ─┬─► M4 ─► M5
 ---
 
 ## Phase 17 — Evacuation, Shelter & Infrastructure
-**Weeks 113–118 | 6 weeks**
 
 **Focus:** Population protection and critical systems.
 
@@ -418,7 +414,6 @@ M1 ─► M2 ─► M3 ─┬─► M4 ─► M5
 ---
 
 ## Phase 18 — Documentation & ICS Forms
-**Weeks 119–124 | 6 weeks**
 
 **Focus:** Standardized documentation.
 
@@ -433,7 +428,6 @@ M1 ─► M2 ─► M3 ─┬─► M4 ─► M5
 ---
 
 ## Phase 19 — Scenario Design & Adaptive Training
-**Weeks 125–130 | 6 weeks**
 
 **Focus:** Reusable, dynamic training content.
 
@@ -449,7 +443,6 @@ M1 ─► M2 ─► M3 ─┬─► M4 ─► M5
 ---
 
 ## Phase 20 — Data Standards & Integration
-**Weeks 131–134 | 4 weeks**
 
 **Focus:** Interoperability and external systems.
 
@@ -464,7 +457,6 @@ M1 ─► M2 ─► M3 ─┬─► M4 ─► M5
 ---
 
 ## Phase 21 — UI/UX & Accessibility
-**Weeks 135–138 | 4 weeks**
 
 **Focus:** Usability under pressure.
 
@@ -480,7 +472,6 @@ M1 ─► M2 ─► M3 ─┬─► M4 ─► M5
 ---
 
 ## Phase 22 — Ethical & Psychological Considerations
-**Weeks 139–140 | 2 weeks**
 
 **Focus:** Responsible training.
 

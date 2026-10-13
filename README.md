@@ -68,7 +68,7 @@ The simulator separates **what is happening** from **what command believes is ha
 | `IIapService` | What should we do? | Contract only, Phase 5 |
 | `IGisService` | What exists where? | Implemented on PostGIS |
 | `IAvlService` | Where are my resources? | Contract only, Phase 3 |
-| `IPlumeService` | Where is the hazard going? | HTTP client plus Python stub model (the trainee's prediction); a simple truth plume runs in-engine since Phase 6; real model comes in Phase 12 |
+| `IPlumeService` | Where is the hazard going? | Implemented: HTTP client to the Python dispersion model (Phase 13), which drives real releases and command's projections; the in-engine plume is the fallback |
 | `ICommsService` | Who said what, on which channel? | Implemented (`CommsService` over the COP's comms log) |
 | `IAarService` | How did we get here? | Implemented: timeline, replay, the analysed review, branch re-runs (Phase 9) |
 | `ISimulationControl` | Start, pause, speed | Implemented (`SimulationEngine`) |
@@ -277,7 +277,7 @@ The world now runs on its own. Each system advances `WorldState` every tick and 
   |---|---|
   | Fire spread | Cellular automaton on 15 m cells. Spread depends on fuel (buildings burn, water doesn't) and wind behind the fire: about 2 m/min in still air, about 6 m/min downwind at 7 m/s. Engines working at the scene put out burning cells within 90 m and cool the cells around them. |
   | Flood | Water enters at the source and runs downhill over the elevation grid. Streets under 25 cm or more become real obstructions, which crews find by driving into them. |
-  | Simple plume | Ground-level Gaussian plume with Briggs urban dispersion, class D. Low, moderate and high zones come from AEGL-style thresholds. The cloud only reaches as far as the wind has carried it, swings with the wind, and clears after the release stops. Phase 12 brings the full models. |
+  | Simple plume | Ground-level Gaussian plume with Briggs urban dispersion, class D. Low, moderate and high zones come from AEGL-style thresholds. The cloud only reaches as far as the wind has carried it, swings with the wind, and clears after the release stops. Since Phase 13 this is the fallback for when the Python dispersion model isn't running. |
 
   Terrain (`HazardTerrain`) comes from the imported buildings, water and elevation layers, and is uniform when there is no GIS. Footprints are recorded every minute (`HazardFootprintChanged`).
 - **Agents:**
@@ -907,6 +907,95 @@ Each item belongs to a function the role holds now, by the permission matrix. So
 
 **Tests:** `MultiplayerCompletionTests`.
 
+## Plume & hazard models (Phase 13)
+
+The Python hazard-model service (`hazard-models/`) now holds a real dispersion model, and the simulator uses it twice: for the **real cloud** (ground truth) and for **command's projections** (what the trainees work from). The two can disagree, because the projection is run on reported information.
+
+### The dispersion model (`plume_service/dispersion.py`)
+
+A Gaussian plume for a continuous release, with what changes the answer:
+
+| Effect | How |
+|---|---|
+| Atmospheric stability | Pasquill–Gifford classes A–F, with the Briggs (1973) sigma curves. A still, clear night (F) carries a cloud more than twice as far as a sunny afternoon (A). |
+| Terrain | Roughness length; 0.4 m and above (built-up) uses the urban curves, which mix a plume out sooner than open country. |
+| Plume rise | Briggs buoyant rise for a release lighter than the air around it (hot smoke, ammonia), capped by stable air. The worst ground-level concentration is then downwind of the source, not at it. |
+| Dense gas | Heavier than air (chlorine, sulphur dioxide): no rise, a shallower and wider cloud that stays on the ground. An approximation of a proper slumping model (DEGADIS, SLAB). |
+| Depletion and decay | Deposition thins the cloud with distance; radiological and biological material lose strength with time in the air. |
+| A travelling cloud | It reaches only as far as the wind has carried it (`elapsedMinutes`). Once the release stops (or the inventory runs out), the back of the cloud moves off too and it drifts away as a band, leaving clear air at the source. |
+
+**Inputs:** substance, release rate, duration, quantity, release temperature and pressure, release height, weather (wind, temperature, humidity, stability, pressure) and terrain. Everything beyond the original five fields is optional.
+
+**Output:** low, moderate and high concentration zones as polygons. Each zone carries its threshold (and, for radioactive material, the dose rate), its area, how far it reaches, and when the cloud arrives.
+
+**Substances** (`plume_service/substances.py`, `GET /v1/substances`): all five material classes in the deliverable, with AEGL-style 60-minute thresholds.
+
+| Class | Substances |
+|---|---|
+| Chemical | Chlorine, ammonia, sulphur dioxide, hydrogen sulphide, and an unidentified industrial chemical |
+| Toxic gas | Unidentified toxic gas |
+| Smoke | Smoke |
+| Biological | Biological aerosol (thresholds as rough infectious-dose bands) |
+| Radiological | Radioactive material (thresholds as 0.1 / 1 / 10 mSv/h) |
+
+Any other name is treated as a toxic gas with chlorine-like thresholds, keeping the name given. The thresholds are teaching values, not a basis for real decisions. The C# fallback (`Hazards/Substance`) carries the same library: keep the two in step.
+
+**Tests:** 22 pytest tests check the contract and the physics: nesting, travelling downwind, stability, wind, terrain, dense gas against buoyant release, dose rates, decay, the detached cloud and the inventory.
+
+### The real cloud (`PlumeDispersionSystem`)
+
+- **Asking the model:** for every live release, the engine asks the service where the cloud is now, from the **true** weather and the **true** release. The stability class is estimated from wind, time of day, season and humidity (`AtmosphericStability`).
+- **Recorded as truth:** the answer is recorded as `PlumePredicted` (ground truth), and the plume model adopts its zones. Crew exposure, the footprint, the instructor's map and the casualty systems all use the service's cloud.
+- **Dynamic updates:** it asks again when the wind turns 15° or changes by 1.5 m/s, when the release rate is revised or the release stops, and otherwise every 2 minutes so the leading edge keeps moving. A stopped release is still modelled, so the cloud drifts away.
+- **Never stalls:** the service is called off the engine thread, so a slow or missing service never holds the clock up. Without it, the in-engine Gaussian plume carries on and is tried again.
+- **On the instructor's board:** the board says which model is driving each cloud.
+- **Replay:** the predictions are events, so a replay rebuilds the same cloud without the service. Branch re-runs use the in-engine model.
+- **Switching it off:** `Simulation:DispersionService = false` forces the in-engine model.
+
+### Command's projection, and what it covers
+
+- **Running it:** `IC2Service.PredictPlumeAsync` runs the model on what command knows: the **reported** wind and command's estimate of the release.
+  - It is the **Hazard prediction** function: Planning, Safety and Operations, and it falls to the IC while any of them is unfilled.
+  - The INCIDENT tab's **PLUME PROJECTION** section runs it.
+- **The result** (`PlumeProjected`, perceived) goes on the COP and on the map ("Projected plume (prediction)", dashed amber to red), with the inputs, each zone's reach and threshold, and the substance's advice.
+- **GIS overlay** (`PlumeImpacts`): each zone is intersected with the static layers. Each place is counted once, in the worst zone it falls in.
+  - Named: schools, hospitals, shelters and critical infrastructure.
+  - Counted: homes (residential buildings).
+
+  Without a GIS database the projection still works; it just can't say what is underneath.
+- **Alerts:**
+  - **"School within projected hazard area"**: one alert for each school, hospital or shelter inside the moderate or high zone (Critical in the high zone).
+  - **"About N home(s) within projected hazard area"**: one alert covering the homes.
+- **From projection to action:** **Evacuate moderate zone** and **Shelter low zone** declare protective zones over the projection's outlines in one click.
+- **Dynamic updates:** when the *reported* wind turns 30° or more, or its speed changes by 3 m/s or more, the projection is re-run and supersedes the old one. It is marked as an update, and re-runs at most every 2 minutes.
+  - It reads only the COP, never the true wind or release.
+  - The release rate stays command's own estimate. To revise it, project again with the new figure.
+- **The desk:** a hazmat incident nobody has projected waits on the desk of whoever holds hazard prediction.
+
+### Releases, and what crews notice
+
+- **Instructor injects:**
+  - **Hazardous release:** any of the eight materials, at a rate and inventory, near the incident.
+  - **Release rate changes:** worsens, eases or stops the latest release, and the model re-predicts.
+- **What crews notice depends on what it is:**
+  - an irritant gas they smell, then feel (chlorine's bleach, hydrogen sulphide's rotten egg);
+  - smoke they see;
+  - radioactive material shows only on dosimeters, with the dose rate;
+  - a biological aerosol is noticed by nobody, except a hazmat crew's detector.
+
+### In the review
+
+- **Timeline:** projections appear under HAZARD; the real model's predictions appear as truth.
+- **Findings:**
+  - how soon each hazmat release was projected (within 10 minutes is prompt), or that it never was;
+  - whether the schools, hospitals and homes a projection found in the moderate or high zone were then covered by an evacuation or shelter zone, and how long that took (within 15 minutes is in time).
+- **Not a decision:** the alerts a projection raises are its consequences, so they are not judged as decisions.
+
+**Tests:**
+- `PlumeModelTests`: fake service and GIS, so these always run.
+- `PlumeContractTests`: the wire format both ways.
+- `PlumeServiceTests`: against the real Python service; these skip unless it is running.
+
 ## Local setup
 
 ```powershell
@@ -918,9 +1007,14 @@ cd "Emergency Response Simulator"
 dotnet tool restore
 dotnet tool run dotnet-ef database update --project "Emergency Response Simulator.Data"
 
-# 3. Hazard-model service (optional until Phase 12)
+# 3. Hazard-model service (Phase 13; optional: without it the in-engine plume is used and projections are refused)
 cd ..\hazard-models
+py -3.14 -m venv .venv                                  # once
+.venv\Scripts\python -m pip install -r requirements.txt  # once
+.venv\Scripts\python -m pytest -q                        # optional: the model's own tests
 .venv\Scripts\python -m uvicorn plume_service.main:app --host 127.0.0.1 --port 8765
 ```
 
 If no connection string is configured, the app runs with an in-memory event store.
+
+The simulator looks for the hazard-model service at `HazardModels:BaseUrl` (`http://127.0.0.1:8765/`). In a networked session only the **server** needs it. The `PlumeServiceTests` run against it when it is up and skip otherwise (`ERS_HAZARD_MODELS` points them elsewhere).

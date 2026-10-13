@@ -65,4 +65,10 @@ public sealed class SimulationOptions
     /// (Phase 12).
     /// </summary>
     public bool MediaCoverage { get; set; } = true;
+
+    /// <summary>
+    /// Let the Python hazard-model service drive real releases and keep command's projections current (Phase 13). Off,
+    /// or with the service not running, the in-engine Gaussian plume models them instead.
+    /// </summary>
+    public bool DispersionService { get; set; } = true;
 }

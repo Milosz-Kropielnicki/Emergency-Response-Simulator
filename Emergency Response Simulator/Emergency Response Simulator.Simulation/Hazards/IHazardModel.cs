@@ -34,11 +34,15 @@ public interface IHazardModel
 
 /// <param name="Rate">Flood inflow (m³/s) or plume release rate (kg/s).</param>
 /// <param name="Suppression">Crews putting water on a fire.</param>
+/// <param name="Prediction">
+/// The dispersion service's latest word on a plume (Phase 13), which the plume model adopts in place of its own maths.
+/// </param>
 public sealed record HazardStepInput(
     DateTimeOffset SimTime,
     WorldWeather Weather,
     double Rate = 0,
-    IReadOnlyList<Suppression>? Suppression = null);
+    IReadOnlyList<Suppression>? Suppression = null,
+    Core.Events.PlumePredicted? Prediction = null);
 
 /// <summary>A fire crew's water: it can put out <paramref name="CellsPerMinute"/> burning cells within reach.</summary>
 public readonly record struct Suppression(GeoPoint Location, double ReachMeters, double CellsPerMinute);

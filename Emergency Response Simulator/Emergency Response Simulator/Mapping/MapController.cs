@@ -48,6 +48,7 @@ public sealed class MapController
     private readonly Dictionary<string, MemoryLayer> _staticLayers = [];
     private readonly MemoryLayer _jurisdictions = new("Jurisdictions");
     private readonly MemoryLayer _zones = new("Zones");
+    private readonly MemoryLayer _plumes = new("Projected plumes");
     private readonly MemoryLayer _reports = new("Reports");
     private readonly MemoryLayer _incidents = new("Incidents");
     private readonly MemoryLayer _routes = new("Routes");
@@ -101,7 +102,7 @@ public sealed class MapController
 
         foreach (var layer in new[]
                  {
-                     _traffic, _jurisdictions, _zones, _truth, _reports, _routes, _trails, _people, _incidents, _hospitals, _units, _trueUnits, _weather, _drawing,
+                     _traffic, _jurisdictions, _plumes, _zones, _truth, _reports, _routes, _trails, _people, _incidents, _hospitals, _units, _trueUnits, _weather, _drawing,
                  })
         {
             layer.Features = [];
@@ -367,7 +368,11 @@ public sealed class MapController
 
         _jurisdictions.Features = IsOn(MapLayerKeys.Jurisdictions) ? _cop.Jurisdictions.Select(JurisdictionFeature).ToList() : [];
 
-        foreach (var layer in new[] { _jurisdictions, _zones, _reports, _routes, _trails, _incidents, _hospitals, _units, _weather })
+        _plumes.Features = IsOn(MapLayerKeys.PlumeProjections)
+            ? _cop.PlumeProjections.Where(p => p.IsCurrent).SelectMany(PlumeFeatures).ToList()
+            : [];
+
+        foreach (var layer in new[] { _jurisdictions, _plumes, _zones, _reports, _routes, _trails, _incidents, _hospitals, _units, _weather })
             layer.DataHasChanged();
         _map.RefreshGraphics();
     }
@@ -385,6 +390,42 @@ public sealed class MapController
         var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(jurisdiction.Boundary)), jurisdiction.Name, [.. lines], label: jurisdiction.Name);
         AddStyles(feature, MapStyles.Jurisdiction(jurisdiction.Level, jurisdiction.RequiresConsent));
         return feature;
+    }
+
+    /// <summary>
+    /// A projection's zones, widest first so the high zone draws on top, each with what it was drawn at and what it
+    /// covers (Phase 13); and the release point.
+    /// </summary>
+    private static IEnumerable<IFeature> PlumeFeatures(PlumeProjection projection)
+    {
+        foreach (var zone in projection.Zones.OrderBy(z => PlumeLevels.Severity(z.Level)))
+        {
+            if (zone.Boundary.Count < 4) continue;
+            var ring = zone.Boundary.Select(p => new Coordinate(p.Longitude, p.Latitude)).ToList();
+            if (!ring[0].Equals2D(ring[^1])) ring.Add(ring[0]);
+            var area = Wgs84.Factory.CreatePolygon([.. ring]);
+
+            var lines = new List<string>
+            {
+                $"{PlumeLevels.Name(zone.Level)} concentration: above {zone.ThresholdMgPerM3:0.#####} mg/m³" +
+                    (zone.DoseRateMsvPerHour is { } dose ? $" ({dose:0.##} mSv/h)" : ""),
+                $"Reaches {zone.MaxDistanceMeters:N0} m downwind" + (zone.ArrivalSeconds is { } s && s > 30 ? $", about {s / 60:0} min from the release" : ""),
+                projection.Inputs,
+                $"{(projection.Automatic ? "Re-run" : "Run")} {MainViewModel.Time(projection.RunAt)} · {projection.Model} · a prediction, not a declared zone",
+            };
+            lines.AddRange(projection.Impacts.Where(i => i.Level == zone.Level)
+                .Select(i => $"Inside: {i.Count} {i.Kind.ToLowerInvariant()}(s)" + (i.Names.Count > 0 ? $" — {string.Join(", ", i.Names)}" : "")));
+
+            var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(area)), $"Projected {projection.Substance} plume", [.. lines],
+                label: zone.Level == PlumeLevels.Low ? $"PROJECTED {projection.Substance.ToUpperInvariant()}" : null);
+            AddStyles(feature, MapStyles.PlumeProjection(zone.Level));
+            yield return feature;
+        }
+
+        var release = Tag(new GeometryFeature(WebMercator.FromWgs84(projection.ReleaseLocation.ToPoint())), $"Release: {projection.Substance}",
+            [projection.Inputs, projection.Advisory]);
+        AddStyles(release, MapStyles.PlumeRelease);
+        yield return release;
     }
 
     private static IFeature ZoneFeature(Zone zone)

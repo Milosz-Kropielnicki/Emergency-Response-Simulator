@@ -98,6 +98,9 @@ public static class PermissionMatrix
         C2(nameof(IC2Service.CallBackAsync), "The 999 line", Dispatcher);
         Anyone(typeof(IC2Service), nameof(IC2Service.AcknowledgeAlertAsync), "Alerts");
 
+        // Hazard prediction (Phase 13): Planning works out where it is going, Safety says what that means for people.
+        C2(nameof(IC2Service.PredictPlumeAsync), "Hazard prediction", Planning, Safety, Ops);
+
         // Zones: hazards are Safety's and Operations'.
         C2(nameof(IC2Service.DeclareZoneAsync), "Zones", Ops, Safety);
         C2(nameof(IC2Service.LiftZoneAsync), "Zones", Ops, Safety);

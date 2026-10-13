@@ -37,6 +37,12 @@ public sealed class WorldHazard
     public IHazardModel? Model { get; set; }
 
     /// <summary>The footprint last recorded in the event stream, and when.</summary>
+    /// <summary>
+    /// The dispersion service's latest prediction for this hazard (Phase 13), applied from the event stream so a
+    /// replay rebuilds the same cloud. Null means the in-engine model is driving it.
+    /// </summary>
+    public Core.Events.PlumePredicted? Prediction { get; set; }
+
     public Geometry? Footprint { get; set; }
     public double FootprintArea { get; set; }
     public DateTimeOffset? FootprintAt { get; set; }

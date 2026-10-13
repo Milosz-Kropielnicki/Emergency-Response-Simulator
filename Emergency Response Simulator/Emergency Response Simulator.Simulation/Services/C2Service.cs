@@ -3,6 +3,7 @@ using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
 using Emergency_Response_Simulator.Simulation.Engine;
+using Emergency_Response_Simulator.Simulation.Hazards;
 
 namespace Emergency_Response_Simulator.Simulation.Services;
 
@@ -10,7 +11,7 @@ namespace Emergency_Response_Simulator.Simulation.Services;
 /// Validates commands against the COP (what command believes, not ground truth) and records
 /// accepted ones in the event stream.
 /// </summary>
-public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2Service
+public sealed class C2Service(ICopService cop, IEventPublisher publisher, IPlumeService? plume = null, IGisService? gis = null) : IC2Service
 {
     /// <summary>
     /// Units of an AI-run agency (Design Document §10.3) take orders from their own control room; command can see
@@ -160,6 +161,60 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher) : IC2S
             return CommandResult.Fail("Unknown or already lifted zone.");
 
         return await PublishAsync(new ZoneLifted(zoneId), cancellationToken);
+    }
+
+    public async Task<CommandResult> PredictPlumeAsync(
+        string substance, Guid? incidentId = null, GeoPoint? location = null, double? rateKgPerSecond = null,
+        double durationMinutes = 30, CancellationToken cancellationToken = default)
+    {
+        if (plume is null)
+            return CommandResult.Fail("The hazard-model service isn't running, so no projection can be made.");
+        if (string.IsNullOrWhiteSpace(substance))
+            return CommandResult.Fail("Say what has been released (the substance, or \"unknown\").");
+        if (durationMinutes <= 0)
+            return CommandResult.Fail("How long is it expected to release for?");
+        if (rateKgPerSecond is <= 0)
+            return CommandResult.Fail("A release rate has to be more than zero.");
+
+        var incident = incidentId is { } id ? cop.FindIncident(id) : null;
+        if (incidentId is not null && incident is null)
+            return CommandResult.Fail("Unknown incident.");
+
+        var where = location ?? (incident is null ? null : new GeoPoint(incident.Location.Y, incident.Location.X));
+        if (where is not { } origin)
+            return CommandResult.Fail("Say where the release is, or pick the incident it belongs to.");
+
+        // What command has been told is coming out, falling back to a working assumption it can revise.
+        var rate = rateKgPerSecond ?? 0.5;
+        var projectionId = Guid.NewGuid();
+        var superseded = cop.PlumeProjections.FirstOrDefault(p => p.IsCurrent && p.IncidentId == incidentId);
+
+        PlumeProjected projected;
+        try
+        {
+            if (await Systems.PlumeDispersionSystem.ProjectAsync(plume, gis, projectionId, incidentId, origin, substance.Trim(),
+                    rate, durationMinutes, cop.Weather, cop.AsOf, automatic: false, supersedes: superseded?.Id, cancellationToken) is not { } result)
+                return CommandResult.Fail("The hazard-model service could not produce a projection.");
+            projected = result;
+        }
+        catch (Exception ex)
+        {
+            return CommandResult.Fail($"The hazard-model service could not be reached: {ex.Message}");
+        }
+
+        var recorded = await PublishAsync(projected, cancellationToken);
+        foreach (var alert in PlumeImpacts.Alerts(projected))
+            await PublishAsync(alert, cancellationToken);
+
+        var reach = projected.Zones.Select(z => z.MaxDistanceMeters).DefaultIfEmpty(0).Max();
+        var covered = projected.Impacts.Count == 0 ? "" : $"; {projected.Impacts.Sum(i => i.Count)} place(s) inside";
+        return recorded with
+        {
+            EntityId = projectionId,
+            Detail = projected.Zones.Count == 0
+                ? "Nothing above the thresholds at that release rate"
+                : $"Plume projected {reach:F0} m downwind{covered}",
+        };
     }
 
     public async Task<CommandResult> EstablishHazardZonesAsync(

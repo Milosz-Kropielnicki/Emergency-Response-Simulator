@@ -364,6 +364,41 @@ public static class MapStyles
         Font = new Font { Size = 10 }, CornerRounding = 3,
     };
 
+    /// <summary>
+    /// A projected plume zone (Phase 13): amber to red by concentration, dashed because it is a prediction, not a
+    /// declared zone. A superseded projection is not drawn at all.
+    /// </summary>
+    public static IStyle PlumeProjection(string level)
+    {
+        var (color, alpha) = level switch
+        {
+            Core.Contracts.PlumeLevels.High => (new Color(220, 20, 40), 110),
+            Core.Contracts.PlumeLevels.Moderate => (new Color(255, 120, 0), 80),
+            _ => (new Color(255, 205, 0), 50),
+        };
+        return new StyleCollection
+        {
+            Styles =
+            {
+                new VectorStyle
+                {
+                    Fill = new Brush(Color.FromArgb(alpha, color.R, color.G, color.B)),
+                    Outline = new Pen(color, level == Core.Contracts.PlumeLevels.High ? 2.5 : 1.5) { PenStyle = PenStyle.Dash },
+                },
+                ZoneLabel(color),
+            },
+        };
+    }
+
+    /// <summary>A sensitive place inside a projected plume: a school, hospital or shelter, ringed in the zone's colour.</summary>
+    public static IStyle PlumeRelease { get; } = new SymbolStyle
+    {
+        SymbolType = SymbolType.Triangle,
+        SymbolScale = 0.5,
+        Fill = new Brush(new Color(220, 20, 40)),
+        Outline = new Pen(Color.White, 2),
+    };
+
     /// <summary>In-progress zone being drawn.</summary>
     public static IStyle DrawingPreview { get; } = new StyleCollection
     {

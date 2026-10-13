@@ -85,6 +85,12 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<ISimulationSystem>(sp => new TrafficSystem(sp.GetRequiredService<RoutingService>(),
                 sp.GetRequiredService<LiveTraffic>(), sp.GetRequiredService<TrafficFeed>()));
             services.AddSingleton<ISimulationSystem>(sp => new HazardReportingSystem(sp.GetRequiredService<IRoutingService>()));
+
+            // Phase 13: the Python dispersion model drives real releases, and keeps command's projections current.
+            // Without the service (or with this off) the in-engine Gaussian plume carries the session.
+            if (configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.DispersionService)}", true))
+                services.AddSingleton<ISimulationSystem>(sp => new PlumeDispersionSystem(
+                    sp.GetService<IPlumeService>(), sp.GetRequiredService<ICopService>(), sp.GetService<IGisService>()));
         }
         if (configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.HumanFactors)}", true))
             services.AddSingleton<ISimulationSystem>(sp => new CrewSystem(sp.GetRequiredService<CrewOptions>()));
@@ -102,7 +108,9 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<ISimulationSystem>(_ => BarrowStreetScenario.Create(
                 configuration.GetValue<bool>($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.DemoAutoResponse)}")));
 
-        services.AddSingleton<IC2Service, C2Service>();
+        // The plume service and the GIS database are both optional: C2 only needs them to run a projection (Phase 13).
+        services.AddSingleton<IC2Service>(sp => new C2Service(sp.GetRequiredService<ICopService>(), sp.GetRequiredService<IEventPublisher>(),
+            sp.GetService<IPlumeService>(), sp.GetService<IGisService>()));
         services.AddSingleton<IAssessmentService>(sp => new Instructor.AssessmentService(sp.GetRequiredService<ICopService>(), sp.GetRequiredService<IEventPublisher>()));
         services.AddSingleton<IInstructorService>(sp => new Instructor.InstructorService(sp.GetRequiredService<SimulationEngine>(), sp.GetServices<ISimulationSystem>(), sp.GetRequiredService<ICopService>()));
         services.AddSingleton<ICommsService>(sp => new CommsService(sp.GetRequiredService<ICopService>(), sp.GetRequiredService<IC2Service>(),

@@ -370,6 +370,11 @@ public sealed class WorldState
                 ended.Ended = true;
                 break;
 
+            // The dispersion service's latest prediction (Phase 13): the model adopts it on the next tick.
+            case PlumePredicted e when Hazards.TryGetValue(e.HazardId, out var predicted):
+                predicted.Prediction = e;
+                break;
+
             case HazardSitePlaced e:
                 Sites.TryAdd(e.SiteId, new HazardSite
                 {

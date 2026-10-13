@@ -34,6 +34,19 @@ public interface IC2Service
     Task<CommandResult> LiftZoneAsync(Guid zoneId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Runs the dispersion model on what command knows and puts the result on the COP (Phase 13): the low, moderate and
+    /// high concentration zones, what they cover on the ground (schools, hospitals, homes), and an alert for anywhere
+    /// sensitive inside them. It uses the <i>reported</i> weather, so the answer is only as good as what command has
+    /// been told. The simulator re-runs it when the reported wind moves; a revised release rate is command's to put in,
+    /// by projecting again.
+    /// </summary>
+    /// <param name="location">Where the release is; null takes the incident's location.</param>
+    /// <param name="rateKgPerSecond">How fast it is coming out. Null takes what has been reported, or a default guess.</param>
+    Task<CommandResult> PredictPlumeAsync(
+        string substance, Guid? incidentId = null, GeoPoint? location = null, double? rateKgPerSecond = null,
+        double durationMinutes = 30, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Hot, warm and cold zones as concentric circles around a point (Design Document §6.2).
     /// Radii in metres; each must be larger than the last.
     /// </summary>

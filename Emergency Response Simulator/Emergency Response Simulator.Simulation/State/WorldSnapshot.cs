@@ -79,7 +79,8 @@ public sealed record WorldSnapshot(
         double Intensity,
         Geometry? Footprint,
         IReadOnlyList<(HazardLevel Level, Geometry Area)> Zones,
-        DateTimeOffset StartedAt);
+        DateTimeOffset StartedAt,
+        string? Model = null);
 
     public sealed record SiteView(HazardSiteKind Kind, string Name, GeoPoint Location, bool Triggered);
 
@@ -106,7 +107,8 @@ public sealed record WorldSnapshot(
             h.Model?.AreaSquareMeters ?? 0, h.Model?.Intensity ?? 0,
             h.Model is PlumeModel plume ? plume.Zones.FirstOrDefault().Area : h.Footprint,
             h.Model is PlumeModel p ? p.Zones.Select(z => (z.Level, (Geometry)z.Area)).ToList() : [],
-            h.StartedAt)).ToList(),
+            h.StartedAt,
+            h.Model is PlumeModel driven ? driven.ModelName : null)).ToList(),
         world.Sites.Values.Select(s => new SiteView(s.Kind, s.Name, s.Location, s.Triggered)).ToList(),
         world.Civilians.Select(c => new CivilianView(c.Location, c.State)).ToList(),
         world.Casualties.Values.Select(c => new CasualtyView(c.Location, c.Triage, c.State, c.IncidentId)).ToList(),

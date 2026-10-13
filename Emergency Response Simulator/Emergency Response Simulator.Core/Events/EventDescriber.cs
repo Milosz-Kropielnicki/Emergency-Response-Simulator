@@ -1,3 +1,4 @@
+using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Model;
 
 namespace Emergency_Response_Simulator.Core.Events;
@@ -229,6 +230,14 @@ public static class EventDescriber
             AiRoleTakenOver e => Entry("INSTRUCTOR", $"Instructor takes over {e.Name}"),
             AiRoleHandedBack e => Entry("INSTRUCTOR", $"{e.Name} handed back to the simulation"),
             InstructorBookmarked e => Entry("INSTRUCTOR", $"Bookmark{(e.ParticipantId is { } who ? $" ({Participant(who)})" : "")}: {e.Note}", important: true),
+            // Plume & hazard models (Phase 13)
+            PlumePredicted e => Entry("TRUTH", $"Dispersion model ({e.Model}): {e.Substance} cloud out to {e.FrontMeters / 1000:0.0} km" +
+                (e.Zones.Count > 0 ? $", {PlumeLevels.Name(e.Zones[0].Level).ToLowerInvariant()} zone {e.Zones[0].MaxDistanceMeters:F0} m" : ", nothing above the thresholds") +
+                $" · {e.Reason}"),
+            PlumeProjected e => Entry("HAZARD", (e.Automatic ? "Plume projection updated: " : "Plume projection: ") +
+                $"{e.Substance} at {e.ReleaseRateKgPerSecond:0.##} kg/s, wind from {e.WindFromDegrees:F0}° at {e.WindSpeedMps:0.#} m/s" +
+                (e.Zones.Count > 0 ? $" — reaches {e.Zones.Max(z => z.MaxDistanceMeters):F0} m" : " — no zones above the thresholds") +
+                (e.Impacts.Count > 0 ? $"; {Impacts(e.Impacts)} inside" : ""), e.IncidentId, important: e.Impacts.Any(i => i.Level != PlumeLevels.Low)),
             // Multiplayer completion (Phase 12)
             ExerciseControlMessage e => Entry("EXERCISE", $"Exercise control{(e.ToParticipantId is { } to ? $" to {Participant(to)}" : "")}: {e.Text}"),
             PublicConfidenceChanged e => Entry("TRUTH", $"Public confidence {e.Confidence} ({(e.Change >= 0 ? "+" : "")}{e.Change}): {e.Reason}", important: Math.Abs(e.Change) >= 8),
@@ -252,6 +261,17 @@ public static class EventDescriber
     }
 
     private static string Accuracy(double? meters) => meters is { } m ? $" (±{m:F0} m)" : "";
+
+    /// <summary>"2 schools, 1 hospital, 340 homes", worst zone first (Phase 13).</summary>
+    private static string Impacts(IReadOnlyList<PlumeImpact> impacts) =>
+        string.Join(", ", impacts
+            .GroupBy(i => i.Kind)
+            .OrderByDescending(g => g.Max(i => PlumeLevels.Severity(i.Level)))
+            .Select(g => (Kind: g.Key, Count: g.Sum(i => i.Count)))
+            .Select(g => $"{g.Count} {(g.Count == 1 ? g.Kind.ToLowerInvariant() : Plural(g.Kind))}"));
+
+    private static string Plural(string kind) =>
+        kind.EndsWith('y') ? $"{kind[..^1].ToLowerInvariant()}ies" : $"{kind.ToLowerInvariant()}s";
 
     public static string TriageLabel(Triage triage) => triage switch
     {

@@ -76,6 +76,14 @@ public static class RoleDesk
                     incident.ReportedAt, incident.Priority >= IncidentPriority.High ? DeskUrgency.Urgent : After(incident.ReportedAt, TimeSpan.FromMinutes(2)),
                     incident.Id, incident.Id));
 
+        // A release nobody has projected (Phase 13): until someone does, nobody knows who is downwind.
+        if (Can<IC2Service>(nameof(IC2Service.PredictPlumeAsync)))
+            foreach (var incident in cop.Incidents.Where(i => i.Status != IncidentStatus.Closed && i.Type == IncidentType.HazmatRelease
+                                                              && !cop.PlumeProjections.Any(p => p.IncidentId == i.Id)))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.PredictPlumeAsync)), $"No plume projection yet for {incident.Number}: who is downwind?",
+                    incident.ReportedAt, now - incident.ReportedAt >= TimeSpan.FromMinutes(10) ? DeskUrgency.Urgent : After(incident.ReportedAt, TimeSpan.FromMinutes(4)),
+                    incident.Id, incident.Id));
+
         if (Can<IC2Service>(nameof(IC2Service.CallBackAsync)))
             foreach (var missed in cop.MissedCalls.Where(c => c.CalledBackAt is null))
                 items.Add(new(Function<IC2Service>(nameof(IC2Service.CallBackAsync)), "A 999 caller hung up waiting: call them back", missed.At,

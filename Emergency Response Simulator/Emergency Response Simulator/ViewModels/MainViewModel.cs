@@ -54,6 +54,7 @@ public partial class MainViewModel : ObservableObject
         Timeline = timeline;
         ZoneDrawing = new ZoneDrawingViewModel(c2, this);
         IncidentDetail = new IncidentDetailViewModel(this, c2);
+        Plume = new PlumeViewModel(this, c2, cop);
         LayerGroups = BuildLayerGroups();
         Workspaces = RoleWorkspaces.Choices();
         assessment.Attach(
@@ -123,7 +124,7 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     private void OnPermissionsChanged()
     {
-        foreach (var viewModel in new object[] { this, Command, CommsHub, Crews, Agencies, Ics, Iap, ZoneDrawing, IncidentDetail })
+        foreach (var viewModel in new object[] { this, Command, CommsHub, Crews, Agencies, Ics, Iap, ZoneDrawing, IncidentDetail, Plume })
             Permissions.Requery(viewModel);
         Ics.Requery();
         if (Permissions.Role is { } role && role != _workspaceRole)
@@ -195,6 +196,9 @@ public partial class MainViewModel : ObservableObject
     public TimelineViewModel Timeline { get; }
 
     public IncidentDetailViewModel IncidentDetail { get; }
+
+    /// <summary>The selected incident's plume projection (Phase 13).</summary>
+    public PlumeViewModel Plume { get; }
 
     public UnitDetailViewModel UnitDetail { get; }
 
@@ -301,6 +305,7 @@ public partial class MainViewModel : ObservableObject
                 new(MapLayerKeys.SearchZones, "Search areas & cordons", true),
                 new(MapLayerKeys.PerimeterZones, "Incident perimeters", true),
                 new(MapLayerKeys.Jurisdictions, "Jurisdictions & estates", true),
+                new(MapLayerKeys.PlumeProjections, "Projected plume (prediction)", true),
             ]),
         };
 
@@ -459,6 +464,7 @@ public partial class MainViewModel : ObservableObject
     {
         var incident = value is { } id ? _cop.FindIncident(id) : null;
         IncidentDetail.Load(incident, selectionChanged: true);
+        Plume.Load(incident);
         OnPropertyChanged(nameof(SelectedIncidentRow));
         ZoneDrawing.TargetChanged();
         if (incident is not null)
@@ -697,6 +703,7 @@ public partial class MainViewModel : ObservableObject
         RefreshWeather();
         RefreshHospitals();
         IncidentDetail.Load(SelectedIncidentId is { } selected ? _cop.FindIncident(selected) : null, selectionChanged: false);
+        Plume.Load(SelectedIncidentId is { } forPlume ? _cop.FindIncident(forPlume) : null);
         Command.Refresh();
         Ics.Load(SelectedIncidentId is { } forIcs ? _cop.FindIncident(forIcs) : null);
         Iap.Load(SelectedIncidentId is { } forIap ? _cop.FindIncident(forIap) : null);

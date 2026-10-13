@@ -79,7 +79,7 @@ public sealed partial class AarAnalyzer
             Metrics = metrics,
             Branches = branches,
             Outcomes = [SessionOutcome()],
-            Findings = [.. Findings(metrics, branches), .. HandoverFindings(), .. PoliticalFindings(), .. MediaFindings()],
+            Findings = [.. Findings(metrics, branches), .. HandoverFindings(), .. PoliticalFindings(), .. MediaFindings(), .. PlumeFindings()],
             Participants = Participants(),
             Instructor = _instructor,
             Notes = Notes(),
@@ -98,6 +98,9 @@ public sealed partial class AarAnalyzer
     {
         var payload = simEvent.Payload;
         var truth = simEvent.Visibility == EventVisibility.Truth;
+
+        // Plume projections and the zones that followed them (Phase 13); it picks out the events it needs itself.
+        TrackPlume(simEvent);
 
         // Bookkeeping the analysis needs whichever way the event went.
         switch (payload)
@@ -164,7 +167,7 @@ public sealed partial class AarAnalyzer
     /// <summary>Something the trainee did (through C2 or the IAP builder), as opposed to the world or the engine.</summary>
     private static bool IsDecision(SimEvent simEvent) =>
         simEvent.Visibility == EventVisibility.Perceived && simEvent.Source is EventSources.C2 or EventSources.Iap
-        && simEvent.Payload is not (AlertAcknowledged or IapDraftSaved or IapDraftCreated);
+        && simEvent.Payload is not (AlertAcknowledged or IapDraftSaved or IapDraftCreated or AlertRaised); // a projection's alerts follow from it
 
     private bool OwnUnit(Guid unitId) =>
         !(_unitAgency.GetValueOrDefault(unitId) is { } agency && _aiAgencies.Contains(agency));
@@ -362,6 +365,7 @@ public sealed partial class AarAnalyzer
             IncidentCreated or IncidentUpdated or IncidentCommanderAssigned => "Incident",
             UnitDispatched or UnitDispatchCancelled or UnitStatusChanged or ResourceRequested => "Dispatch",
             ZoneDeclared or ZoneLifted => "Zone",
+            PlumeProjected => "Hazard",
             OrderIssued or OrderClosed or ReadBackConfirmed => "Order",
             ApprovalDecided or NotificationSent => "Liaison",
             ReportAssessed or ReportLinked => "Assessment",

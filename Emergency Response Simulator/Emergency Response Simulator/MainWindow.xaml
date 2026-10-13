@@ -577,6 +577,81 @@
                                     <TextBlock Style="{StaticResource EmptyHint}" FontSize="11" Margin="0,0,0,12"
                                                Text="Command posts, staging areas, evacuation zones: use Draw zone on the map; they attach to this incident." />
 
+                                    <!-- Plume projection (Phase 13): the dispersion model run on what command knows. -->
+                                    <StackPanel DataContext="{Binding DataContext.Plume, RelativeSource={RelativeSource AncestorType=Window}}" Margin="0,0,0,12">
+                                        <TextBlock Text="PLUME PROJECTION" Style="{StaticResource PanelHeader}" />
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <ComboBox ItemsSource="{Binding Substances}" Text="{Binding Substance, UpdateSourceTrigger=PropertyChanged}" IsEditable="True"
+                                                      ToolTip="What has been released, as far as you know. Type anything; an unknown material is treated as a toxic gas." />
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="6,0,0,0">
+                                                <TextBox Text="{Binding Rate, UpdateSourceTrigger=PropertyChanged}" Width="44" ToolTip="Release rate, kg/s (your best estimate)" />
+                                                <TextBlock Text="kg/s" Style="{StaticResource FieldLabel}" Margin="3,0,6,0" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                                <TextBox Text="{Binding Duration, UpdateSourceTrigger=PropertyChanged}" Width="36" ToolTip="How long it is expected to go on releasing, minutes" />
+                                                <TextBlock Text="min" Style="{StaticResource FieldLabel}" Margin="3,0,0,0" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <Button Content="☁ Project plume" Command="{Binding ProjectCommand}" HorizontalAlignment="Left" Margin="0,0,0,4"
+                                                ToolTip="Runs the dispersion model with the reported wind; the result goes on the map for everyone, and anything sensitive inside raises an alert" />
+                                        <StackPanel Visibility="{Binding HasProjection, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Inputs}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,0,0,4" />
+                                            <ItemsControl ItemsSource="{Binding Zones}" Margin="0,0,0,4">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="{x:Type vm:PlumeZoneRow}">
+                                                        <Grid Margin="0,1">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="70" />
+                                                                <ColumnDefinition Width="64" />
+                                                                <ColumnDefinition Width="90" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock x:Name="Level" Text="{Binding Name}" FontWeight="SemiBold" />
+                                                            <TextBlock Grid.Column="1" Text="{Binding Reach}" TextAlignment="Right" Margin="0,0,6,0" />
+                                                            <TextBlock Grid.Column="2" Text="{Binding Threshold}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                            <TextBlock Grid.Column="3" Text="{Binding Inside}" FontSize="11" TextWrapping="Wrap" />
+                                                        </Grid>
+                                                        <DataTemplate.Triggers>
+                                                            <DataTrigger Binding="{Binding Level}" Value="high">
+                                                                <Setter TargetName="Level" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Level}" Value="moderate">
+                                                                <Setter TargetName="Level" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                            </DataTrigger>
+                                                        </DataTemplate.Triggers>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <TextBlock x:Name="Impact" Text="{Binding ImpactSummary}" TextWrapping="Wrap" FontSize="11" Margin="0,0,0,2">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasPressing}" Value="True">
+                                                                <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                                <Setter Property="FontWeight" Value="SemiBold" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding Advisory}" TextWrapping="Wrap" FontSize="11" FontStyle="Italic" Margin="0,0,0,4" />
+                                            <StackPanel Orientation="Horizontal">
+                                                <Button Content="Evacuate moderate zone" Command="{Binding EvacuateCommand}" Padding="6,1" FontSize="11"
+                                                        ToolTip="Declares an evacuation zone over the projected moderate (and high) zone" />
+                                                <Button Content="Shelter low zone" Command="{Binding ShelterCommand}" Padding="6,1" FontSize="11" Margin="4,0,0,0"
+                                                        ToolTip="Declares a shelter-in-place zone over the projected low zone" />
+                                            </StackPanel>
+                                            <TextBlock Style="{StaticResource EmptyHint}" FontSize="10" Margin="0,4,0,0"
+                                                       Text="A prediction from the reported wind and your release estimate, not a measurement. It re-runs when the reported wind shifts." />
+                                        </StackPanel>
+                                    </StackPanel>
+
                                     <DockPanel Margin="0,0,0,4">
                                         <Button DockPanel.Dock="Right" Content="↻" Padding="6,0" Margin="0" Command="{Binding RankCommand}"
                                                 ToolTip="Recalculate road ETAs" />

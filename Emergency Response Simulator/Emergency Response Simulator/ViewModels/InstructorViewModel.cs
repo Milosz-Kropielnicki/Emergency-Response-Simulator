@@ -6,6 +6,7 @@ using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Model;
 using Emergency_Response_Simulator.Simulation.Engine;
+using Emergency_Response_Simulator.Simulation.Hazards;
 using Emergency_Response_Simulator.Simulation.Routing;
 using Emergency_Response_Simulator.Simulation.State;
 using Emergency_Response_Simulator.Simulation.Systems;
@@ -86,7 +87,8 @@ public partial class InstructorViewModel : ObservableObject
             {
                 HazardKind.Fire => $"{hazard.Intensity:N0} m² burning, {hazard.AreaSquareMeters:N0} m² affected",
                 HazardKind.Flood => $"up to {hazard.Intensity * 100:F0} cm, {hazard.AreaSquareMeters / 10_000:0.#} ha",
-                _ => $"{hazard.Rate:0.0#} kg/s, {hazard.AreaSquareMeters / 10_000:0.#} ha above the lowest threshold",
+                _ => $"{hazard.Rate:0.0#} kg/s, {hazard.AreaSquareMeters / 10_000:0.#} ha above the lowest threshold" +
+                     (hazard.Model is { } model ? $" ({(model == PlumeModel.InEngineModel ? "in-engine fallback model" : model)})" : ""),
             };
             yield return new WorldFact(EventDescriber.Humanize(hazard.Kind), $"{hazard.Description}: {size}");
         }

@@ -46,6 +46,7 @@ public sealed class PerceivedState : ICopService
     private readonly List<PublicStatement> _statements = [];
     private readonly Dictionary<Guid, MediaEnquiry> _enquiries = [];
     private readonly Dictionary<Guid, PoliticalCall> _politicalCalls = [];
+    private readonly Dictionary<Guid, PlumeProjection> _projections = [];
     private readonly Dictionary<Guid, Participant> _participants = [];
 
     /// <summary>The comms log keeps this many messages; older ones are in the event stream.</summary>
@@ -143,6 +144,11 @@ public sealed class PerceivedState : ICopService
     public IReadOnlyList<PoliticalCall> PoliticalCalls
     {
         get { lock (_lock) return _politicalCalls.Values.OrderBy(c => c.ReceivedAt).ToList(); }
+    }
+
+    public IReadOnlyList<PlumeProjection> PlumeProjections
+    {
+        get { lock (_lock) return _projections.Values.OrderByDescending(p => p.RunAt).ToList(); }
     }
 
     public IReadOnlyList<MediaEnquiry> MediaEnquiries
@@ -589,6 +595,18 @@ public sealed class PerceivedState : ICopService
                 if (_eoc.Requested == e.Level) _eoc.Requested = null;
                 _eoc.Seats.RemoveAll(s => s.From > e.Level);
                 if (EocLevels.SitrepInterval(e.Level) is null) _eoc.SitrepDue = null;
+                break;
+
+            // A plume projection command ran (Phase 13); it replaces the one it was run from.
+            case PlumeProjected e:
+                if (e.Supersedes is { } replaced && _projections.TryGetValue(replaced, out var old)) old.SupersededAt = at;
+                _projections[e.ProjectionId] = new PlumeProjection
+                {
+                    Id = e.ProjectionId, IncidentId = e.IncidentId, ReleaseLocation = e.ReleaseLocation, Substance = e.Substance,
+                    MaterialClass = e.MaterialClass, ReleaseRateKgPerSecond = e.ReleaseRateKgPerSecond, DurationMinutes = e.DurationMinutes,
+                    WindFromDegrees = e.WindFromDegrees, WindSpeedMps = e.WindSpeedMps, StabilityClass = e.StabilityClass,
+                    Zones = e.Zones, Impacts = e.Impacts, Model = e.Model, Advisory = e.Advisory, Automatic = e.Automatic, RunAt = at,
+                };
                 break;
 
             case SitrepRequested e:

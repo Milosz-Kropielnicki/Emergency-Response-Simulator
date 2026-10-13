@@ -24,6 +24,9 @@ public static class MapLayerKeys
     // Multi-agency (Phase 10): city, county, regional and national areas, and estates needing their authority's consent.
     public const string Jurisdictions = "zones:jurisdictions";
 
+    // Plume & hazard models (Phase 13): command's projections, predictions rather than declared zones.
+    public const string PlumeProjections = "zones:plume";
+
     // Instructor only: ground truth the trainee never sees (Design Document §10.1, §21).
     public const string TruthHazards = "truth:hazards";
     public const string TruthPeople = "truth:people";

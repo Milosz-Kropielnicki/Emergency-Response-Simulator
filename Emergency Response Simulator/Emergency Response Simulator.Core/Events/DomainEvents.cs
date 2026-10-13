@@ -157,6 +157,9 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(HazardStarted), nameof(HazardStarted))]
 [JsonDerivedType(typeof(HazardFootprintChanged), nameof(HazardFootprintChanged))]
 [JsonDerivedType(typeof(HazardRateChanged), nameof(HazardRateChanged))]
+// Plume & hazard models (Phase 13)
+[JsonDerivedType(typeof(PlumePredicted), nameof(PlumePredicted))]
+[JsonDerivedType(typeof(PlumeProjected), nameof(PlumeProjected))]
 [JsonDerivedType(typeof(HazardEnded), nameof(HazardEnded))]
 [JsonDerivedType(typeof(HazardSitePlaced), nameof(HazardSitePlaced))]
 [JsonDerivedType(typeof(CasualtyInjured), nameof(CasualtyInjured))]
@@ -921,3 +924,58 @@ public sealed record PublicConfidenceChanged(int Confidence, int Change, string 
 /// live (a visit inside a live cordon puts a VIP party where the crews need to work).
 /// </summary>
 public sealed record PoliticalVisitDecided(Guid ApprovalId, Guid? IncidentId, string Visitor, bool Approved, bool HazardLive) : DomainEvent;
+
+// ---- Plume & hazard models (Phase 13) ----
+
+/// <summary>
+/// Ground truth: the dispersion model's picture of where the real cloud is now, from the true weather and the true
+/// release. Recorded so a replay rebuilds the same cloud without calling the model service again.
+/// </summary>
+/// <param name="Model">Which model produced it, e.g. "gaussian-plume-v1" or the in-engine fallback.</param>
+/// <param name="Reason">Why it was run now: the first prediction, a wind shift, a revised release rate, or the interval.</param>
+public sealed record PlumePredicted(
+    Guid HazardId,
+    string Model,
+    string Substance,
+    string MaterialClass,
+    IReadOnlyList<Contracts.PlumeZone> Zones,
+    double FrontMeters,
+    double RearMeters,
+    double EffectiveHeightMeters,
+    bool DenseGas,
+    string StabilityClass,
+    string Advisory,
+    string Reason) : DomainEvent;
+
+/// <summary>
+/// Command ran a plume projection on what it knows: the reported release and the reported weather, which may not be
+/// the truth. Perceived, so it belongs on the COP and in the review as the picture command was working from.
+/// </summary>
+/// <param name="Impacts">What the zones cover on the ground: schools, hospitals, homes (Phase 13's GIS overlay).</param>
+/// <param name="Automatic">Re-run by the simulator because the reported wind or release rate moved, rather than asked for.</param>
+/// <param name="Supersedes">The projection this replaces, if any.</param>
+public sealed record PlumeProjected(
+    Guid ProjectionId,
+    Guid? IncidentId,
+    GeoPoint ReleaseLocation,
+    string Substance,
+    string MaterialClass,
+    double ReleaseRateKgPerSecond,
+    double DurationMinutes,
+    double WindFromDegrees,
+    double WindSpeedMps,
+    string StabilityClass,
+    IReadOnlyList<Contracts.PlumeZone> Zones,
+    IReadOnlyList<PlumeImpact> Impacts,
+    string Model,
+    string Advisory,
+    bool Automatic = false,
+    Guid? Supersedes = null) : DomainEvent;
+
+/// <summary>
+/// What one zone of a projection covers on the ground (Phase 13). Named places are listed; homes are only counted,
+/// because a street of them is a number, not a list.
+/// </summary>
+/// <param name="Kind">What they are, for the message: "School", "Hospital", "Home"…</param>
+/// <param name="Names">Up to a handful of names, for the alert and the panel; empty when they have none.</param>
+public sealed record PlumeImpact(string Level, string LayerKey, string Kind, int Count, IReadOnlyList<string> Names);

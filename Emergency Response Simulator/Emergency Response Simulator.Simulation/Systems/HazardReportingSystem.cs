@@ -198,24 +198,63 @@ public sealed class HazardReportingSystem(IRoutingService? routing = null) : ISi
                 var exposure = plume.ExposureAt(unit.Location);
                 if (exposure.Level == HazardLevel.None) continue;
 
+                // What a crew notices depends on what it is (Phase 13). A biological aerosol is invisible and odourless:
+                // nobody knows they are in it unless a hazmat crew's detector picks it up.
+                var substance = plume.Substance;
+                if (substance.IsBiological && unit.Type != UnitType.Hazmat) continue;
+
                 var key = (unit.Id, hazard.Id);
                 var previous = _plumeReports.GetValueOrDefault(key);
                 if (previous.At != default && exposure.Level <= previous.Level && context.SimTime - previous.At < PlumeReportInterval) continue;
                 _plumeReports[key] = (context.SimTime, exposure.Level);
 
-                var where = Near(unit.Location);
-                // Crews don't know what it is from the smell alone.
-                var smell = plume.Substance == Substance.Chlorine ? "a strong bleach-like smell, possibly chlorine" : "a strong chemical smell";
-                var claim = exposure.Level switch
-                {
-                    HazardLevel.High => $"{unit.Callsign}: crew overcome by fumes{where}, coughing and struggling to breathe. Withdrawing now.",
-                    HazardLevel.Moderate => $"{unit.Callsign}: crew have stinging eyes and throats{where}. Withdrawing upwind.",
-                    _ => $"{unit.Callsign}: {smell}{where}.",
-                };
+                var claim = Sensed(unit.Callsign, substance, exposure, Near(unit.Location));
                 Report(context, unit, claim, exposure.Level == HazardLevel.Low ? Confidence.Medium : Confidence.High,
                     VerificationStatus.Reported);
             }
         }
+    }
+
+    /// <summary>
+    /// What a crew in the cloud says, by what it is in (Phase 13): an irritant gas they smell and then feel; smoke they
+    /// see; radioactive material only their dosimeters notice; a biological agent only a detector does.
+    /// </summary>
+    public static string Sensed(string callsign, Substance substance, HazardExposure exposure, string where)
+    {
+        if (substance.IsRadiological)
+        {
+            var dose = substance.DoseRate(exposure.Value) ?? 0;
+            return exposure.Level switch
+            {
+                HazardLevel.High => $"{callsign}: dosimeters alarming{where}, reading over {dose:0.#} mSv/h. Withdrawing immediately; crew to be surveyed.",
+                HazardLevel.Moderate => $"{callsign}: dosimeters reading about {dose:0.#} mSv/h{where}. Withdrawing; we need a radiation protection adviser.",
+                _ => $"{callsign}: personal dosimeters showing an elevated dose rate{where}, about {dose:0.##} mSv/h. Nothing to see or smell.",
+            };
+        }
+        if (substance.IsBiological)
+            return exposure.Level switch
+            {
+                HazardLevel.Low => $"{callsign}: detector alarm{where}, possible biological agent. No symptoms. Requesting confirmation sampling.",
+                _ => $"{callsign}: detector showing a strong positive for a biological agent{where}. Crew in respiratory protection, withdrawing for decontamination.",
+            };
+        if (substance.IsSmoke)
+            return exposure.Level switch
+            {
+                HazardLevel.High => $"{callsign}: zero visibility in thick smoke{where}. Crew on breathing apparatus, pulling back.",
+                HazardLevel.Moderate => $"{callsign}: heavy smoke{where}, crew coughing. Moving upwind.",
+                _ => $"{callsign}: smoke drifting through{where}, visibility reduced.",
+            };
+
+        // An irritant or toxic gas. Crews don't know what it is from the smell alone.
+        var smell = substance == Substance.Chlorine ? "a strong bleach-like smell, possibly chlorine"
+            : substance == Substance.HydrogenSulphide ? "a rotten-egg smell"
+            : "a strong chemical smell";
+        return exposure.Level switch
+        {
+            HazardLevel.High => $"{callsign}: crew overcome by fumes{where}, coughing and struggling to breathe. Withdrawing now.",
+            HazardLevel.Moderate => $"{callsign}: crew have stinging eyes and throats{where}. Withdrawing upwind.",
+            _ => $"{callsign}: {smell}{where}.",
+        };
     }
 
     // ---- Flood ----
