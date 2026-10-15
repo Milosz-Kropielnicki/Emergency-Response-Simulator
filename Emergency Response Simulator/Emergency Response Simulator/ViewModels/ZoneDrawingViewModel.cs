@@ -38,6 +38,7 @@ public partial class ZoneDrawingViewModel(IC2Service c2, MainViewModel owner) : 
         new(ZoneType.RoadClosure, "Road closure (line)", ZoneDrawMode.Line),
         new(ZoneType.CommandPost, "Command post (click)", ZoneDrawMode.Point, 25),
         new(ZoneType.StagingArea, "Staging area (click)", ZoneDrawMode.Point, 40),
+        new(ZoneType.BaseCamp, "Base camp (click)", ZoneDrawMode.Point, 60),
         new(ZoneType.LandingZone, "Landing zone (click)", ZoneDrawMode.Point, 30),
     ];
 

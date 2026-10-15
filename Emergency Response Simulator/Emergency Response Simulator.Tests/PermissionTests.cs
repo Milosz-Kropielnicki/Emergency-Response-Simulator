@@ -145,6 +145,7 @@ public class PermissionTests
             : underlying == typeof(bool) ? false
             : underlying == typeof(int) ? 1
             : underlying == typeof(double) ? 1.0
+            : underlying == typeof(decimal) ? 1m // a contract's value (Phase 15)
             : null;
         return JsonSerializer.SerializeToElement(value, type, WireJson.Options);
     }

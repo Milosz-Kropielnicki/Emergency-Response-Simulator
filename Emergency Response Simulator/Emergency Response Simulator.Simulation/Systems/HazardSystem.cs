@@ -139,12 +139,13 @@ public sealed class HazardSystem(IHazardTerrain? terrain = null) : ISimulationSy
 
     /// <summary>
     /// Fire crews working at a scene, with how much fire each can knock down: less for a tired or short-handed crew, one
-    /// working from outside after an evacuation, or one handing over (Phase 8).
+    /// working from outside after an evacuation, or one handing over (Phase 8); one out of fuel does none, and one
+    /// without foam on a fuel or chemical fire, or without suits on a release, does far less (Phase 15).
     /// </summary>
     private static List<Suppression> Suppression(WorldState world, DateTimeOffset now) =>
         world.Units.Values
-            .Where(u => u.Phase == ResponsePhase.Operating && !u.BrokenDown)
-            .Select(u => (Unit: u, Rate: SuppressionRate(u.Type) * CrewFactors.Effectiveness(u, now)))
+            .Where(u => u.Phase == ResponsePhase.Operating && !u.Disabled)
+            .Select(u => (Unit: u, Rate: SuppressionRate(u.Type) * CrewFactors.Effectiveness(u, now) * SupplyFactors.Suppression(world, u)))
             .Where(x => x.Rate > 0)
             .Select(x => new Suppression(x.Unit.Location, HoseReachMeters, x.Rate))
             .ToList();

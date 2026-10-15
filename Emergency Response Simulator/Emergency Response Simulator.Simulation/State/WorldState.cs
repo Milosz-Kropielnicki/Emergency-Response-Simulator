@@ -113,6 +113,9 @@ public sealed class WorldState
     /// <summary>The public side of the response (Phase 14): rumours, volunteers, vulnerable people, families, the press.</summary>
     public WorldPublic Public { get; } = new();
 
+    /// <summary>Supplies, staging, repairs, contracts and costs (Phase 15).</summary>
+    public WorldLogistics Logistics { get; } = new();
+
     /// <summary>
     /// Roles people play instead of the simulation, by role key (Phase 11 M4–M5): the instructor (null) or a participant
     /// (their id, for an agency they run). The systems that play those roles leave their decisions to them.
@@ -168,6 +171,7 @@ public sealed class WorldState
         Interagency.Apply(simEvent.Payload, simEvent.SimTime);
         Public.Apply(simEvent.Payload, simEvent.SimTime,
             callId => PoliticalCalls.TryGetValue(callId, out var call) && call.Call.Office == PoliticalOffice.CommunityLeader ? call.Call.ZoneId : null);
+        Logistics.Apply(simEvent.Payload, simEvent.SimTime);
 
         switch (simEvent.Payload)
         {
@@ -555,6 +559,14 @@ public sealed class WorldState
                 unit.PhaseStartedAt = simEvent.SimTime;
                 break;
 
+            // Phase 15: to a staging area, driven like a dispatch; the crew checks in and waits there (UnitResponseSystem).
+            case UnitStaged e when Units.TryGetValue(e.UnitId, out var staging) && Logistics.Facilities.TryGetValue(e.ZoneId, out var area):
+                ReportedIncidentLocations[e.ZoneId] = area.Location;
+                staging.OrderedIncidentId = e.ZoneId;
+                staging.Phase = ResponsePhase.TurningOut;
+                staging.PhaseStartedAt = simEvent.SimTime;
+                break;
+
             case UnitDispatchCancelled e when Units.TryGetValue(e.UnitId, out var unit):
                 if (Commands.TryGetValue(e.IncidentId, out var fromCommand))
                     fromCommand.Apply(e);
@@ -718,6 +730,23 @@ public sealed class WorldUnit
 
     /// <summary>The unit keeps working, but nothing it says reaches command.</summary>
     public bool RadioFailed { get; set; }
+
+    // ---- Phase 15: fuel, wear and repair ----
+
+    /// <summary>Fuel in the tank, 0–1. Only drawn down when the logistics model runs.</summary>
+    public double Fuel { get; set; } = 1;
+
+    /// <summary>The tank is empty: the unit can't drive or pump until the bowser reaches it.</summary>
+    public bool OutOfFuel { get; set; }
+
+    /// <summary>Wear, 0 (just serviced) to 1: past about 0.75 the crew notices, and it may break down.</summary>
+    public double Wear { get; set; }
+
+    /// <summary>With a mechanic, being serviced, or in the workshop.</summary>
+    public bool UnderRepair { get; set; }
+
+    /// <summary>Can't move or work: broken down, with the mechanic, or out of fuel.</summary>
+    public bool Disabled => BrokenDown || UnderRepair || OutOfFuel;
 
     /// <summary>The people riding it, as they really are (Phase 8). Empty when no crew model is running.</summary>
     public WorldCrew Crew { get; } = new();

@@ -79,13 +79,18 @@ public sealed partial class AarAnalyzer
             Metrics = metrics,
             Branches = branches,
             Outcomes = [SessionOutcome()],
-            Findings = [.. Findings(metrics, branches), .. HandoverFindings(), .. PoliticalFindings(), .. MediaFindings(), .. PlumeFindings(), .. PublicFindings()],
+            Findings =
+            [
+                .. Findings(metrics, branches), .. HandoverFindings(), .. PoliticalFindings(), .. MediaFindings(), .. PlumeFindings(), .. PublicFindings(),
+                .. LogisticsFindings(),
+            ],
             Participants = Participants(),
             Instructor = _instructor,
             Notes = Notes(),
             Competencies = Competencies(),
             Liabilities = Liabilities(End),
             Documentation = Documentation(),
+            Logistics = LogisticsSummary(),
         };
     }
 
@@ -104,6 +109,7 @@ public sealed partial class AarAnalyzer
         // Plume projections and the zones that followed them (Phase 13); it picks out the events it needs itself.
         TrackPlume(simEvent);
         TrackPublic(simEvent); // Phase 14: the public, the media and the law
+        TrackLogistics(simEvent); // Phase 15: supplies, the fleet and the money
 
         // Bookkeeping the analysis needs whichever way the event went.
         switch (payload)
@@ -346,6 +352,11 @@ public sealed partial class AarAnalyzer
                 rating = Rating.Poor;
                 note = $"{e.TargetName} has nobody {Qualifications.Name(needed.Qualification).ToLowerInvariant()} qualified (needs {needed.Members}).";
                 break;
+
+            // ---- Logistics (Phase 15): timed from the warning that called for it ----
+            case SuppliesOrdered or RepairRequested or UnitServiceOrdered when LogisticsTrigger(simEvent.Payload) is { } prompt:
+                From(prompt.At, prompt.What, prompt.Good, prompt.Fair);
+                break;
         }
 
         return new AarDecision(simEvent.Sequence, at, category, text, trigger, taken, Known(at), _truth.Describe(at), rating, note);
@@ -371,6 +382,7 @@ public sealed partial class AarAnalyzer
             ZoneDeclared or ZoneLifted => "Zone",
             PlumeProjected => "Hazard",
             PressConferenceHeld or RumourRebutted or AssistedEvacuationRequested or VolunteersManaged or FamilyAssistanceCentreOpened => "Public",
+            SuppliesOrdered or UnitStaged or UnitServiceOrdered or RepairRequested or ContractAwarded or ReimbursementClaimSubmitted => "Logistics",
             OrderIssued or OrderClosed or ReadBackConfirmed => "Order",
             ApprovalDecided or NotificationSent => "Liaison",
             ReportAssessed or ReportLinked => "Assessment",

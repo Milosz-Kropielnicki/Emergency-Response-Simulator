@@ -295,6 +295,7 @@ public static class MapStyles
             ZoneType.FireExclusion => (new Color(255, 70, 40), true),
             ZoneType.TrafficControl => (new Color(255, 180, 0), true),
             ZoneType.StagingArea => (new Color(0, 190, 190), false),
+            ZoneType.BaseCamp => (new Color(0, 150, 110), false),
             ZoneType.CommandPost => (new Color(30, 60, 160), false),
             ZoneType.LandingZone => (new Color(0, 220, 255), false),
             ZoneType.IncidentPerimeter => (new Color(255, 40, 40), true),
@@ -611,7 +612,7 @@ public static class MapStyles
         ZoneType.HotZone or ZoneType.WarmZone or ZoneType.ColdZone or ZoneType.FireExclusion
             or ZoneType.PlumeHigh or ZoneType.PlumeModerate or ZoneType.PlumeLow => MapLayerKeys.HazardZones,
         ZoneType.EvacuationZone or ZoneType.ShelterInPlace => MapLayerKeys.EvacuationZones,
-        ZoneType.StagingArea or ZoneType.CommandPost or ZoneType.LandingZone => MapLayerKeys.CommandZones,
+        ZoneType.StagingArea or ZoneType.BaseCamp or ZoneType.CommandPost or ZoneType.LandingZone => MapLayerKeys.CommandZones,
         ZoneType.RoadClosure or ZoneType.TrafficControl => MapLayerKeys.TrafficZones,
         ZoneType.SearchArea or ZoneType.PoliceCordon => MapLayerKeys.SearchZones,
         _ => MapLayerKeys.PerimeterZones,

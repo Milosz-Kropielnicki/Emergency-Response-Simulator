@@ -148,7 +148,8 @@ public class ServerClientTests
             Assert.Equal(remotable.Count, callable.Count);
             Assert.All(remotable, m => Assert.Contains(m, callable));
         }
-        Assert.Equal(53, typeof(IC2Service).GetMethods().Length); // 47th: PredictPlumeAsync (Phase 13); 48–53: public, media & legal (Phase 14)
+        // 47th: PredictPlumeAsync (Phase 13); 48–53: public, media & legal (Phase 14); 54–59: logistics & finance (Phase 15)
+        Assert.Equal(59, typeof(IC2Service).GetMethods().Length);
         Assert.Contains(CommandDispatcher.Callable, c => c.Method.Name == nameof(IIapService.PullFromCopAsync));
         Assert.DoesNotContain(CommandDispatcher.Callable, c => c.Method.Name == nameof(IAarService.ReplayToAsync)); // runs on the client
 

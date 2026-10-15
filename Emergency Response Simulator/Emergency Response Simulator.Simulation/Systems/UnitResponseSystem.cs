@@ -51,9 +51,10 @@ public sealed class UnitResponseSystem(RoutingService? routing = null, LiveTraff
     {
         foreach (var unit in context.World.Units.Values)
         {
-            if (unit.BrokenDown)
+            if (unit.Disabled)
             {
-                Broken(context, unit);
+                if (unit.BrokenDown) Broken(context, unit);
+                else Stopped(context, unit); // with the mechanic, or out of fuel (Phase 15)
                 continue;
             }
 
@@ -264,7 +265,18 @@ public sealed class UnitResponseSystem(RoutingService? routing = null, LiveTraff
                 $"{unit.Callsign}: {unit.BreakdownFault}. Vehicle immobilised, request replacement.", Confidence.High,
                 VerificationStatus.Confirmed, unit.Location, 10, unit.Id));
             Report(context, unit, new UnitStatusChanged(unit.Id, UnitStatus.OutOfService));
+            // What fleet maintenance needs to know (Phase 15): whether a mechanic can fix it where it is.
+            Report(context, unit, new UnitDefectReported(unit.Id, unit.BreakdownFault ?? "breakdown", Immobilised: true,
+                Maintenance.FieldRepairable(unit.BreakdownFault)));
         }
+    }
+
+    /// <summary>A unit that can't move for now (with a mechanic, or out of fuel): it stays put and keeps its AVL heartbeat.</summary>
+    private static void Stopped(SimulationContext context, WorldUnit unit)
+    {
+        unit.SpeedKph = 0;
+        if (unit.OrderedIncidentId is not null && context.SimTime - unit.LastFixAt >= HeartbeatInterval)
+            Fix(context, unit, null);
     }
 
     private void Arrive(SimulationContext context, WorldUnit unit)
@@ -272,6 +284,16 @@ public sealed class UnitResponseSystem(RoutingService? routing = null, LiveTraff
         unit.Location = unit.Destination;
         unit.SpeedKph = 0;
         unit.Route = [];
+        // Sent to a staging area (Phase 15): the crew checks in and waits, available, for a job.
+        if (unit.OrderedIncidentId is { } zone && context.World.Logistics.Staged.GetValueOrDefault(unit.Id) == zone)
+        {
+            unit.Phase = ResponsePhase.Idle;
+            Fix(context, unit, TimeSpan.Zero);
+            Report(context, unit, new UnitArrivedAtStaging(unit.Id, zone));
+            Report(context, unit, new UnitStatusChanged(unit.Id, UnitStatus.Available));
+            unit.OrderedIncidentId = null;
+            return;
+        }
         if (unit.Phase == ResponsePhase.Transporting)
         {
             // MedicalSystem takes it from here: handover, then the crew clears.

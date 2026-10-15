@@ -234,6 +234,41 @@ public interface IC2Service
     /// <param name="aboutSequence">The recorded command it explains, if any.</param>
     Task<CommandResult> RecordDecisionAsync(string decision, string rationale, long? aboutSequence = null, CancellationToken cancellationToken = default);
 
+    // ---- Logistics & resource sustainment (Phase 15) ----
+
+    /// <summary>
+    /// Orders supplies for an incident from one tier of the supply chain: the council and local suppliers (quick, but
+    /// they run out), the regional level (more, slower, needs a justification) or national reserves (any quantity,
+    /// slowest, for a declared major emergency). Deliveries go to the incident's staging area or base camp.
+    /// </summary>
+    Task<CommandResult> OrderSuppliesAsync(Guid incidentId, SupplyKind kind, int quantity, SupplyTier tier, string? justification = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Sends an available unit to wait at a staging area, ready to commit, where it is refuelled and can be serviced.</summary>
+    Task<CommandResult> StageUnitAsync(Guid unitId, Guid zoneId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sends a worn unit for preventive servicing before it fails: out of service for a short while, then much less
+    /// likely to break down. Quicker at a staging area or base camp, where a mechanic is on hand.
+    /// </summary>
+    Task<CommandResult> ServiceUnitAsync(Guid unitId, CancellationToken cancellationToken = default);
+
+    /// <summary>Asks fleet maintenance to repair a broken-down unit: a mechanic to it (minor faults), or recovery to the workshop.</summary>
+    Task<CommandResult> RequestRepairAsync(Guid unitId, RepairKind kind, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lets a contract: catering, sanitation and fuel supply deliver to the incident on a schedule; plant hire brings an
+    /// excavator. Above the procurement threshold a direct award needs a written justification, or it can't be claimed.
+    /// </summary>
+    Task<CommandResult> AwardContractAsync(ContractKind kind, string vendor, string scope, decimal value, string? justification = null,
+        Guid? incidentId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Claims the eligible costs of a declared major emergency from central government: overtime, apparatus, mutual
+    /// aid, supplies, repairs and properly let contracts since the declaration. Straight time is not claimable.
+    /// </summary>
+    Task<CommandResult> SubmitReimbursementClaimAsync(CancellationToken cancellationToken = default);
+
     // ---- AI role players (Phase 11 M5) ----
 
     /// <summary>

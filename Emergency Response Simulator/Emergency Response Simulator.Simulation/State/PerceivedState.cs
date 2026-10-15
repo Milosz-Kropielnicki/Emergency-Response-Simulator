@@ -157,6 +157,13 @@ public sealed class PerceivedState : ICopService
         get { lock (_lock) return _public.Copy(); }
     }
 
+    public LogisticsSituation Logistics
+    {
+        get { lock (_lock) return _logistics.Copy(); }
+    }
+
+    private readonly LogisticsSituation _logistics = new();
+
     public IReadOnlyList<MediaEnquiry> MediaEnquiries
     {
         get { lock (_lock) return _enquiries.Values.OrderBy(m => m.ReceivedAt).ToList(); }
@@ -208,6 +215,7 @@ public sealed class PerceivedState : ICopService
     /// <param name="actorId">Who gave the command that recorded it, when someone did (for the decision log's author).</param>
     private void ApplyPayload(DomainEvent payload, DateTimeOffset at, Guid? actorId = null)
     {
+        ApplyLogistics(payload, at);
         switch (payload)
         {
             case AgencyRegistered e:
@@ -1210,6 +1218,129 @@ public sealed class PerceivedState : ICopService
         2 => Wgs84.Factory.CreateLineString(boundary.Select(p => p.ToPoint().Coordinate).ToArray()),
         _ => throw new ArgumentException("A zone boundary needs at least two points.", nameof(boundary)),
     };
+
+    /// <summary>Supplies, the fleet, contracts and costs (Phase 15), from the supply unit, crews, suppliers and finance.</summary>
+    private void ApplyLogistics(DomainEvent payload, DateTimeOffset at)
+    {
+        FleetRecord Fleet(Guid unitId) =>
+            _logistics.Fleet.TryGetValue(unitId, out var record) ? record : _logistics.Fleet[unitId] = new FleetRecord { UnitId = unitId };
+        IncidentSupplies Supplies(Guid incidentId) =>
+            _logistics.Incidents.TryGetValue(incidentId, out var supplies) ? supplies : _logistics.Incidents[incidentId] = new IncidentSupplies { IncidentId = incidentId };
+        SupplyStock Stock(Guid incidentId, SupplyKind kind)
+        {
+            var supplies = Supplies(incidentId);
+            var stock = supplies.Stock(kind);
+            if (stock is null) supplies.Stocks.Add(stock = new SupplyStock { Kind = kind });
+            return stock;
+        }
+
+        switch (payload)
+        {
+            case SupplyLevelsReported e:
+                var reported = Supplies(e.IncidentId);
+                (reported.Personnel, reported.ReportedAt) = (e.Personnel, at);
+                foreach (var level in e.Levels)
+                {
+                    var stock = Stock(e.IncidentId, level.Kind);
+                    (stock.OnHand, stock.PerHour) = (level.OnHand, level.PerHour);
+                    if (level.OnHand > 0) stock.OutSince = null;
+                    // Restocked without a delivery (an appliance arrived with some): no longer low once it would last half an hour.
+                    if (level.PerHour <= 0.01 ? level.OnHand > 0 : level.OnHand / level.PerHour >= 0.5) stock.LowSince = null;
+                }
+                break;
+            case SupplyShortage e:
+                var short_ = Stock(e.IncidentId, e.Kind);
+                short_.OnHand = e.OnHand;
+                short_.LowSince ??= at;
+                if (e.Exhausted) short_.OutSince ??= at;
+                break;
+            case SuppliesDelivered e:
+                var delivered = Stock(e.IncidentId, e.Kind);
+                delivered.OnHand += e.Quantity;
+                (delivered.LowSince, delivered.OutSince) = (null, null);
+                if (_logistics.Orders.FirstOrDefault(o => o.Id == e.SourceId) is { } order)
+                    (order.Status, order.DeliveredAt, order.Cost) = (SupplyOrderStatus.Delivered, at, e.Cost);
+                if (_logistics.Contracts.FirstOrDefault(c => c.Id == e.SourceId) is { } contract)
+                    contract.Deliveries++;
+                break;
+            case SuppliesOrdered e:
+                _logistics.Orders.Add(new SupplyOrder
+                {
+                    Id = e.OrderId, IncidentId = e.IncidentId, Kind = e.Kind, Quantity = e.Quantity, Tier = e.Tier, Justification = e.Justification,
+                    RequestedAt = at,
+                });
+                break;
+            case SupplyOrderDecided e when _logistics.Orders.FirstOrDefault(o => o.Id == e.OrderId) is { } decided:
+                decided.Status = e.Approved ? SupplyOrderStatus.Approved : SupplyOrderStatus.Declined;
+                (decided.Supplier, decided.ExpectedAt, decided.Reason) = (e.Supplier, e.ExpectedAt, e.Reason);
+                decided.Granted = e.Approved && e.Quantity != decided.Quantity ? e.Quantity : null;
+                break;
+            case SupplyDeliveryDelayed e when _logistics.Orders.FirstOrDefault(o => o.Id == e.OrderId) is { } late:
+                (late.ExpectedAt, late.Reason) = (e.ExpectedAt, e.Reason);
+                break;
+
+            case UnitFuelReported e:
+                (Fleet(e.UnitId).Fuel, Fleet(e.UnitId).FuelReportedAt) = (e.Level, at);
+                break;
+            case UnitDefectReported e:
+                var defective = Fleet(e.UnitId);
+                (defective.Defect, defective.DefectReportedAt, defective.Immobilised, defective.FieldRepairable) =
+                    (e.Defect, at, e.Immobilised, e.FieldRepairable);
+                break;
+            case UnitServiceOrdered e:
+                Fleet(e.UnitId).Repair = RepairKind.Service;
+                break;
+            case RepairRequested e:
+                Fleet(e.UnitId).Repair = e.Kind;
+                break;
+            case RepairScheduled e:
+                var repairing = Fleet(e.UnitId);
+                (repairing.Repair, repairing.RepairExpectedAt, repairing.RepairProvider) = (e.Kind, e.ExpectedAt, e.Provider);
+                break;
+            case UnitRepaired e:
+                var repaired = Fleet(e.UnitId);
+                (repaired.Repair, repaired.RepairExpectedAt, repaired.RepairedAt) = (null, null, at);
+                (repaired.Defect, repaired.DefectReportedAt, repaired.Immobilised, repaired.FieldRepairable) = (null, null, false, false);
+                break;
+            case UnitStaged e:
+                (Fleet(e.UnitId).StagingZoneId, Fleet(e.UnitId).StagedAt) = (e.ZoneId, null);
+                break;
+            case UnitArrivedAtStaging e:
+                (Fleet(e.UnitId).StagingZoneId, Fleet(e.UnitId).StagedAt) = (e.ZoneId, at);
+                break;
+            case UnitDispatched e when _logistics.Fleet.TryGetValue(e.UnitId, out var leaving):
+                (leaving.StagingZoneId, leaving.StagedAt) = (null, null);
+                break;
+            case ZoneLifted e:
+                foreach (var record in _logistics.Fleet.Values.Where(f => f.StagingZoneId == e.ZoneId))
+                    (record.StagingZoneId, record.StagedAt) = (null, null);
+                break;
+
+            case ContractAwarded e:
+                _logistics.Contracts.Add(new LogisticsContract
+                {
+                    Id = e.ContractId, IncidentId = e.IncidentId, Kind = e.Kind, Vendor = e.Vendor, Scope = e.Scope, Value = e.Value,
+                    Justification = e.Justification, AwardedAt = at,
+                });
+                break;
+            case CostsReported e:
+                _logistics.Costs.Clear();
+                _logistics.Costs.AddRange(e.Lines);
+                (_logistics.TotalCost, _logistics.Reimbursable, _logistics.CostsReportedAt) = (e.Total, e.Reimbursable, at);
+                break;
+            case ReimbursementClaimSubmitted e:
+                _logistics.Claims.Add(new ReimbursementClaim { Id = e.ClaimId, Amount = e.Amount, SubmittedAt = at });
+                _logistics.Reimbursable = Math.Max(0, _logistics.Reimbursable - e.Amount);
+                break;
+            case ReimbursementDecided e when _logistics.Claims.FirstOrDefault(c => c.Id == e.ClaimId) is { } claim:
+                (claim.Approved, claim.DecidedAt) = (e.Approved, at);
+                claim.Disallowed.AddRange(e.Disallowed);
+                break;
+            case EocLevelReached { Level: >= EocLevel.Partial }:
+                _logistics.MajorEmergencySince ??= at;
+                break;
+        }
+    }
 
     private IReadOnlyList<T> Snapshot<T>(Dictionary<Guid, T> source)
     {

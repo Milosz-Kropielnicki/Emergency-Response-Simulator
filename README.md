@@ -1100,6 +1100,101 @@ These callers sit outside the TD → council → minister ladder.
 
 **Tests:** `PublicPressureTests`.
 
+## Logistics & resource sustainment (Phase 15)
+
+Keeping the operation going once it has gone on a while. Supplies run out, appliances run dry and wear out, and every hour costs money. Work it from the new **LOGISTICS** tab. Logistics and Finance/Admin start on it; the IC, Operations and observers have it too.
+
+`Simulation:Logistics = false` turns it all off: nothing runs short, nothing wears out, nothing is costed. Every effect below is neutral without it, so sessions and tests that don't run it are unchanged. Only command's own units and the mutual aid it brought in are sustained and costed; other agencies look after theirs.
+
+### Supplies (`LogisticsSystem`)
+
+Eight supplies are stocked per incident: fuel, food, water, foam, medical supplies, batteries, PPE and sanitation.
+
+- **First stock:** an appliance arrives with what it carries, which becomes the incident's stock. An engine brings 200 L of foam, 6 suits, 2 kits and 4 battery packs; a hazmat unit 600 L and 20 suits; an ALS ambulance 6 kits. Every crew brings about 1 L of water and half a meal a head.
+- **What the work gets through:**
+
+  | Supply | Used by | Rate | Running out means |
+  |---|---|---|---|
+  | Water | everyone at the scene | 0.6 L/person-hour (1 L in suits; ×1.5 above 25 °C) | crews tire ×1.35 faster; rehab works at 0.6 |
+  | Food | everyone at the scene | 0.25 meals/person-hour | tire ×1.2 faster; rehab at 0.6 |
+  | Sanitation | everyone, after the first 90 minutes | 1 unit per 25 person-hours | tire ×1.1 faster |
+  | Foam | pumping fire appliances on an explosion or hazmat release | 8 L/min each | suppression ×0.35: water alone won't hold it |
+  | PPE | fire and ambulance crews working a release (an explosion 0.3, a fire 0.05) | 1 suit/person-hour | suppression ×0.5 on a release |
+  | Medical supplies | ambulance crews | a kit per casualty, two for a P1 | each treatment takes twice as long |
+  | Batteries | radio swaps | a pack per swap | flat handhelds stay flat |
+  | Fuel | the bowser (below) | | appliances run dry |
+
+- **The supply unit** reports levels every 5 minutes, warns when something has under **20 minutes** left at the current rate, and again when it runs out (with a resource-shortage alert).
+- **A base camp** (a new zone type) makes rehab work ×1.3 better while there is food and water.
+
+### Ordering: local, regional, national (`OrderSuppliesAsync`)
+
+The Irish tiers line up with local / state / federal.
+
+| Tier | Who | Decided in | Arrives after | Price | Limits |
+|---|---|---|---|---|---|
+| Local | Dublin City Council stores and local suppliers | 1 min | 25 min | list | Hold a fixed amount (e.g. 1,500 L of foam, 40 suits) and then run out |
+| Regional (state) | Regional Coordination Group | 4 min | 50 min | +15% | Needs a justification; up to five typical orders at a time |
+| National (federal) | National Emergency Coordination Group (NORA fuel, Civil Defence, Defence Forces) | 6 min | 90 min | +35% | Needs a justification; only in a declared major emergency |
+
+- A declared major emergency speeds decisions ×0.6.
+- **Somewhere to unload:** deliveries go to the incident's staging area or base camp. Without one, the driver waits at the cordon for 15 minutes and says so.
+- Mutual aid and specialist teams (Phase 10) are still ordered with `RequestResourcesAsync`; they are now costed (below).
+
+### Staging areas and base camps
+
+- **Base camp** joins the zone tool (one click).
+- **Staging** (`StageUnitAsync`, Operations, Logistics or a dispatcher) sends an available unit to wait at a staging area. It checks in there, available, close to the job. The fuel bowser fills staged units too, and servicing is quicker there.
+
+### Fuel
+
+- Tanks start the shift 45–100% full. Driving burns little (about 0.3% of a tank per km); **pumping burns a quarter of a tank an hour**.
+- Crews call a quarter tank, fuel critical at 10%, and running dry, when the pump stops and the appliance can't move.
+- **The bowser** goes round each incident that has fuel in stock, one appliance every 3 minutes, emptiest first. It fills anything below half working there, staged there, or dry within 600 m.
+
+### Wear, breakdowns and repair (`MaintenanceSystem`)
+
+- **Wear:** appliances start between just serviced and due a service, and wear with use. Pumping wears 0.15 an hour, driving a little.
+- **The warning:** past 0.75 the crew notices something ("pump overheating, pressure dropping", "aerial hydraulics leaking") and says so. It still works.
+- **Failure:** from then on it may break down any minute, about one in three per hour at 0.8 and near certain at 1. The crew diagnoses it two minutes later and says whether a mechanic can fix it where it stands (a tyre, a belt, an alternator) or it needs the workshop.
+- **Servicing** (`ServiceUnitAsync`, Logistics): 20 minutes out of service, at once at a station, staging area or base camp, otherwise once the mechanic arrives (20 min). Wear goes back to 0.2. €300.
+- **Repair** (`RequestRepairAsync`, Logistics):
+  - **Mechanic:** arrives in 20 minutes, 15–30 minutes' work, back in service where it stands. €450–750. Refused for a workshop fault.
+  - **Workshop:** recovery in 30 minutes, 90–150 minutes in the workshop, back at its station. €2,000–6,000.
+- The instructor's **unit breakdown** inject still works: "flat tyre" is field-repairable, "pump seal has failed" is not.
+
+### Costs and finance
+
+- **Accrued every tick** for each unit working for command (committed or staged), at standard rates:
+  - **Personnel:** €38 a person-hour, **overtime** ×1.5 past the end of the crew's shift.
+  - **Equipment:** an engine €120/h, ladder €160, hazmat €220, ALS ambulance €85, garda car €45.
+  - **Mutual aid:** what the provider will bill, the same rates plus 10% administration.
+  - **Supplies** at delivery, **repairs** when booked, **contracts** when let.
+- **The finance section** reports by category every 10 minutes.
+- **Contracts** (`AwardContractAsync`, Finance or Logistics):
+  - **Catering** delivers meals and water every 2 hours (first after 45 min). **Sanitation** 4 units every 2 hours (60 min). **Fuel supply** 1,500 L every 2 hours (40 min). **Plant hire** brings an excavator to the roster after 45 minutes. **Other** is just a cost.
+  - **Procurement:** above **€25,000** a direct award needs a written justification. Without one it is awarded, but it can't be claimed and the review lists it as a liability.
+- **Reimbursement** (`SubmitReimbursementClaimAsync`, Finance):
+  - Only for a **declared major emergency** (the EOC at partial activation or above).
+  - **Claimable:** overtime, apparatus, mutual aid, supplies, repairs and documented contracts, from the declaration on. Our own straight time is not.
+  - Central government decides after 10 minutes and says what it disallowed and why.
+
+### The desk and the review
+
+- **The desk:** low and exhausted supplies (unless an order or contract is coming), units dry or critical with no fuel at the scene, breakdowns to repair and warnings to service go to Logistics. Unclaimed eligible costs over €1,000 go to Finance.
+- **In the review**, under **Logistics & finance**:
+  - each **supply outage**, how long it lasted, when the supply unit warned and when it was ordered;
+  - each **breakdown**, whether the crew had warned of it, when a repair was asked for, and how long it was off the road;
+  - appliances that ran dry, worn ones serviced in time, the cost breakdown, and the claim.
+  - **Findings** on all of these, and on a long operation (25+ people for 2+ hours) with no base camp.
+  - **Decisions:** orders, repairs and servicing are rated against the warning that called for them.
+  - **Decision log:** contracts over the threshold and national orders count as significant decisions to log. An undocumented contract is a **Procurement** liability.
+  - **Exports:** the HTML and CSV exports include it all.
+
+**Injects:** **Delivery delayed** (the next delivery is held up) and **Local suppliers run out** (of a chosen supply).
+
+**Tests:** `LogisticsTests`.
+
 ## Local setup
 
 ### Prerequisites: PostgreSQL and PostGIS

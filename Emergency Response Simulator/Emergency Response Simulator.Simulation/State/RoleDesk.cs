@@ -125,6 +125,53 @@ public static class RoleDesk
                 After(since, TimeSpan.FromMinutes(15))));
         }
 
+        // ---- Phase 15: keeping the operation going ----
+        var logistics = cop.Logistics;
+        string Callsign(Guid id) => cop.FindUnit(id)?.Callsign ?? "A unit";
+        if (Can<IC2Service>(nameof(IC2Service.OrderSuppliesAsync)))
+            foreach (var (incidentId, supplies) in logistics.Incidents)
+                foreach (var stock in supplies.Stocks.Where(s => s.LowSince is not null || s.OutSince is not null))
+                {
+                    // Something already on its way answers the warning.
+                    if (logistics.Orders.Any(o => o.IncidentId == incidentId && o.Kind == stock.Kind && o.Open && o.RequestedAt >= (stock.LowSince ?? stock.OutSince)))
+                        continue;
+                    if (logistics.Contracts.Any(c => c.IncidentId == incidentId && Covers(c.Kind, stock.Kind))) continue;
+                    var outNow = stock.OutSince is not null;
+                    items.Add(new(Function<IC2Service>(nameof(IC2Service.OrderSuppliesAsync)),
+                        outNow ? $"{Supplies.Name(stock.Kind)} has run out{Incident(incidentId)}: order more"
+                               : $"{Supplies.Name(stock.Kind)} low{Incident(incidentId)}: {Supplies.Quantity(stock.Kind, stock.OnHand)}" +
+                                 (stock.HoursLeft is { } left ? $", about {Math.Max(1, (int)(left * 60))} min left" : "") + " — order more",
+                        (stock.OutSince ?? stock.LowSince)!.Value, outNow ? DeskUrgency.Urgent : DeskUrgency.Overdue, incidentId));
+                }
+
+        if (Can<IC2Service>(nameof(IC2Service.RequestRepairAsync)))
+            foreach (var broken in logistics.Fleet.Values.Where(f => f.Immobilised && !f.UnderRepair))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.RequestRepairAsync)),
+                    $"{Callsign(broken.UnitId)} broken down ({broken.Defect}): {(broken.FieldRepairable ? "send a mechanic" : "recover it to the workshop")}",
+                    broken.DefectReportedAt ?? now, After(broken.DefectReportedAt ?? now, Patience), EntityId: broken.UnitId));
+
+        if (Can<IC2Service>(nameof(IC2Service.ServiceUnitAsync)))
+            foreach (var worn in logistics.Fleet.Values.Where(f => f is { Defect: not null, Immobilised: false, UnderRepair: false }))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.ServiceUnitAsync)),
+                    $"{Callsign(worn.UnitId)}: {worn.Defect} — service it before it fails", worn.DefectReportedAt ?? now,
+                    After(worn.DefectReportedAt ?? now, TimeSpan.FromMinutes(10)), EntityId: worn.UnitId));
+
+        if (Can<IC2Service>(nameof(IC2Service.OrderSuppliesAsync)))
+            foreach (var dry in logistics.Fleet.Values.Where(f => f.Fuel is <= 0.1 && !f.UnderRepair))
+            {
+                var at = cop.FindUnit(dry.UnitId)?.AssignedIncidentId;
+                if (at is { } incidentId && logistics.Incidents.GetValueOrDefault(incidentId)?.Stock(SupplyKind.Fuel) is { OnHand: > 0 }) continue;
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.OrderSuppliesAsync)),
+                    dry.Dry ? $"{Callsign(dry.UnitId)} has run out of fuel: get a bowser to it" : $"{Callsign(dry.UnitId)} fuel critical, and no fuel at the scene",
+                    dry.FuelReportedAt ?? now, dry.Dry ? DeskUrgency.Urgent : DeskUrgency.Overdue, at, dry.UnitId));
+            }
+
+        if (Can<IC2Service>(nameof(IC2Service.SubmitReimbursementClaimAsync)) && logistics.MajorEmergencySince is { } declared
+            && logistics.Reimbursable >= 1_000m && !logistics.Claims.Any(c => c.Waiting)
+            && (logistics.Claims.Count == 0 || now - logistics.Claims.Max(c => c.SubmittedAt) >= TimeSpan.FromHours(1)))
+            items.Add(new(Function<IC2Service>(nameof(IC2Service.SubmitReimbursementClaimAsync)),
+                $"{CostRates.Money(logistics.Reimbursable)} of eligible costs not yet claimed from central government", declared, DeskUrgency.Routine));
+
         if (Can<IC2Service>(nameof(IC2Service.AnswerPoliticalCallAsync)))
             foreach (var call in cop.PoliticalCalls.Where(c => c.Waiting))
                 items.Add(new(Function<IC2Service>(nameof(IC2Service.AnswerPoliticalCallAsync)), $"Call back {call.Caller} (for the {call.To})",
@@ -153,4 +200,13 @@ public static class RoleDesk
 
         return [.. items.OrderByDescending(i => i.Urgency).ThenBy(i => i.Since)];
     }
+
+    /// <summary>Whether a standing contract keeps an incident supplied with this (Phase 15).</summary>
+    private static bool Covers(ContractKind contract, SupplyKind kind) => (contract, kind) switch
+    {
+        (ContractKind.Catering, SupplyKind.Food or SupplyKind.Water) => true,
+        (ContractKind.Sanitation, SupplyKind.Sanitation) => true,
+        (ContractKind.FuelSupply, SupplyKind.Fuel) => true,
+        _ => false,
+    };
 }

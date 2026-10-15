@@ -105,6 +105,12 @@ public interface ICopService
     /// </summary>
     PublicSituation Public { get; }
 
+    /// <summary>
+    /// What keeps the operation going (Phase 15): supplies at each incident, orders, the fleet's fuel, defects, repairs
+    /// and staging, contracts, costs and reimbursement claims. A copy.
+    /// </summary>
+    LogisticsSituation Logistics { get; }
+
     // Networked sessions (Phase 11)
 
     /// <summary>Everyone who has joined the session, present or not, in the order they joined.</summary>

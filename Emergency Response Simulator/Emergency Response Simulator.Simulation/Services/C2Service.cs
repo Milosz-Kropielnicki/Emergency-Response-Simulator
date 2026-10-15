@@ -905,6 +905,127 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher, IPlume
         return result with { EntityId = entryId };
     }
 
+    // ---- Logistics & resource sustainment (Phase 15) ----
+
+    public async Task<CommandResult> OrderSuppliesAsync(Guid incidentId, SupplyKind kind, int quantity, SupplyTier tier, string? justification = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (cop.FindIncident(incidentId) is not { } incident)
+            return CommandResult.Fail("Unknown incident.");
+        if (incident.Status == IncidentStatus.Closed)
+            return CommandResult.Fail($"{incident.Number} is closed.");
+        if (quantity < 1 || quantity > Supplies.MaxOrder(kind))
+            return CommandResult.Fail($"Order between 1 and {Supplies.MaxOrder(kind):N0} {Supplies.Measure(kind)} of {Supplies.Name(kind).ToLowerInvariant()}.");
+        if (tier != SupplyTier.Local && string.IsNullOrWhiteSpace(justification))
+            return CommandResult.Fail($"The {(tier == SupplyTier.Regional ? "regional" : "national")} level wants a justification: what it is for, and why local supplies won't do.");
+
+        var orderId = Guid.NewGuid();
+        var result = await PublishAsync(new SuppliesOrdered(orderId, incidentId, kind, quantity, tier, justification?.Trim()), cancellationToken);
+        var noDrop = !cop.Zones.Any(z => z.IncidentId == incidentId && z.Type is ZoneType.StagingArea or ZoneType.BaseCamp);
+        return result with
+        {
+            EntityId = orderId,
+            Detail = $"{Supplies.Quantity(kind, quantity)} of {Supplies.Name(kind).ToLowerInvariant()} ordered from {Supplies.Supplier(tier)}" +
+                     (noDrop ? $"; {incident.Number} has no staging area or base camp for the delivery to unload at" : ""),
+        };
+    }
+
+    public async Task<CommandResult> StageUnitAsync(Guid unitId, Guid zoneId, CancellationToken cancellationToken = default)
+    {
+        if (cop.FindUnit(unitId) is not { } unit)
+            return CommandResult.Fail("Unknown unit.");
+        if (NotUnderCommand(unit) is { } refused)
+            return refused;
+        if (cop.Zones.FirstOrDefault(z => z.Id == zoneId) is not { } zone || zone.Type != ZoneType.StagingArea)
+            return CommandResult.Fail("Choose a staging area (draw one on the map first).");
+        if (unit.Status != UnitStatus.Available)
+            return CommandResult.Fail($"{unit.Callsign} is {EventDescriber.Humanize(unit.Status).ToLowerInvariant()}: only available units can be staged.");
+        var fleet = cop.Logistics.FleetOf(unitId);
+        if (fleet is { Immobilised: true } or { UnderRepair: true } or { Dry: true })
+            return CommandResult.Fail($"{unit.Callsign} can't move: {(fleet.Dry ? "it has no fuel" : fleet.UnderRepair ? "it is being repaired" : "it has broken down")}.");
+        if (fleet?.StagingZoneId == zoneId)
+            return CommandResult.Fail($"{unit.Callsign} is already at {zone.Name}.");
+        return await PublishAsync(new UnitStaged(unitId, zoneId), cancellationToken);
+    }
+
+    public async Task<CommandResult> ServiceUnitAsync(Guid unitId, CancellationToken cancellationToken = default)
+    {
+        if (cop.FindUnit(unitId) is not { } unit)
+            return CommandResult.Fail("Unknown unit.");
+        if (NotUnderCommand(unit) is { } refused)
+            return refused;
+        var fleet = cop.Logistics.FleetOf(unitId);
+        if (fleet is { UnderRepair: true })
+            return CommandResult.Fail($"{unit.Callsign} is already with fleet maintenance.");
+        if (fleet is { Immobilised: true })
+            return CommandResult.Fail($"{unit.Callsign} has broken down: it needs a repair, not a service.");
+        var result = await PublishAsync(new UnitServiceOrdered(unitId), cancellationToken);
+        return unit.AssignedIncidentId is { } incident
+            ? result with { Detail = $"{unit.Callsign} comes off {cop.FindIncident(incident)?.Number ?? "the incident"} while it is serviced" }
+            : result;
+    }
+
+    public async Task<CommandResult> RequestRepairAsync(Guid unitId, RepairKind kind, CancellationToken cancellationToken = default)
+    {
+        if (cop.FindUnit(unitId) is not { } unit)
+            return CommandResult.Fail("Unknown unit.");
+        if (kind == RepairKind.Service)
+            return CommandResult.Fail("Servicing is ordered as a service, not a repair.");
+        if (cop.Logistics.FleetOf(unitId) is not { Immobilised: true } fleet)
+            return CommandResult.Fail($"{unit.Callsign} hasn't reported a breakdown.");
+        if (fleet.UnderRepair)
+            return CommandResult.Fail($"{unit.Callsign} is already being repaired.");
+        if (kind == RepairKind.FieldRepair && !fleet.FieldRepairable)
+            return CommandResult.Fail($"The crew says {unit.Callsign} needs the workshop: \"{fleet.Defect}\" can't be fixed at the roadside.");
+        return await PublishAsync(new RepairRequested(unitId, kind), cancellationToken);
+    }
+
+    public async Task<CommandResult> AwardContractAsync(ContractKind kind, string vendor, string scope, decimal value, string? justification = null,
+        Guid? incidentId = null, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(vendor))
+            return CommandResult.Fail("Name the contractor.");
+        if (string.IsNullOrWhiteSpace(scope))
+            return CommandResult.Fail("Say what the contract is for.");
+        if (value <= 0 || value > 5_000_000m)
+            return CommandResult.Fail("Give the contract's value, up to €5,000,000.");
+        if (incidentId is { } id && cop.FindIncident(id) is null)
+            return CommandResult.Fail("Unknown incident.");
+        if (kind is ContractKind.Catering or ContractKind.Sanitation or ContractKind.FuelSupply)
+        {
+            if (incidentId is null)
+                return CommandResult.Fail("Say which incident the deliveries are for.");
+            if (cop.Logistics.Contracts.FirstOrDefault(c => c.Kind == kind && c.IncidentId == incidentId) is { } existing)
+                return CommandResult.Fail($"{existing.Vendor} already has the {EventDescriber.Humanize(kind).ToLowerInvariant()} contract for that incident.");
+        }
+
+        var contractId = Guid.NewGuid();
+        var result = await PublishAsync(new ContractAwarded(contractId, incidentId, kind, vendor.Trim(), scope.Trim(), value,
+            string.IsNullOrWhiteSpace(justification) ? null : justification.Trim()), cancellationToken);
+        var undocumented = value >= CostRates.ProcurementThreshold && string.IsNullOrWhiteSpace(justification);
+        return result with
+        {
+            EntityId = contractId,
+            Detail = undocumented
+                ? $"Awarded without competition and without a written justification: above {CostRates.Money(CostRates.ProcurementThreshold)} an auditor will question it, and it can't be claimed back"
+                : $"Contract with {vendor.Trim()} for {CostRates.Money(value)}",
+        };
+    }
+
+    public async Task<CommandResult> SubmitReimbursementClaimAsync(CancellationToken cancellationToken = default)
+    {
+        var logistics = cop.Logistics;
+        if (logistics.MajorEmergencySince is null)
+            return CommandResult.Fail("Central government meets the costs of a declared major emergency: none has been declared (the EOC at partial activation or above), so these costs fall to the service.");
+        if (logistics.Claims.Any(c => c.Waiting))
+            return CommandResult.Fail("A claim is already with central government: wait for its decision.");
+        if (logistics.Reimbursable < 1)
+            return CommandResult.Fail("There is nothing claimable yet: the finance section's last figures show no eligible costs since the declaration that haven't been claimed.");
+        var claimId = Guid.NewGuid();
+        var result = await PublishAsync(new ReimbursementClaimSubmitted(claimId, Math.Round(logistics.Reimbursable, 2)), cancellationToken);
+        return result with { EntityId = claimId, Detail = $"Claim for {CostRates.Money(logistics.Reimbursable)} submitted" };
+    }
+
     /// <summary>The new value if it differs from the current one, otherwise null (no change).</summary>
     private static T? Changed<T>(T? requested, T current) where T : struct =>
         requested is { } value && !EqualityComparer<T>.Default.Equals(value, current) ? value : null;

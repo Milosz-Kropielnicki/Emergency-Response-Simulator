@@ -56,6 +56,7 @@ public partial class MainViewModel : ObservableObject
         IncidentDetail = new IncidentDetailViewModel(this, c2);
         Plume = new PlumeViewModel(this, c2, cop);
         Public = new PublicViewModel(this, c2, cop);
+        Logistics = new LogisticsViewModel(this, c2, cop);
         LayerGroups = BuildLayerGroups();
         Workspaces = RoleWorkspaces.Choices();
         assessment.Attach(
@@ -125,7 +126,7 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     private void OnPermissionsChanged()
     {
-        foreach (var viewModel in new object[] { this, Command, CommsHub, Crews, Agencies, Ics, Iap, ZoneDrawing, IncidentDetail, Plume, Public })
+        foreach (var viewModel in new object[] { this, Command, CommsHub, Crews, Agencies, Ics, Iap, ZoneDrawing, IncidentDetail, Plume, Public, Logistics })
             Permissions.Requery(viewModel);
         Ics.Requery();
         if (Permissions.Role is { } role && role != _workspaceRole)
@@ -153,6 +154,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _showAgencies = true;
     [ObservableProperty] private bool _showDesk = true;
     [ObservableProperty] private bool _showPublic = true;
+    [ObservableProperty] private bool _showLogistics = true;
     [ObservableProperty] private bool _showCommandBoard = true;
     [ObservableProperty] private bool _showInstructorBoard = true;
 
@@ -182,6 +184,7 @@ public partial class MainViewModel : ObservableObject
         ShowAgencies = Shows(WorkspacePanel.Agencies);
         ShowDesk = Shows(WorkspacePanel.Desk);
         ShowPublic = Shows(WorkspacePanel.Public);
+        ShowLogistics = Shows(WorkspacePanel.Logistics);
         ShowAssess = Assessment.IsAssessor && Shows(WorkspacePanel.Assess);
         ShowCommandBoard = value.Boards.Contains(WorkspaceBoard.Command);
         ShowInstructorBoard = value.Boards.Contains(WorkspaceBoard.Instructor);
@@ -205,6 +208,9 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>Rumours, the press, vulnerable people, volunteers, families and the decision log (Phase 14).</summary>
     public PublicViewModel Public { get; }
+
+    /// <summary>Supplies, staging, the fleet's fuel and repairs, costs, contracts and claims (Phase 15).</summary>
+    public LogisticsViewModel Logistics { get; }
 
     public UnitDetailViewModel UnitDetail { get; }
 
@@ -306,7 +312,7 @@ public partial class MainViewModel : ObservableObject
             [
                 new(MapLayerKeys.HazardZones, "Hot / warm / cold & hazard", true),
                 new(MapLayerKeys.EvacuationZones, "Evacuation & shelter", true),
-                new(MapLayerKeys.CommandZones, "Command, staging & landing", true),
+                new(MapLayerKeys.CommandZones, "Command, staging, base camp & landing", true),
                 new(MapLayerKeys.TrafficZones, "Road closures & traffic", true),
                 new(MapLayerKeys.SearchZones, "Search areas & cordons", true),
                 new(MapLayerKeys.PerimeterZones, "Incident perimeters", true),
@@ -704,6 +710,7 @@ public partial class MainViewModel : ObservableObject
         Assessment.Refresh();
         Desk.Refresh();
         Public.Refresh();
+        Logistics.Refresh();
         Radio.Refresh();
         RefreshObserving();
         RefreshZones();

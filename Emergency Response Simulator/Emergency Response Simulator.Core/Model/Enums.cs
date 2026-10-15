@@ -188,6 +188,9 @@ public enum ZoneType
     PlumeLow,
     PlumeModerate,
     PlumeHigh,
+
+    /// <summary>Where crews eat, rest and sleep, supplies are stocked and the appliances serviced, on a long incident (Phase 15).</summary>
+    BaseCamp,
 }
 
 public enum GisLayerKind

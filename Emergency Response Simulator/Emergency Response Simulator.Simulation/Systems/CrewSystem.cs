@@ -173,7 +173,8 @@ public sealed class CrewSystem(CrewOptions? options = null) : ISimulationSystem
         var nearFire = fireCrew && fires.Any(f => f.DistanceToFire(unit.Location) <= HazardSystem.HoseReachMeters);
         double rate = unit.Phase switch
         {
-            ResponsePhase.Rehab => -_options.RehabRecovery,
+            // Rehab with nothing to eat or drink barely works; at a base camp it works better (Phase 15).
+            ResponsePhase.Rehab => -_options.RehabRecovery * SupplyFactors.Rehab(context.World, unit),
             _ when crew.Rescuing is not null => _options.InteriorFatigue,
             ResponsePhase.Operating when nearFire => crew.Withdrawn ? _options.DefensiveFatigue : _options.InteriorFatigue,
             ResponsePhase.Operating => _options.OtherWorkFatigue,
@@ -181,13 +182,14 @@ public sealed class CrewSystem(CrewOptions? options = null) : ISimulationSystem
             _ => 0.02,
         };
         var overtime = context.SimTime >= crew.ShiftEnd ? 1.5 : 1;
+        var welfare = SupplyFactors.Welfare(context.World, unit); // no water, food or toilets: they tire faster (Phase 15)
         var hours = context.Delta.TotalHours;
         foreach (var member in crew.Available)
         {
             var personal = rate;
             // The driver stays at the pump.
             if (rate > _options.OtherWorkFatigue && member.Role == CrewRole.Driver) personal = _options.OtherWorkFatigue;
-            var change = personal > 0 ? personal * overtime * (0.8 + 0.4 * Constitution(member)) : personal;
+            var change = personal > 0 ? personal * overtime * welfare * (0.8 + 0.4 * Constitution(member)) : personal;
             member.Fatigue = Math.Clamp(member.Fatigue + change * hours, 0.02, 1);
         }
     }

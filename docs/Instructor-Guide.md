@@ -75,6 +75,7 @@ Open it with **🎛 Console** in the header. To run it on a second screen or mac
   - unit breakdown, radio failure, road blocked, hospital under pressure
   - hazardous release and release rate changes (Phase 13)
   - **social-media rumour:** you say whether it's true. A true one the PIO denies backfires on them.
+  - **delivery delayed** and **local suppliers run out** (Phase 15)
 
 > **Tip:** Hold an inject when the team is already saturated, and fire one early when they are coasting. The review shows every inject that fired early, was held, or was fired ad hoc, so the debrief can account for the difficulty.
 
@@ -182,6 +183,17 @@ These are the parts the simulation plays:
 
 > **Steering tip:** On a hazmat or fire exercise, the public side is easy to forget. If the team is all tactics, let a rumour run, or fire a true one and watch whether the PIO checks before denying it. If they're overloaded, take over the politicians (which also silences community leaders and agency heads) or turn the public side down with `Simulation:PublicPressures=false` for a first run.
 
+**Logistics** (Phase 15). Nothing here announces itself loudly; the LOGISTICS tab and the supply unit's warnings are where the team sees it.
+- **Supplies run out:** appliances bring a first stock (foam, suits, kits, batteries, a little water and food), and the work gets through it. On a chemical fire, foam goes in under an hour; water and food in an hour or two.
+- **Warnings come first:** the supply unit warns with 20 minutes left. Watch whether Logistics orders then, or waits until it has run out.
+- **Three tiers:** local is quick but runs out; regional needs a reason; national needs a declared major emergency. Deliveries need a staging area or base camp to unload at.
+- **Fuel:** pumping burns a quarter of a tank an hour. Without fuel ordered to the scene, engines start running dry after a couple of hours.
+- **Wear:** worn appliances warn before they fail ("pump overheating"). Servicing then almost always saves them; ignored, they break down and need a mechanic or the workshop.
+- **Money:** every hour is costed, overtime past the end of a shift, mutual aid as billed. Contracts over €25,000 need a written justification. A claim to central government is only possible after a major emergency is declared.
+- **Injects:** **Delivery delayed** holds up the next delivery; **Local suppliers run out** forces orders up a tier. The **unit breakdown** inject now needs repairing: "flat tyre" can be fixed on site, "pump seal has failed" needs the workshop.
+
+> **Steering tip:** Logistics only bites on longer exercises. For a short one, fire **Local suppliers run out** on foam early in a chemical incident, or a breakdown on a key appliance. To leave it out of a first run, set `Simulation:Logistics=false`.
+
 ---
 
 ## 5. Voice radio
@@ -204,6 +216,7 @@ These are the parts the simulation plays:
    - **Participants:** roles over time, commands, decision ratings, observer ratings, and combined score and level.
    - **Observer notes and Competencies:** each player's ratings by competency area.
    - **Legal & liability:** how many significant decisions were logged with their reasons, and each exposure an inquiry would ask about. Some will be marked mitigated: an evacuation without the Garda, vulnerable people left behind, an unguarded zone, a volunteer hurt, an untrue denial, families waiting over an hour.
+   - **Logistics & finance:** each supply outage and breakdown, with when it was warned of and when anyone acted; appliances that ran dry; the cost breakdown and the claim. A contract over €25,000 with no justification shows under legal & liability.
    - **Instructor:** what you injected, held, skipped and role-played. This shows how hard you made it.
    - **Timeline:** filter to one participant, play the recorded radio (▶), and find your bookmarks and exercise-control messages.
 4. **Export** to HTML or CSV for the training record.

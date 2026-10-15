@@ -167,6 +167,27 @@
                             </DataGrid>
                         </StackPanel>
 
+                        <!-- Logistics and finance (Phase 15) -->
+                        <StackPanel Visibility="{Binding HasLogistics, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="LOGISTICS &amp; FINANCE" Style="{StaticResource PanelHeader}" />
+                            <TextBlock Text="{Binding LogisticsSummary}" Style="{StaticResource Wrap}" Margin="0,0,0,4" />
+                            <DataGrid ItemsSource="{Binding LogisticsEvents}" Margin="0,0,0,6">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="70" />
+                                    <DataGridTextColumn Header="What" Binding="{Binding What}" Width="*" />
+                                    <DataGridTextColumn Header="Where / unit" Binding="{Binding Where}" Width="110" />
+                                    <DataGridTextColumn Header="For" Binding="{Binding Lasted}" Width="100" />
+                                    <DataGridTextColumn Header="Warning and response" Binding="{Binding Warning}" Width="230" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <DataGrid ItemsSource="{Binding LogisticsCosts}" Margin="0,0,0,12" HorizontalAlignment="Left" Width="360">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Cost" Binding="{Binding Category}" Width="*" />
+                                    <DataGridTextColumn Header="Amount" Binding="{Binding Amount}" Width="110" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+
                         <!-- Legal and liability (Phase 14) -->
                         <StackPanel Visibility="{Binding HasLegal, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="LEGAL &amp; LIABILITY" Style="{StaticResource PanelHeader}" />

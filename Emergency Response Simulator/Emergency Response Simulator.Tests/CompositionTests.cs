@@ -44,6 +44,8 @@ public class CompositionTests
         Assert.Contains(typeof(WeatherSystem), systems);
         Assert.Contains(typeof(AgencyAiSystem), systems);
         Assert.Contains(typeof(HazardReportingSystem), systems);
+        Assert.Contains(typeof(LogisticsSystem), systems); // Phase 15
+        Assert.Contains(typeof(MaintenanceSystem), systems);
 
         // Routing plans with the lagged feed; vehicles drive by live traffic.
         Assert.IsType<TrafficFeed>(provider.GetRequiredService<ITrafficModel>());
@@ -70,5 +72,16 @@ public class CompositionTests
         Assert.DoesNotContain(typeof(CivilianSystem), systems);
         Assert.Contains(typeof(UnitResponseSystem), systems);
         Assert.Contains(typeof(ScriptedInjectSystem), systems);
+    }
+
+    [Fact]
+    public async Task Logistics_can_be_switched_off_and_then_nothing_runs_short()
+    {
+        await using var provider = Build(("Simulation:Logistics", "false"));
+        var systems = provider.GetServices<ISimulationSystem>().Select(s => s.GetType()).ToList();
+        Assert.DoesNotContain(typeof(LogisticsSystem), systems);
+        Assert.DoesNotContain(typeof(MaintenanceSystem), systems);
+        Assert.Contains(typeof(CrewSystem), systems);
+        Assert.False(provider.GetRequiredService<SimulationEngine>().World.Logistics.Active);
     }
 }

@@ -38,6 +38,9 @@ public sealed record AarNoteRow(string Time, string Participant, string Rating, 
 /// <summary>Something that would be hard to defend at an inquiry (Phase 14).</summary>
 public sealed record AarLiabilityRow(string Time, string Kind, string Text, string Mitigated);
 
+/// <summary>A supply that ran out, or an appliance that broke down (Phase 15).</summary>
+public sealed record AarLogisticsRow(string Time, string What, string Where, string Lasted, string Warning);
+
 /// <summary>One participant's observer ratings in one competency area (Phase 12).</summary>
 public sealed record AarCompetencyRow(string Participant, string Area, int Ratings, string Score, string Level);
 
@@ -133,6 +136,11 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
 
     [ObservableProperty] private bool _hasLegal;
     [ObservableProperty] private string _documentationSummary = "";
+
+    public ObservableCollection<AarLogisticsRow> LogisticsEvents { get; } = [];
+    public ObservableCollection<CostRow> LogisticsCosts { get; } = [];
+    [ObservableProperty] private bool _hasLogistics;
+    [ObservableProperty] private string _logisticsSummary = "";
 
     [ObservableProperty] private bool _hasCompetencies;
     [ObservableProperty] private string _instructorNote = "";
@@ -359,6 +367,20 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
             : $"Decision log: {log.Documented} of {log.Significant} significant decisions documented with their reasons ({log.Percent}%)." +
               (log.Undocumented.Count > 0 ? $" Not logged: {string.Join("; ", log.Undocumented)}." : "");
         Replace(Liabilities, report.Liabilities.Select(l => new AarLiabilityRow(Clock(l.At), l.Kind, l.Text, l.Mitigated ? "mitigated" : "")));
+        var logistics = report.Logistics;
+        HasLogistics = logistics.Any;
+        LogisticsSummary = $"{logistics.Orders} supply order(s) · {logistics.Outages.Count} supply outage(s) · {logistics.RanDry} ran out of fuel · " +
+                           $"{logistics.Breakdowns.Count} breakdown(s), {logistics.Serviced} serviced in time · total cost {CostRates.Money(logistics.Total)}" +
+                           (logistics.Claimed > 0 ? $" · claimed {CostRates.Money(logistics.Claimed)}, {CostRates.Money(logistics.Approved)} approved" : "");
+        Replace(LogisticsCosts, logistics.Costs.Select(c => new CostRow(CostRates.Name(c.Category), CostRates.Money(c.Amount))));
+        Replace(LogisticsEvents, logistics.Outages
+            .Select(o => (o.From, Row: new AarLogisticsRow(Clock(o.From), $"{Supplies.Name(o.Kind)} ran out", o.Incident,
+                o.To is { } to ? AarAnalyzer.Duration(to - o.From) : "to the end",
+                (o.WarnedAt is { } w ? $"warned {Clock(w)}" : "no warning") + (o.OrderedAt is { } ord ? $", ordered {Clock(ord)}" : ", not ordered"))))
+            .Concat(logistics.Breakdowns.Select(b => (From: b.At, Row: new AarLogisticsRow(Clock(b.At), $"Broke down: {b.Fault}", b.Unit,
+                b.BackAt is { } back ? AarAnalyzer.Duration(back - b.At) : "to the end",
+                (b.WarnedAt is { } w ? $"crew warned {Clock(w)}" : "no warning") + (b.RepairRequestedAt is { } r ? $", repair asked {Clock(r)}" : ", no repair asked")))))
+            .OrderBy(x => x.From).Select(x => x.Row));
         HasCompetencies = report.Competencies.Count > 0;
         Replace(Competencies, report.Competencies.Select(c => new AarCompetencyRow(c.Participant, Rubric.Name(c.Area), c.Ratings, $"{c.Score} / 100",
             Rubric.Name(c.Level))));

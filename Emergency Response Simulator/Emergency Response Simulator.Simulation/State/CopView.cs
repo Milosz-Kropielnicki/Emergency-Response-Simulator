@@ -109,6 +109,8 @@ public sealed class CopView : ICopService
     public IReadOnlyList<PlumeProjection> PlumeProjections => _current.PlumeProjections;
 
     public PublicSituation Public => _current.Public;
+
+    public LogisticsSituation Logistics => _current.Logistics;
     public IReadOnlyList<Participant> Participants => _current.Participants;
     public Incident? FindIncident(Guid incidentId) => _current.FindIncident(incidentId);
     public Unit? FindUnit(Guid unitId) => _current.FindUnit(unitId);

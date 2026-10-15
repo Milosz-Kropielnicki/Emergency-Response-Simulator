@@ -156,7 +156,7 @@ public sealed class MedicalSystem(IRoutingService? routing = null) : ISimulation
     private void Care(SimulationContext context)
     {
         var world = context.World;
-        foreach (var crew in world.Units.Values.Where(u => IsAmbulance(u.Type) && u.Phase == ResponsePhase.Operating && !u.BrokenDown))
+        foreach (var crew in world.Units.Values.Where(u => IsAmbulance(u.Type) && u.Phase == ResponsePhase.Operating && !u.Disabled))
         {
             var nearby = world.Casualties.Values
                 .Where(c => c.NeedsCare && (c.CrewId is null || c.CrewId == crew.Id)
@@ -171,7 +171,9 @@ public sealed class MedicalSystem(IRoutingService? routing = null) : ISimulation
             if (patient.CrewId is null)
             {
                 patient.CrewId = crew.Id;
-                _treatmentDone[crew.Id] = context.SimTime + TreatmentTime;
+                // A kit per casualty, two for a P1 (Phase 15): without them the crew improvises, and it takes twice as long.
+                var improvising = SupplyFactors.Treat(world, crew, patient.Triage == Triage.Immediate ? 2 : 1, context.SimTime);
+                _treatmentDone[crew.Id] = context.SimTime + TreatmentTime * improvising;
                 continue;
             }
 

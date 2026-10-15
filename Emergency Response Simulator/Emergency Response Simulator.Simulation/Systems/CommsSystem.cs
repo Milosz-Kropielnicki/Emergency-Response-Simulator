@@ -66,6 +66,9 @@ public sealed class CommsSystem(CommsOptions? options = null, IRoutingService? r
     private readonly CommsOptions _options = options ?? new CommsOptions();
     private readonly List<DateTimeOffset> _callTakersFreeAt = [];
     private readonly HashSet<Guid> _batteriesChecked = [];
+
+    /// <summary>Crews who have said there are no spare batteries, so they say it once (Phase 15).</summary>
+    private readonly HashSet<Guid> _noSpares = [];
     private readonly HashSet<Guid> _foreignNudged = [];
     private readonly List<(DateTimeOffset At, DomainEvent Payload, string From, string Text)> _interpreters = [];
 
@@ -577,6 +580,16 @@ public sealed class CommsSystem(CommsOptions? options = null, IRoutingService? r
 
             if (unit.LowBatteryReportedAt is { } reported && context.SimTime - reported >= _options.BatterySwapTime)
             {
+                // A swap takes a spare pack from the incident's stock (Phase 15): with none, the radio runs down.
+                if (!SupplyFactors.SpareBattery(world, unit, context.SimTime))
+                {
+                    if (_noSpares.Add(unit.Id))
+                        CommsNet.Voice(context, unit, $"Control, {unit.Callsign}, no spare handheld batteries at the scene. Our radios won't last.",
+                            new ReportReceived(Guid.NewGuid(), unit.OrderedIncidentId, ReportSource.FieldUnit, unit.Callsign,
+                                "No spare handheld batteries at the scene; radios running flat.", Confidence.High, VerificationStatus.Confirmed, unit.Location, 30, unit.Id));
+                    continue;
+                }
+                _noSpares.Remove(unit.Id);
                 unit.LowBatteryReportedAt = null;
                 unit.Battery = 1;
                 context.EmitTruth(new RadioBatteryChanged(unit.Id, 1));

@@ -1529,6 +1529,210 @@
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
+                    <!-- Keeping the operation going (Phase 15). Last, so tab indices match WorkspacePanel. -->
+                    <TabItem DataContext="{Binding Logistics}" Visibility="{Binding DataContext.ShowLogistics, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
+                        <TabItem.Header>
+                            <TextBlock Text="{Binding TabHeader}" />
+                        </TabItem.Header>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="2">
+                                <!-- Supplies at the selected incident -->
+                                <TextBlock Style="{StaticResource PanelHeader}">
+                                    <Run Text="SUPPLIES ·" />
+                                    <Run Text="{Binding IncidentLabel, Mode=OneWay}" />
+                                </TextBlock>
+                                <TextBlock Text="{Binding SuppliesSummary}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,0,0,2" />
+                                <ItemsControl ItemsSource="{Binding Stocks}" Margin="0,0,0,4">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:SupplyRow}">
+                                            <Border x:Name="Row" BorderBrush="{StaticResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,1">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="110" />
+                                                        <ColumnDefinition Width="80" />
+                                                        <ColumnDefinition Width="80" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding OnHand}" />
+                                                    <TextBlock Grid.Column="2" Text="{Binding Rate}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock x:Name="Left" Grid.Column="3" TextWrapping="Wrap">
+                                                        <Run Text="{Binding Left, Mode=OneWay}" />
+                                                        <Run Text="{Binding Status, Mode=OneWay}" FontSize="10" />
+                                                    </TextBlock>
+                                                </Grid>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Alarm}" Value="1">
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Alarm}" Value="2">
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Left" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Grid Margin="0,2,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="70" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox ItemsSource="{Binding Kinds}" SelectedItem="{Binding SelectedKind}" ToolTip="What to order" />
+                                    <TextBox Grid.Column="1" Text="{Binding Quantity, UpdateSourceTrigger=PropertyChanged}" Margin="4,0" ToolTip="How much" />
+                                    <ComboBox Grid.Column="2" ItemsSource="{Binding Tiers}" SelectedItem="{Binding SelectedTier}"
+                                              ToolTip="Who supplies it: local is quickest but runs out; regional and national need a justification" />
+                                </Grid>
+                                <TextBlock Text="{Binding TierHint}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                <DockPanel Margin="0,2,0,6">
+                                    <Button DockPanel.Dock="Right" Content="📦 Order" Command="{Binding OrderCommand}" Padding="8,2" Margin="4,0,0,0" />
+                                    <TextBox Text="{Binding Justification, UpdateSourceTrigger=PropertyChanged}" ToolTip="Justification: what it is for, and why local supplies won't do" />
+                                </DockPanel>
+                                <ItemsControl ItemsSource="{Binding Orders}" Margin="0,0,0,10">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:SupplyOrderRow}">
+                                            <TextBlock x:Name="Line" FontSize="11" TextWrapping="Wrap" Margin="0,1">
+                                                <Run Text="{Binding What, Mode=OneWay}" FontWeight="SemiBold" />
+                                                <Run Text="{Binding Status, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                            </TextBlock>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Alarm}" Value="True">
+                                                    <Setter TargetName="Line" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Staging areas and base camps -->
+                                <TextBlock Text="STAGING &amp; BASE CAMP" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Text="{Binding StagingHint}" Style="{StaticResource EmptyHint}" FontSize="11" Margin="0,0,0,2" />
+                                <ItemsControl ItemsSource="{Binding Facilities}" Margin="0,0,0,4">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:FacilityRow}">
+                                            <TextBlock TextWrapping="Wrap" Margin="0,1">
+                                                <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
+                                                <Run Text="{Binding Kind, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" FontSize="11" />
+                                                <LineBreak />
+                                                <Run Text="{Binding Units, Mode=OneWay}" FontSize="11" />
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <DockPanel Margin="0,0,0,10">
+                                    <Button DockPanel.Dock="Right" Content="Stage selected unit" Command="{Binding StageSelectedCommand}" Padding="6,0" Margin="4,0,0,0"
+                                            ToolTip="Send the unit selected on the resource board to wait at this staging area, ready to commit" />
+                                    <ComboBox ItemsSource="{Binding StagingAreas}" SelectedItem="{Binding SelectedStaging}" />
+                                </DockPanel>
+
+                                <!-- The fleet -->
+                                <TextBlock Text="FLEET: FUEL, DEFECTS &amp; REPAIRS" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Style="{StaticResource EmptyHint}" FontSize="11" Margin="0,0,0,2"
+                                           Text="Crews call low fuel and warning signs. A bowser fills them when the incident has fuel; service a worn appliance before it fails." />
+                                <ItemsControl ItemsSource="{Binding Fleet}" Margin="0,0,0,10">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:FleetRow}">
+                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,2">
+                                                <DockPanel>
+                                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <Button Content="Service" Padding="5,0" FontSize="11" CommandParameter="{Binding UnitId}"
+                                                                Visibility="{Binding CanService, Converter={StaticResource BoolToVisibility}}"
+                                                                Command="{Binding DataContext.ServiceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                ToolTip="Out of service for about 20 minutes; far less likely to break down after" />
+                                                        <Button Content="Mechanic" Padding="5,0" FontSize="11" Margin="4,0,0,0" CommandParameter="{Binding UnitId}"
+                                                                Visibility="{Binding CanFieldRepair, Converter={StaticResource BoolToVisibility}}"
+                                                                Command="{Binding DataContext.FieldRepairCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                                                        <Button Content="Workshop" Padding="5,0" FontSize="11" Margin="4,0,0,0" CommandParameter="{Binding UnitId}"
+                                                                Visibility="{Binding CanWorkshop, Converter={StaticResource BoolToVisibility}}"
+                                                                Command="{Binding DataContext.WorkshopCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                ToolTip="Recovered to the workshop: gone for two hours or more, back at its station" />
+                                                    </StackPanel>
+                                                    <TextBlock x:Name="Line" TextWrapping="Wrap">
+                                                        <Run Text="{Binding Callsign, Mode=OneWay}" FontWeight="SemiBold" />
+                                                        <Run Text="{Binding Fuel, Mode=OneWay, StringFormat='· fuel {0}'}" />
+                                                        <LineBreak />
+                                                        <Run Text="{Binding Condition, Mode=OneWay}" FontSize="11" />
+                                                    </TextBlock>
+                                                </DockPanel>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Alarm}" Value="True">
+                                                    <Setter TargetName="Line" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Finance -->
+                                <TextBlock Text="COSTS &amp; FINANCE" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Text="{Binding CostSummary}" FontWeight="SemiBold" Margin="0,0,0,2" />
+                                <ItemsControl ItemsSource="{Binding Costs}" Margin="0,0,0,4">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:CostRow}">
+                                            <DockPanel>
+                                                <TextBlock DockPanel.Dock="Right" Text="{Binding Amount}" />
+                                                <TextBlock Text="{Binding Category}" Foreground="{StaticResource MutedTextBrush}" />
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="{Binding ClaimSummary}" TextWrapping="Wrap" FontSize="11" />
+                                <Button Content="💶 Claim from central government" Command="{Binding ClaimCommand}" HorizontalAlignment="Left" Margin="0,4,0,4" Padding="8,2"
+                                        ToolTip="Overtime, apparatus, mutual aid, supplies, repairs and properly let contracts since the declaration" />
+                                <ItemsControl ItemsSource="{Binding Claims}" Margin="0,0,0,6">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:ClaimRow}">
+                                            <StackPanel Margin="0,1">
+                                                <TextBlock FontSize="11" TextWrapping="Wrap">
+                                                    <Run Text="{Binding Submitted, Mode=OneWay}" FontWeight="SemiBold" />
+                                                    <Run Text="{Binding Status, Mode=OneWay}" />
+                                                </TextBlock>
+                                                <TextBlock Text="{Binding Disallowed}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <TextBlock Text="CONTRACTS" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Text="{Binding ProcurementHint}" Style="{StaticResource EmptyHint}" FontSize="11" Margin="0,0,0,2" />
+                                <ComboBox ItemsSource="{Binding ContractKinds}" SelectedItem="{Binding SelectedContractKind}" Margin="0,0,0,2" />
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="90" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Text="{Binding Vendor, UpdateSourceTrigger=PropertyChanged}" ToolTip="The contractor" />
+                                    <TextBox Grid.Column="1" Text="{Binding ContractValue, UpdateSourceTrigger=PropertyChanged}" Margin="4,0,0,0" ToolTip="Value in euro" />
+                                </Grid>
+                                <TextBox Text="{Binding Scope, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,2" ToolTip="What it is for" />
+                                <TextBox Text="{Binding ContractJustification, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="32"
+                                         ToolTip="Why a direct award, without competition: needed above the threshold" />
+                                <Button Content="📝 Award contract" Command="{Binding AwardContractCommand}" HorizontalAlignment="Left" Margin="0,4,0,4" Padding="8,2" />
+                                <ItemsControl ItemsSource="{Binding Contracts}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:ContractRow}">
+                                            <StackPanel Margin="0,1">
+                                                <DockPanel>
+                                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Value}" />
+                                                    <TextBlock Text="{Binding Vendor}" FontWeight="SemiBold" />
+                                                </DockPanel>
+                                                <TextBlock Text="{Binding What}" FontSize="11" TextWrapping="Wrap" />
+                                                <TextBlock x:Name="Note" Text="{Binding Note}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                            </StackPanel>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Alarm}" Value="True">
+                                                    <Setter TargetName="Note" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
                 </TabControl>
             </Border>
         </Grid>

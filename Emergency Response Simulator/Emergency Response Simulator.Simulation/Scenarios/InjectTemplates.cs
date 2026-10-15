@@ -171,6 +171,25 @@ public static class InjectTemplates
                 ];
             },
             v => $"Social media rumour ({(v["true"] == "Yes" ? "true" : "false")}): {v["text"]}"),
+
+        // Phase 15: the supply chain lets command down.
+        new(new("supply-delay", "Delivery delayed", "The next supply delivery due is held up on the road; its driver rings to say so.",
+            [
+                new("minutes", "Minutes late", InjectParameterKind.Number, "30"),
+                new("reason", "Why", InjectParameterKind.Text, "lorry caught in traffic behind a crash on the M50"),
+            ]),
+            (context, v) => context.World.Logistics.Orders.Where(o => o.ArriveAt is not null).OrderBy(o => o.ArriveAt).FirstOrDefault() is { } next
+                ? [Perceived(new SupplyDeliveryDelayed(next.Order.OrderId, next.ArriveAt!.Value + TimeSpan.FromMinutes(Math.Max(1, Number(v, "minutes", 30))), v["reason"]))]
+                : [],
+            v => $"Next delivery {Number(v, "minutes", 30):0} min late: {v["reason"]}"),
+
+        new(new("local-shortage", "Local suppliers run out", "The council stores and local suppliers have no more of something: orders must go to the regional level.",
+            [
+                new("kind", "Supply", InjectParameterKind.Choice, nameof(SupplyKind.Foam), [.. Enum.GetNames<SupplyKind>()]),
+                new("reason", "Why", InjectParameterKind.Text, "the depot's stock went to another incident overnight"),
+            ]),
+            (_, v) => Enum.TryParse<SupplyKind>(v["kind"], out var kind) ? [Truth(new LocalStocksDepleted(kind, v["reason"]))] : [],
+            v => $"Local suppliers out of {v["kind"]}: {v["reason"]}"),
     ];
 
     public static IReadOnlyList<InjectTemplate> All => [.. Library.Select(t => t.Info)];

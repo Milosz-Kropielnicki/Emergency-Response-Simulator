@@ -127,6 +127,37 @@ public static class AarExport
             html.Append("</table>");
         }
 
+        // Logistics and finance (Phase 15).
+        var logistics = report.Logistics;
+        if (logistics.Any)
+        {
+            html.Append("<h2>Logistics &amp; finance</h2>");
+            html.Append($"<p>{logistics.Orders} supply order(s); {logistics.Outages.Count} supply outage(s); {logistics.RanDry} appliance(s) ran out of fuel; " +
+                        $"{logistics.Breakdowns.Count} breakdown(s), {logistics.Serviced} worn appliance(s) serviced in time.</p>");
+            if (logistics.Outages.Count + logistics.Breakdowns.Count > 0)
+            {
+                html.Append("<table><tr><th>Time</th><th>What</th><th>Where</th><th>For</th><th>Warned</th><th>Acted</th></tr>");
+                foreach (var o in logistics.Outages)
+                    html.Append($"<tr><td>{Clock(o.From)}</td><td>{E(Supplies.Name(o.Kind))} ran out</td><td>{E(o.Incident)}</td>" +
+                                $"<td>{(o.To is { } to ? AarAnalyzer.Duration(to - o.From) : "to the end")}</td><td>{(o.WarnedAt is { } w ? Clock(w) : "—")}</td>" +
+                                $"<td>{(o.OrderedAt is { } ordered ? "ordered " + Clock(ordered) : "—")}</td></tr>");
+                foreach (var b in logistics.Breakdowns)
+                    html.Append($"<tr><td>{Clock(b.At)}</td><td>Broke down: {E(b.Fault)}</td><td>{E(b.Unit)}</td>" +
+                                $"<td>{(b.BackAt is { } back ? AarAnalyzer.Duration(back - b.At) : "to the end")}</td><td>{(b.WarnedAt is { } w ? Clock(w) : "—")}</td>" +
+                                $"<td>{(b.RepairRequestedAt is { } asked ? "repair " + Clock(asked) : "—")}</td></tr>");
+                html.Append("</table>");
+            }
+            if (logistics.Costs.Count > 0)
+            {
+                html.Append("<table><tr><th>Cost</th><th>Amount</th></tr>");
+                foreach (var line in logistics.Costs)
+                    html.Append($"<tr><td>{E(CostRates.Name(line.Category))}</td><td>{CostRates.Money(line.Amount)}</td></tr>");
+                html.Append($"<tr><td><b>Total</b></td><td><b>{CostRates.Money(logistics.Total)}</b></td></tr></table>");
+            }
+            if (logistics.Claimed > 0)
+                html.Append($"<p>Claimed from central government: <b>{CostRates.Money(logistics.Claimed)}</b>; approved {CostRates.Money(logistics.Approved)}.</p>");
+        }
+
         // Legal and liability (Phase 14).
         if (report.Liabilities.Count > 0 || report.Documentation.Significant > 0)
         {
@@ -323,6 +354,19 @@ public static class AarExport
                 $"{(note.About is { } about ? $"About: {about}. " : "")}By {note.By}");
         foreach (var item in report.Liabilities)
             Row("Liability", item.At, item.Kind, item.Text, item.Mitigated ? "mitigated" : "", "", "", "");
+        foreach (var outage in report.Logistics.Outages)
+            Row("Supply outage", outage.From, Supplies.Name(outage.Kind), outage.Incident,
+                outage.To is { } to ? AarAnalyzer.Duration(to - outage.From) : "to the end", outage.WarnedAt is { } w ? Clock(w) : "",
+                outage.OrderedAt is { } ordered ? Clock(ordered) : "", "");
+        foreach (var breakdown in report.Logistics.Breakdowns)
+            Row("Breakdown", breakdown.At, breakdown.Unit, breakdown.Fault,
+                breakdown.BackAt is { } back ? AarAnalyzer.Duration(back - breakdown.At) : "to the end", breakdown.WarnedAt is { } w ? Clock(w) : "",
+                breakdown.RepairRequestedAt is { } asked ? Clock(asked) : "", "");
+        foreach (var line in report.Logistics.Costs)
+            Row("Cost", null, CostRates.Name(line.Category), "", line.Amount.ToString("0.00", CultureInfo.InvariantCulture), "", "", "");
+        if (report.Logistics.Claimed > 0)
+            Row("Reimbursement", null, "Claim", "", report.Logistics.Claimed.ToString("0.00", CultureInfo.InvariantCulture), "",
+                report.Logistics.Approved.ToString("0.00", CultureInfo.InvariantCulture), "approved");
         if (report.Documentation.Significant > 0)
             Row("Decision log", null, "Documentation", $"{report.Documentation.Documented} of {report.Documentation.Significant} significant decisions logged",
                 report.Documentation.Percent.ToString(CultureInfo.InvariantCulture) + "%", "", "", string.Join("; ", report.Documentation.Undocumented));

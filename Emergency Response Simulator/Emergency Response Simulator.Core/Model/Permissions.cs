@@ -153,6 +153,14 @@ public static class PermissionMatrix
         C2(nameof(IC2Service.OpenFamilyAssistanceCentreAsync), "Family assistance", Liaison, Logistics);
         Anyone(typeof(IC2Service), nameof(IC2Service.RecordDecisionAsync), "Decision log"); // everyone in command keeps one
 
+        // Phase 15: the supply unit and ground support are Logistics'; staging is Operations'; money is Finance's.
+        C2(nameof(IC2Service.OrderSuppliesAsync), "Supply ordering", Logistics);
+        C2(nameof(IC2Service.StageUnitAsync), "Staging", Ops, Logistics, Dispatcher);
+        C2(nameof(IC2Service.ServiceUnitAsync), "Ground support", Logistics);
+        C2(nameof(IC2Service.RequestRepairAsync), "Ground support", Logistics);
+        C2(nameof(IC2Service.AwardContractAsync), "Procurement", Finance, Logistics);
+        C2(nameof(IC2Service.SubmitReimbursementClaimAsync), "Cost recovery", Finance);
+
         // AI role players (Phase 11 M5): politicians ring the IC or the PIO; an agency chief answers for the agency they run.
         C2(nameof(IC2Service.AnswerPoliticalCallAsync), "Political calls", IC, Pio);
         C2(nameof(IC2Service.AnswerAgencyRequestAsync), "Answering for your agency", Chief);

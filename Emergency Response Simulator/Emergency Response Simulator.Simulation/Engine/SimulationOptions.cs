@@ -78,4 +78,10 @@ public sealed class SimulationOptions
     /// the civilian population and are always modelled.
     /// </summary>
     public bool PublicPressures { get; set; } = true;
+
+    /// <summary>
+    /// Sustaining the operation (Phase 15): supplies that run out, fuel, wear and breakdowns, repairs, contracts and
+    /// costs. Off, nothing runs short, nothing wears out, and nothing is costed.
+    /// </summary>
+    public bool Logistics { get; set; } = true;
 }

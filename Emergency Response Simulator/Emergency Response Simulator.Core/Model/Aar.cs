@@ -100,6 +100,33 @@ public sealed record AarDocumentation(int Significant, int Documented, IReadOnly
     public int Percent => Significant == 0 ? 100 : (int)Math.Round(100.0 * Documented / Significant);
 }
 
+/// <summary>A supply that ran out at an incident (Phase 15): how long crews went without, and whether the warning was acted on.</summary>
+/// <param name="To">When the next delivery arrived; null if it never did.</param>
+/// <param name="WarnedAt">When the supply unit first said it was running low.</param>
+/// <param name="OrderedAt">The first order for it after the warning (or the outage).</param>
+public sealed record AarSupplyOutage(string Incident, SupplyKind Kind, DateTimeOffset From, DateTimeOffset? To, DateTimeOffset? WarnedAt, DateTimeOffset? OrderedAt);
+
+/// <summary>A breakdown (Phase 15), whether the crew had warned of it, and how long the unit was off the road.</summary>
+public sealed record AarBreakdown(string Unit, DateTimeOffset At, string Fault, DateTimeOffset? WarnedAt, DateTimeOffset? RepairRequestedAt, DateTimeOffset? BackAt);
+
+/// <summary>Logistics and finance over the session (Phase 15).</summary>
+/// <param name="Costs">The finance section's last figures, by category.</param>
+/// <param name="Claimed">Reimbursement claimed from central government, and approved.</param>
+public sealed record AarLogistics(
+    IReadOnlyList<CostLine> Costs,
+    decimal Total,
+    decimal Claimed,
+    decimal Approved,
+    IReadOnlyList<AarSupplyOutage> Outages,
+    IReadOnlyList<AarBreakdown> Breakdowns,
+    int Orders,
+    int RanDry,
+    int Serviced)
+{
+    public static readonly AarLogistics None = new([], 0, 0, 0, [], [], 0, 0, 0);
+    public bool Any => Total > 0 || Orders > 0 || Outages.Count > 0 || Breakdowns.Count > 0 || RanDry > 0;
+}
+
 /// <summary>A unit's status over the session, for the commitment chart.</summary>
 public sealed record AarStatusSpan(DateTimeOffset From, DateTimeOffset To, UnitStatus Status);
 
@@ -205,6 +232,9 @@ public sealed class AarReport
 
     /// <summary>How well the significant decisions were documented in the decision log (Phase 14).</summary>
     public AarDocumentation Documentation { get; init; } = new(0, 0, []);
+
+    /// <summary>Supplies, the fleet, costs and cost recovery (Phase 15).</summary>
+    public AarLogistics Logistics { get; init; } = AarLogistics.None;
 
     /// <summary>The decisions one participant made (everyone's with null).</summary>
     public IEnumerable<AarDecision> DecisionsOf(Guid? participantId) =>

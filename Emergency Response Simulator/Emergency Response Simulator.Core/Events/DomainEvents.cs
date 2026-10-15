@@ -180,6 +180,27 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(PressConferenceHeld), nameof(PressConferenceHeld))]
 [JsonDerivedType(typeof(DecisionLogged), nameof(DecisionLogged))]
 [JsonDerivedType(typeof(LegalExposure), nameof(LegalExposure))]
+// Logistics & resource sustainment (Phase 15)
+[JsonDerivedType(typeof(SuppliesOrdered), nameof(SuppliesOrdered))]
+[JsonDerivedType(typeof(SupplyOrderDecided), nameof(SupplyOrderDecided))]
+[JsonDerivedType(typeof(SuppliesDelivered), nameof(SuppliesDelivered))]
+[JsonDerivedType(typeof(SupplyDeliveryDelayed), nameof(SupplyDeliveryDelayed))]
+[JsonDerivedType(typeof(SupplyLevelsReported), nameof(SupplyLevelsReported))]
+[JsonDerivedType(typeof(SupplyShortage), nameof(SupplyShortage))]
+[JsonDerivedType(typeof(LocalStocksDepleted), nameof(LocalStocksDepleted))]
+[JsonDerivedType(typeof(UnitFuelReported), nameof(UnitFuelReported))]
+[JsonDerivedType(typeof(UnitRefuelled), nameof(UnitRefuelled))]
+[JsonDerivedType(typeof(UnitDefectReported), nameof(UnitDefectReported))]
+[JsonDerivedType(typeof(UnitServiceOrdered), nameof(UnitServiceOrdered))]
+[JsonDerivedType(typeof(RepairRequested), nameof(RepairRequested))]
+[JsonDerivedType(typeof(RepairScheduled), nameof(RepairScheduled))]
+[JsonDerivedType(typeof(UnitRepaired), nameof(UnitRepaired))]
+[JsonDerivedType(typeof(UnitStaged), nameof(UnitStaged))]
+[JsonDerivedType(typeof(UnitArrivedAtStaging), nameof(UnitArrivedAtStaging))]
+[JsonDerivedType(typeof(ContractAwarded), nameof(ContractAwarded))]
+[JsonDerivedType(typeof(CostsReported), nameof(CostsReported))]
+[JsonDerivedType(typeof(ReimbursementClaimSubmitted), nameof(ReimbursementClaimSubmitted))]
+[JsonDerivedType(typeof(ReimbursementDecided), nameof(ReimbursementDecided))]
 [JsonDerivedType(typeof(HazardEnded), nameof(HazardEnded))]
 [JsonDerivedType(typeof(HazardSitePlaced), nameof(HazardSitePlaced))]
 [JsonDerivedType(typeof(CasualtyInjured), nameof(CasualtyInjured))]
@@ -1074,3 +1095,83 @@ public sealed record DecisionLogged(Guid EntryId, string Decision, string Ration
 /// </summary>
 /// <param name="SubjectId">What it is about: the call that raised it, so the review can see whether it was answered.</param>
 public sealed record LegalExposure(string Kind, string Detail, Guid? SubjectId = null) : DomainEvent;
+
+// ---- Logistics & resource sustainment (Phase 15) ----
+
+/// <summary>Command ordered supplies for an incident from one tier of the supply chain (local, regional or national).</summary>
+/// <param name="Justification">Why: the regional and national levels want one before they release anything.</param>
+public sealed record SuppliesOrdered(Guid OrderId, Guid IncidentId, SupplyKind Kind, int Quantity, SupplyTier Tier, string? Justification = null)
+    : DomainEvent;
+
+/// <summary>The supplier (or the approver at the regional or national level) answered an order.</summary>
+/// <param name="Quantity">How much is coming: less than asked when that is all there is.</param>
+public sealed record SupplyOrderDecided(Guid OrderId, bool Approved, int Quantity, string Supplier, DateTimeOffset? ExpectedAt, string? Reason = null)
+    : DomainEvent;
+
+/// <summary>Supplies reached an incident: an order, or a contract's scheduled delivery.</summary>
+/// <param name="SourceId">The order, or the contract, that brought them.</param>
+/// <param name="Cost">What this delivery cost (nothing more for a contract's: its value covers them).</param>
+public sealed record SuppliesDelivered(Guid? SourceId, Guid IncidentId, SupplyKind Kind, double Quantity, string Supplier, decimal Cost) : DomainEvent;
+
+/// <summary>A delivery is running late, as its driver rang to say.</summary>
+public sealed record SupplyDeliveryDelayed(Guid OrderId, DateTimeOffset ExpectedAt, string Reason) : DomainEvent;
+
+/// <summary>What one supply stands at, and how fast it is going.</summary>
+public sealed record SupplyLevel(SupplyKind Kind, double OnHand, double PerHour);
+
+/// <summary>The supply unit's regular return for an incident: what is on hand, how fast it is going, how many are working.</summary>
+public sealed record SupplyLevelsReported(Guid IncidentId, int Personnel, IReadOnlyList<SupplyLevel> Levels) : DomainEvent;
+
+/// <summary>The supply unit warns that something is about to run out at an incident, or has.</summary>
+/// <param name="MinutesLeft">At the current rate, when not yet out.</param>
+public sealed record SupplyShortage(Guid IncidentId, SupplyKind Kind, bool Exhausted, double OnHand, int? MinutesLeft) : DomainEvent;
+
+/// <summary>Ground truth: the council depot and local suppliers have no more of something (an inject).</summary>
+public sealed record LocalStocksDepleted(SupplyKind Kind, string Reason) : DomainEvent;
+
+/// <summary>A crew said how much fuel it has left, 0–1: quarter tank, fuel critical, run dry, or full again.</summary>
+public sealed record UnitFuelReported(Guid UnitId, double Level) : DomainEvent;
+
+/// <summary>The fuel bowser at an incident filled a unit's tank from the incident's stock.</summary>
+public sealed record UnitRefuelled(Guid UnitId, Guid IncidentId, double Litres) : DomainEvent;
+
+/// <summary>A crew reported a defect: a warning sign on a worn appliance (it still works), or the fault that has stopped it.</summary>
+/// <param name="Immobilised">It has broken down and can't move or work.</param>
+/// <param name="FieldRepairable">A mechanic could fix it where it is; otherwise it needs the workshop.</param>
+public sealed record UnitDefectReported(Guid UnitId, string Defect, bool Immobilised, bool FieldRepairable) : DomainEvent;
+
+/// <summary>Command sent a worn unit for preventive servicing.</summary>
+public sealed record UnitServiceOrdered(Guid UnitId) : DomainEvent;
+
+/// <summary>Command asked fleet maintenance to repair a broken-down unit: a mechanic to it, or recovery to the workshop.</summary>
+public sealed record RepairRequested(Guid UnitId, RepairKind Kind) : DomainEvent;
+
+/// <summary>Fleet maintenance said when the unit will be back, and what it will cost.</summary>
+public sealed record RepairScheduled(Guid UnitId, RepairKind Kind, DateTimeOffset ExpectedAt, decimal Cost, string Provider) : DomainEvent;
+
+/// <summary>A unit is back in service after repair or servicing.</summary>
+/// <param name="AtHome">It was repaired at the workshop and is back at its station.</param>
+public sealed record UnitRepaired(Guid UnitId, RepairKind Kind, bool AtHome) : DomainEvent;
+
+/// <summary>Command sent a unit to wait at a staging area, ready to be committed.</summary>
+public sealed record UnitStaged(Guid UnitId, Guid ZoneId) : DomainEvent;
+
+/// <summary>A unit checked in at its staging area.</summary>
+public sealed record UnitArrivedAtStaging(Guid UnitId, Guid ZoneId) : DomainEvent;
+
+/// <summary>The finance section let a contract.</summary>
+/// <param name="Justification">Why it was awarded directly, without competition: an emergency direct award above the threshold needs one.</param>
+public sealed record ContractAwarded(Guid ContractId, Guid? IncidentId, ContractKind Kind, string Vendor, string Scope, decimal Value, string? Justification = null)
+    : DomainEvent;
+
+/// <summary>
+/// The finance section's time and cost units report what the response has cost so far, by category, and how much of
+/// it could be claimed back now.
+/// </summary>
+public sealed record CostsReported(IReadOnlyList<CostLine> Lines, decimal Total, decimal Reimbursable) : DomainEvent;
+
+/// <summary>Command claimed the costs of the major emergency from central government.</summary>
+public sealed record ReimbursementClaimSubmitted(Guid ClaimId, decimal Amount) : DomainEvent;
+
+/// <summary>Central government decided a claim: how much it will pay, and what it won't, and why.</summary>
+public sealed record ReimbursementDecided(Guid ClaimId, decimal Claimed, decimal Approved, IReadOnlyList<string> Disallowed) : DomainEvent;

@@ -263,6 +263,39 @@ public static class EventDescriber
             PressConferenceHeld e => Entry("MEDIA", $"Press conference ({string.Join(", ", e.Spokespeople)}): \"{e.Statement}\"", e.IncidentId, important: true),
             DecisionLogged e => Entry("LOG", $"Decision: {e.Decision} — because {e.Rationale}"),
             LegalExposure e => Entry("TRUTH", $"Legal exposure ({e.Kind}): {e.Detail}", important: true),
+            // Logistics & resource sustainment (Phase 15)
+            SuppliesOrdered e => Entry("LOGISTICS", $"Ordered {Supplies.Quantity(e.Kind, e.Quantity)} {Supplies.Name(e.Kind).ToLowerInvariant()} for {Incident(e.IncidentId)}, " +
+                $"{Supplies.TierName(e.Tier).ToLowerInvariant()}", e.IncidentId),
+            SupplyOrderDecided e => Entry("LOGISTICS", e.Approved
+                ? $"{e.Supplier}: order accepted, {e.Quantity} coming" + (e.ExpectedAt is { } due ? $", due {due.ToLocalTime():HH:mm}" : "") + (e.Reason is { } why ? $" ({why})" : "")
+                : $"{e.Supplier}: order declined — {e.Reason}", important: !e.Approved),
+            SuppliesDelivered e => Entry("LOGISTICS", $"Delivered to {Incident(e.IncidentId)}: {Supplies.Quantity(e.Kind, e.Quantity)} {Supplies.Name(e.Kind).ToLowerInvariant()} " +
+                $"from {e.Supplier}", e.IncidentId),
+            SupplyDeliveryDelayed e => Entry("LOGISTICS", $"Delivery late, now due {e.ExpectedAt.ToLocalTime():HH:mm}: {e.Reason}", important: true),
+            SupplyLevelsReported => null, // the supply unit's regular return: the LOGISTICS tab shows it
+            SupplyShortage e => Entry("LOGISTICS", e.Exhausted
+                ? $"{Supplies.Name(e.Kind)} exhausted at {Incident(e.IncidentId)}"
+                : $"{Supplies.Name(e.Kind)} at {Incident(e.IncidentId)} low: {Supplies.Quantity(e.Kind, e.OnHand)}, about {e.MinutesLeft} min left", e.IncidentId, important: true),
+            LocalStocksDepleted e => Entry("TRUTH", $"Local suppliers have no more {Supplies.Name(e.Kind).ToLowerInvariant()}: {e.Reason}"),
+            UnitFuelReported e => Entry("FLEET", e.Level <= 0 ? $"{Unit(e.UnitId)} has run out of fuel" : e.Level >= 0.95 ? $"{Unit(e.UnitId)} refuelled"
+                : $"{Unit(e.UnitId)} fuel at {e.Level:P0}", unit: e.UnitId, important: e.Level <= 0.1),
+            UnitRefuelled e => Entry("FLEET", $"{Unit(e.UnitId)} refuelled at {Incident(e.IncidentId)}: {e.Litres:F0} L", e.IncidentId, e.UnitId),
+            UnitDefectReported e => Entry("FLEET", $"{Unit(e.UnitId)}: {e.Defect}" + (e.Immobilised ? $" — off the road, {(e.FieldRepairable ? "a mechanic can fix it on site" : "needs the workshop")}" : " — still working"),
+                unit: e.UnitId, important: e.Immobilised),
+            UnitServiceOrdered e => Entry("FLEET", $"{Unit(e.UnitId)} sent for servicing", unit: e.UnitId),
+            RepairRequested e => Entry("FLEET", $"{Unit(e.UnitId)}: {(e.Kind == RepairKind.FieldRepair ? "mechanic requested" : "recovery to the workshop requested")}", unit: e.UnitId),
+            RepairScheduled e => Entry("FLEET", $"{e.Provider}: {Unit(e.UnitId)} back by {e.ExpectedAt.ToLocalTime():HH:mm}, {CostRates.Money(e.Cost)}", unit: e.UnitId),
+            UnitRepaired e => Entry("FLEET", $"{Unit(e.UnitId)} back in service{(e.Kind == RepairKind.Service ? " after servicing" : " after repair")}{(e.AtHome ? ", at its station" : "")}",
+                unit: e.UnitId),
+            UnitStaged e => Entry("STAGING", $"{Unit(e.UnitId)} sent to staging", unit: e.UnitId),
+            UnitArrivedAtStaging e => Entry("STAGING", $"{Unit(e.UnitId)} checked in at staging", unit: e.UnitId),
+            ContractAwarded e => Entry("FINANCE", $"Contract: {EventDescriber.Humanize(e.Kind).ToLowerInvariant()} with {e.Vendor}, {CostRates.Money(e.Value)} — {e.Scope}" +
+                (e.Value >= CostRates.ProcurementThreshold && string.IsNullOrWhiteSpace(e.Justification) ? " (direct award, no justification recorded)" : ""), e.IncidentId,
+                important: e.Value >= CostRates.ProcurementThreshold),
+            CostsReported => null, // the finance section's running figures: the LOGISTICS tab shows them
+            ReimbursementClaimSubmitted e => Entry("FINANCE", $"Claim for {CostRates.Money(e.Amount)} submitted to central government", important: true),
+            ReimbursementDecided e => Entry("FINANCE", $"Claim decided: {CostRates.Money(e.Approved)} of {CostRates.Money(e.Claimed)} approved" +
+                (e.Disallowed.Count > 0 ? $"; disallowed: {string.Join("; ", e.Disallowed)}" : ""), important: true),
             // Multiplayer completion (Phase 12)
             ExerciseControlMessage e => Entry("EXERCISE", $"Exercise control{(e.ToParticipantId is { } to ? $" to {Participant(to)}" : "")}: {e.Text}"),
             PublicConfidenceChanged e => Entry("TRUTH", $"Public confidence {e.Confidence} ({(e.Change >= 0 ? "+" : "")}{e.Change}): {e.Reason}", important: Math.Abs(e.Change) >= 8),
