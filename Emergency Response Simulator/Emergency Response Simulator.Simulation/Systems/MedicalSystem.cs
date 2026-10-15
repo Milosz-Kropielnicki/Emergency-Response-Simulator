@@ -187,17 +187,20 @@ public sealed class MedicalSystem(IRoutingService? routing = null) : ISimulation
                 context.EmitTruth(new CasualtyChanged(patient.Id, patient.Triage, patient.State));
             }
 
-            // One P1, or two less serious casualties, per ambulance.
+            // One P1, or two less serious casualties going to the same place (Phase 16: the same need), per ambulance.
             var load = new List<WorldCasualty> { patient };
+            var need = NeedOf(world, patient);
             if (patient.Triage != Triage.Immediate)
-                load.AddRange(nearby.Where(c => c != patient && c.Triage != Triage.Immediate && c.CrewId is null).Take(1));
+                load.AddRange(nearby.Where(c => c != patient && c.Triage != Triage.Immediate && c.CrewId is null && NeedOf(world, c) == need).Take(1));
             Transport(context, crew, load);
         }
     }
 
+    private static Specialty? NeedOf(WorldState world, WorldCasualty casualty) => world.Health.Needs.GetValueOrDefault(casualty.Id);
+
     private void Transport(SimulationContext context, WorldUnit crew, List<WorldCasualty> load)
     {
-        if (ChooseHospital(context, crew.Location, exclude: null) is not { } hospital) return;
+        if (ChooseHospital(context, crew.Location, exclude: null, load[0], crew.OrderedIncidentId) is not { } hospital) return;
 
         foreach (var casualty in load)
         {
@@ -221,12 +224,24 @@ public sealed class MedicalSystem(IRoutingService? routing = null) : ISimulation
             $"Leaving scene with {summary} for {hospital.Name}.", Confidence.High, VerificationStatus.Confirmed, crew.Location, 20, crew.Id));
     }
 
-    /// <summary>The hospital that can take patients soonest by road, skipping full ones.</summary>
-    private WorldHospital? ChooseHospital(SimulationContext context, GeoPoint from, Guid? exclude)
+    /// <summary>
+    /// The hospital that can take patients soonest by road, skipping full ones and (Phase 16) a children's hospital for
+    /// adults. Where command has set a destination for the patients with this need from the incident the crew was sent
+    /// to, the crew goes there instead while it is open.
+    /// </summary>
+    private WorldHospital? ChooseHospital(SimulationContext context, GeoPoint from, Guid? exclude, WorldCasualty? patient = null, Guid? crewIncident = null)
     {
-        var candidates = context.World.Hospitals.Values.Where(h => h.Id != exclude && !h.OnDiversion).ToList();
+        var world = context.World;
+        var need = patient is null ? null : NeedOf(world, patient);
+        if (crewIncident is { } incident && world.Health.Destinations.TryGetValue((incident, need), out var set)
+            && world.Hospitals.TryGetValue(set, out var directed) && directed.Id != exclude && !directed.OnDiversion)
+            return directed;
+
+        var candidates = world.Hospitals.Values.Where(h => h.Id != exclude && !h.OnDiversion && world.Health.Accepts(h, need)).ToList();
         if (candidates.Count == 0)
-            candidates = context.World.Hospitals.Values.Where(h => h.Id != exclude).ToList(); // everywhere is full: least bad
+            candidates = world.Hospitals.Values.Where(h => h.Id != exclude && world.Health.Accepts(h, need)).ToList(); // everywhere is full: least bad
+        if (candidates.Count == 0)
+            candidates = world.Hospitals.Values.Where(h => h.Id != exclude).ToList();
         if (candidates.Count == 0) return null;
 
         return candidates.MinBy(h =>
@@ -245,7 +260,7 @@ public sealed class MedicalSystem(IRoutingService? routing = null) : ISimulation
 
             // Arrived to find the department full: on to the next hospital.
             if (hospital is { OnDiversion: true } && _arrivalChecked.Add(crew.Id)
-                && ChooseHospital(context, crew.Location, hospital.Id) is { } next && next.Id != hospital.Id)
+                && ChooseHospital(context, crew.Location, hospital.Id, world.Casualties.GetValueOrDefault(load.FirstOrDefault()), crew.OrderedIncidentId) is { } next && next.Id != hospital.Id)
             {
                 foreach (var casualty in load.Select(world.Casualties.GetValueOrDefault).OfType<WorldCasualty>())
                 {

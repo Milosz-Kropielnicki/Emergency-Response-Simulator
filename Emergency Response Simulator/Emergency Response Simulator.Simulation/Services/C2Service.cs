@@ -1026,6 +1026,124 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher, IPlume
         return result with { EntityId = claimId, Detail = $"Claim for {CostRates.Money(logistics.Reimbursable)} submitted" };
     }
 
+    // ---- Medical, mass casualty & public health (Phase 16) ----
+
+    public async Task<CommandResult> SetTransportDestinationAsync(Guid incidentId, Specialty? need, Guid? hospitalId, CancellationToken cancellationToken = default)
+    {
+        if (cop.FindIncident(incidentId) is not { } incident)
+            return CommandResult.Fail("Unknown incident.");
+        var health = cop.Health;
+        if (hospitalId is null)
+            return health.DestinationFor(incidentId, need) is null
+                ? CommandResult.Fail($"No destination is set for {Health.Need(need).ToLowerInvariant()} patients from {incident.Number}.")
+                : await PublishAsync(new TransportDestinationSet(incidentId, need, null), cancellationToken);
+        if (cop.Hospitals.FirstOrDefault(h => h.Id == hospitalId) is not { } hospital)
+            return CommandResult.Fail("Unknown hospital.");
+        var resources = health.Hospitals.GetValueOrDefault(hospital.Id);
+        if (resources?.ChildrenOnly == true && need != Specialty.Paediatric)
+            return CommandResult.Fail($"{hospital.Name} takes children only.");
+        if (health.DestinationFor(incidentId, need) == hospital.Id)
+            return CommandResult.Fail($"{Health.Need(need)} patients from {incident.Number} already go to {hospital.Name}.");
+
+        var result = await PublishAsync(new TransportDestinationSet(incidentId, need, hospital.Id), cancellationToken);
+        var lacks = need is { } specialty && resources?.Beds(specialty) is null;
+        return result with
+        {
+            Detail = lacks
+                ? $"{hospital.Name} has no {Health.Name(need!.Value).ToLowerInvariant()} service: these patients will need a transfer"
+                : $"{Health.Need(need)} patients from {incident.Number} to {hospital.Name}" + (hospital.OnDiversion ? " (on diversion: crews go elsewhere until it reopens)" : ""),
+        };
+    }
+
+    public async Task<CommandResult> RequestBloodAsync(Guid hospitalId, int units, CancellationToken cancellationToken = default)
+    {
+        if (cop.Hospitals.FirstOrDefault(h => h.Id == hospitalId) is not { } hospital)
+            return CommandResult.Fail("Unknown hospital.");
+        if (units is < 1 or > 200)
+            return CommandResult.Fail("Ask for between 1 and 200 units.");
+        var requestId = Guid.NewGuid();
+        var result = await PublishAsync(new BloodRequested(requestId, hospital.Id, units), cancellationToken);
+        return result with { EntityId = requestId, Detail = $"{units} units for {hospital.Name}" };
+    }
+
+    public async Task<CommandResult> OpenTemporaryMortuaryAsync(string name, GeoPoint location, Guid? incidentId = null, CancellationToken cancellationToken = default)
+    {
+        if (cop.Health.Fatalities.MortuaryName is { } open)
+            return CommandResult.Fail($"{open} is already open.");
+        if (string.IsNullOrWhiteSpace(name))
+            return CommandResult.Fail("Name the temporary mortuary (where it is: a hangar, a sports hall).");
+        if (incidentId is { } id && cop.FindIncident(id) is null)
+            return CommandResult.Fail("Unknown incident.");
+        var mortuaryId = Guid.NewGuid();
+        var result = await PublishAsync(new TemporaryMortuaryOpened(mortuaryId, name.Trim(), location, incidentId), cancellationToken);
+        return result with
+        {
+            EntityId = mortuaryId,
+            Detail = cop.Health.Fatalities.CoronerNotifiedAt is null
+                ? "Temporary mortuary open; nobody can be moved to it until the coroner has been notified"
+                : "Temporary mortuary open",
+        };
+    }
+
+    public Task<CommandResult> OrderIsolationAsync(Guid threatId, CancellationToken cancellationToken = default) =>
+        PublicHealthOrderAsync(threatId, quarantine: false, cancellationToken);
+
+    public Task<CommandResult> OrderQuarantineAsync(Guid threatId, CancellationToken cancellationToken = default) =>
+        PublicHealthOrderAsync(threatId, quarantine: true, cancellationToken);
+
+    private async Task<CommandResult> PublicHealthOrderAsync(Guid threatId, bool quarantine, CancellationToken cancellationToken)
+    {
+        if (cop.Health.Threats.FirstOrDefault(t => t.Id == threatId) is not { } threat)
+            return CommandResult.Fail("Unknown public-health threat.");
+        if (!Health.Contagious(threat.Kind))
+            return CommandResult.Fail($"{threat.Agent} is not passed from person to person: {(quarantine ? "quarantine" : "isolation")} won't help. " +
+                                      $"Get {Health.Countermeasure(threat.Kind)} to the exposed.");
+        if ((quarantine ? threat.QuarantineOrderedAt : threat.IsolationOrderedAt) is not null)
+            return CommandResult.Fail($"{(quarantine ? "Quarantine" : "Isolation")} has already been ordered.");
+        var result = await PublishAsync(quarantine ? new QuarantineOrdered(threatId) : new IsolationOrdered(threatId), cancellationToken);
+        var consulted = cop.Notifications.Any(n => n.Recipient.Contains("public health", StringComparison.OrdinalIgnoreCase));
+        return consulted ? result : result with
+        {
+            Detail = "Ordered, but HSE Public Health hasn't been involved: under the Health Acts this is a Medical Officer of Health's order",
+        };
+    }
+
+    public async Task<CommandResult> OpenDispensingPointAsync(Guid threatId, string name, GeoPoint location, CancellationToken cancellationToken = default)
+    {
+        if (cop.Health.Threats.FirstOrDefault(t => t.Id == threatId) is not { } threat)
+            return CommandResult.Fail("Unknown public-health threat.");
+        if (string.IsNullOrWhiteSpace(name))
+            return CommandResult.Fail("Name the point of dispensing (where it is: a school, a community centre).");
+        if (cop.Health.Dispensing.Count(d => d.ThreatId == threatId) >= 4)
+            return CommandResult.Fail("Four points of dispensing are open for this threat already.");
+        var podId = Guid.NewGuid();
+        var result = await PublishAsync(new DispensingPointOpened(podId, threatId, name.Trim(), location), cancellationToken);
+        var stock = threat.IncidentId is { } incident ? cop.Logistics.Incidents.GetValueOrDefault(incident)?.Stock(SupplyKind.Prophylaxis)?.OnHand ?? 0 : 0;
+        var ordered = threat.IncidentId is { } forIncident && cop.Logistics.Orders.Any(o => o.IncidentId == forIncident && o.Kind == SupplyKind.Prophylaxis && o.Open);
+        return result with
+        {
+            EntityId = podId,
+            Detail = $"{name.Trim()} opens in {Systems.PublicHealthSystem.PodSetup.TotalMinutes:F0} min" +
+                     (stock < 1 && !ordered ? $"; there are no doses of {Health.Countermeasure(threat.Kind)} for it yet: order prophylaxis" : "") +
+                     "; tell the public where it is",
+        };
+    }
+
+    public async Task<CommandResult> DeployCrisisCounsellingAsync(Guid? incidentId, CounsellingSetting setting, CancellationToken cancellationToken = default)
+    {
+        if (incidentId is null && setting != CounsellingSetting.Helpline)
+            return CommandResult.Fail("Say which incident the team is for.");
+        if (incidentId is { } id && cop.FindIncident(id) is null)
+            return CommandResult.Fail("Unknown incident.");
+        if (setting == CounsellingSetting.FamilyAssistanceCentre && cop.Public.AssistanceCentres.Count == 0)
+            return CommandResult.Fail("There is no family assistance centre open to send them to.");
+        if (cop.Health.Counselling.Any(c => c.Setting == setting && c.IncidentId == incidentId))
+            return CommandResult.Fail(setting == CounsellingSetting.Helpline ? "The helpline is already open." : $"A team is already at {Health.Name(setting)}.");
+        var deploymentId = Guid.NewGuid();
+        var result = await PublishAsync(new CrisisCounsellingDeployed(deploymentId, incidentId, setting), cancellationToken);
+        return result with { EntityId = deploymentId };
+    }
+
     /// <summary>The new value if it differs from the current one, otherwise null (no change).</summary>
     private static T? Changed<T>(T? requested, T current) where T : struct =>
         requested is { } value && !EqualityComparer<T>.Default.Equals(value, current) ? value : null;

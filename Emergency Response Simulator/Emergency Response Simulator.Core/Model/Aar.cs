@@ -127,6 +127,33 @@ public sealed record AarLogistics(
     public bool Any => Total > 0 || Orders > 0 || Outages.Count > 0 || Breakdowns.Count > 0 || RanDry > 0;
 }
 
+/// <summary>Medical surge, the dead, public health and behavioural health over the session (Phase 16).</summary>
+/// <param name="RightFirstTime">Patients whose first hospital could give them the care they needed.</param>
+/// <param name="DiedAwaitingTransport">Tagged patients who died before they left the scene.</param>
+/// <param name="ProtectedInTime">Exposed people given the countermeasure within its window, of <paramref name="Exposed"/>.</param>
+public sealed record AarHealth(
+    int Tagged,
+    int Arrived,
+    int RightFirstTime,
+    int Transfers,
+    int DiedAwaitingTransport,
+    int DiedInHospital,
+    int Fatalities,
+    TimeSpan? CoronerAfter,
+    TimeSpan? LongestAtScene,
+    int Identified,
+    int Exposed,
+    int ProtectedInTime,
+    int Ill,
+    int Distressed,
+    int SeenByCounsellors,
+    int WorriedWellPeak)
+{
+    public static readonly AarHealth None = new(0, 0, 0, 0, 0, 0, 0, null, null, 0, 0, 0, 0, 0, 0, 0);
+    public bool Any => Tagged > 0 || Fatalities > 0 || Exposed > 0 || Distressed > 0;
+    public int RightFirstTimePercent => Arrived == 0 ? 100 : (int)Math.Round(100.0 * RightFirstTime / Arrived);
+}
+
 /// <summary>A unit's status over the session, for the commitment chart.</summary>
 public sealed record AarStatusSpan(DateTimeOffset From, DateTimeOffset To, UnitStatus Status);
 
@@ -235,6 +262,9 @@ public sealed class AarReport
 
     /// <summary>Supplies, the fleet, costs and cost recovery (Phase 15).</summary>
     public AarLogistics Logistics { get; init; } = AarLogistics.None;
+
+    /// <summary>Patients, the dead, public health and behavioural health (Phase 16).</summary>
+    public AarHealth Health { get; init; } = AarHealth.None;
 
     /// <summary>The decisions one participant made (everyone's with null).</summary>
     public IEnumerable<AarDecision> DecisionsOf(Guid? participantId) =>

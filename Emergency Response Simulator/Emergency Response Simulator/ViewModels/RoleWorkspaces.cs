@@ -3,7 +3,7 @@ using Emergency_Response_Simulator.Core.Model;
 namespace Emergency_Response_Simulator.ViewModels;
 
 /// <summary>Right-panel tabs, in the order the main window shows them.</summary>
-public enum WorkspacePanel { Comms, Incident, Unit, Ics, Crews, Agencies, Session, Assess, Desk, Public, Logistics }
+public enum WorkspacePanel { Comms, Incident, Unit, Ics, Crews, Agencies, Session, Assess, Desk, Public, Logistics, Health }
 
 /// <summary>Bottom tabs, in the order the main window shows them.</summary>
 public enum WorkspaceBoard { Status, Command, History, Instructor }
@@ -32,19 +32,19 @@ public static class RoleWorkspaces
     [
         // The IC starts at the desk: decisions waiting, and whatever falls to them from the roles nobody has taken.
         Of(UserRole.IncidentCommander, "Command overview: what waits for your decision, incidents, the command structure and other agencies.",
-            [WorkspacePanel.Desk, WorkspacePanel.Incident, WorkspacePanel.Ics, WorkspacePanel.Agencies, WorkspacePanel.Public, WorkspacePanel.Logistics, WorkspacePanel.Comms, WorkspacePanel.Crews], WorkspacePanel.Desk,
+            [WorkspacePanel.Desk, WorkspacePanel.Incident, WorkspacePanel.Ics, WorkspacePanel.Agencies, WorkspacePanel.Public, WorkspacePanel.Logistics, WorkspacePanel.Health, WorkspacePanel.Comms, WorkspacePanel.Crews], WorkspacePanel.Desk,
             WorkspaceBoard.Command, layers: [(MapLayerKeys.Trails, false), (MapLayerKeys.Routes, false), (MapLayerKeys.Jurisdictions, true)]),
         Of(UserRole.Dispatcher, "Calls, units and the radio: who is free and how far away.",
             [WorkspacePanel.Comms, WorkspacePanel.Incident, WorkspacePanel.Unit], WorkspacePanel.Comms,
             WorkspaceBoard.Status, layers: [(MapLayerKeys.Routes, true), (MapLayerKeys.Trails, true), (MapLayerKeys.Reports, true)]),
-        Of(UserRole.Operations, "Tactics: units, groups and orders at the scene.",
-            [WorkspacePanel.Incident, WorkspacePanel.Ics, WorkspacePanel.Unit, WorkspacePanel.Comms, WorkspacePanel.Crews, WorkspacePanel.Public, WorkspacePanel.Logistics], WorkspacePanel.Ics,
+        Of(UserRole.Operations, "Tactics: units, groups and orders at the scene; where the patients go.",
+            [WorkspacePanel.Incident, WorkspacePanel.Ics, WorkspacePanel.Unit, WorkspacePanel.Comms, WorkspacePanel.Crews, WorkspacePanel.Public, WorkspacePanel.Logistics, WorkspacePanel.Health], WorkspacePanel.Ics,
             WorkspaceBoard.Command, layers: [(MapLayerKeys.Routes, true), (MapLayerKeys.HazardZones, true), (MapLayerKeys.CommandZones, true)]),
         Of(UserRole.Planning, "The situation and the plan: reports, the IAP and objectives.",
             [WorkspacePanel.Incident, WorkspacePanel.Ics, WorkspacePanel.Agencies], WorkspacePanel.Incident,
             WorkspaceBoard.Status, layers: [(MapLayerKeys.Reports, true), (MapLayerKeys.Weather, true), (MapLayerKeys.Trails, false)]),
         Of(UserRole.Logistics, "Resources and support: supplies, fuel and repairs, staging, requests, relief, the comms plan, hospitals.",
-            [WorkspacePanel.Logistics, WorkspacePanel.Comms, WorkspacePanel.Crews, WorkspacePanel.Unit, WorkspacePanel.Incident, WorkspacePanel.Public], WorkspacePanel.Logistics,
+            [WorkspacePanel.Logistics, WorkspacePanel.Health, WorkspacePanel.Comms, WorkspacePanel.Crews, WorkspacePanel.Unit, WorkspacePanel.Incident, WorkspacePanel.Public], WorkspacePanel.Logistics,
             WorkspaceBoard.Command, layers: [(MapLayerKeys.Hospitals, true), (MapLayerKeys.CommandZones, true), (MapLayerKeys.Trails, false)]),
         Of(UserRole.FinanceAdmin, "Costs and commitments: what the response costs, contracts, claiming it back, resource requests and mutual aid.",
             [WorkspacePanel.Logistics, WorkspacePanel.Incident, WorkspacePanel.Agencies], WorkspacePanel.Logistics,
@@ -52,8 +52,8 @@ public static class RoleWorkspaces
         Of(UserRole.Safety, "Responder safety: crews, Maydays, PARs, hazards and the weather.",
             [WorkspacePanel.Crews, WorkspacePanel.Incident, WorkspacePanel.Comms], WorkspacePanel.Crews,
             WorkspaceBoard.Status, layers: [(MapLayerKeys.HazardZones, true), (MapLayerKeys.Weather, true), (MapLayerKeys.TrafficZones, true)]),
-        Of(UserRole.Liaison, "Other agencies: unified command, assistance, disputes and jurisdictions.",
-            [WorkspacePanel.Agencies, WorkspacePanel.Public, WorkspacePanel.Incident, WorkspacePanel.Comms], WorkspacePanel.Agencies,
+        Of(UserRole.Liaison, "Other agencies: unified command, assistance, disputes and jurisdictions; public health and counselling.",
+            [WorkspacePanel.Agencies, WorkspacePanel.Public, WorkspacePanel.Health, WorkspacePanel.Incident, WorkspacePanel.Comms], WorkspacePanel.Agencies,
             WorkspaceBoard.Command, layers: [(MapLayerKeys.Jurisdictions, true), (MapLayerKeys.PoliceUnits, true), (MapLayerKeys.OtherUnits, true)]),
         Of(UserRole.PublicInformation, "The public and the media: rumours, press conferences, statements, enquiries, evacuation and shelter areas.",
             [WorkspacePanel.Public, WorkspacePanel.Agencies, WorkspacePanel.Incident], WorkspacePanel.Public,
@@ -64,7 +64,7 @@ public static class RoleWorkspaces
         Of(UserRole.Instructor, "Everything, with ground truth: the instructor's board in front.",
             AllPanels, WorkspacePanel.Session, WorkspaceBoard.Instructor, boards: AllBoards),
         Of(UserRole.Observer, "Watching and assessing: follow a player, note how they do, and the history.",
-            [WorkspacePanel.Assess, WorkspacePanel.Incident, WorkspacePanel.Comms, WorkspacePanel.Agencies, WorkspacePanel.Public, WorkspacePanel.Logistics], WorkspacePanel.Assess, WorkspaceBoard.History, boards: AllBoards),
+            [WorkspacePanel.Assess, WorkspacePanel.Incident, WorkspacePanel.Comms, WorkspacePanel.Agencies, WorkspacePanel.Public, WorkspacePanel.Logistics, WorkspacePanel.Health], WorkspacePanel.Assess, WorkspaceBoard.History, boards: AllBoards),
     ];
 
     /// <summary>What the workspace picker offers: the full layout, then each role's.</summary>

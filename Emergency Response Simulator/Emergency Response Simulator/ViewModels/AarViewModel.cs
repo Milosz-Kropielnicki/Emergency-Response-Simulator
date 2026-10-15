@@ -142,6 +142,9 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
     [ObservableProperty] private bool _hasLogistics;
     [ObservableProperty] private string _logisticsSummary = "";
 
+    public ObservableCollection<CostRow> HealthFigures { get; } = [];
+    [ObservableProperty] private bool _hasHealth;
+
     [ObservableProperty] private bool _hasCompetencies;
     [ObservableProperty] private string _instructorNote = "";
     public ObservableCollection<ParticipantChoice> ParticipantChoices { get; } = [];
@@ -373,6 +376,8 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
                            $"{logistics.Breakdowns.Count} breakdown(s), {logistics.Serviced} serviced in time · total cost {CostRates.Money(logistics.Total)}" +
                            (logistics.Claimed > 0 ? $" · claimed {CostRates.Money(logistics.Claimed)}, {CostRates.Money(logistics.Approved)} approved" : "");
         Replace(LogisticsCosts, logistics.Costs.Select(c => new CostRow(CostRates.Name(c.Category), CostRates.Money(c.Amount))));
+        HasHealth = report.Health.Any;
+        Replace(HealthFigures, AarExport.HealthLines(report.Health).Select(l => new CostRow(l.Label, l.Value)));
         Replace(LogisticsEvents, logistics.Outages
             .Select(o => (o.From, Row: new AarLogisticsRow(Clock(o.From), $"{Supplies.Name(o.Kind)} ran out", o.Incident,
                 o.To is { } to ? AarAnalyzer.Duration(to - o.From) : "to the end",

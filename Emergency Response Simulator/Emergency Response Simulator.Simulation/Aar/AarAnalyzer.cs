@@ -82,15 +82,16 @@ public sealed partial class AarAnalyzer
             Findings =
             [
                 .. Findings(metrics, branches), .. HandoverFindings(), .. PoliticalFindings(), .. MediaFindings(), .. PlumeFindings(), .. PublicFindings(),
-                .. LogisticsFindings(),
+                .. LogisticsFindings(), .. HealthFindings(),
             ],
             Participants = Participants(),
             Instructor = _instructor,
             Notes = Notes(),
             Competencies = Competencies(),
-            Liabilities = Liabilities(End),
+            Liabilities = [.. Liabilities(End).Concat(HealthLiabilities()).OrderBy(l => l.At)],
             Documentation = Documentation(),
             Logistics = LogisticsSummary(),
+            Health = HealthSummary(),
         };
     }
 
@@ -110,6 +111,7 @@ public sealed partial class AarAnalyzer
         TrackPlume(simEvent);
         TrackPublic(simEvent); // Phase 14: the public, the media and the law
         TrackLogistics(simEvent); // Phase 15: supplies, the fleet and the money
+        TrackHealth(simEvent); // Phase 16: patients, the dead, public health, behavioural health
 
         // Bookkeeping the analysis needs whichever way the event went.
         switch (payload)
@@ -353,6 +355,12 @@ public sealed partial class AarAnalyzer
                 note = $"{e.TargetName} has nobody {Qualifications.Name(needed.Qualification).ToLowerInvariant()} qualified (needs {needed.Members}).";
                 break;
 
+            // ---- Health (Phase 16): timed from what called for it ----
+            case TransportDestinationSet or BloodRequested or TemporaryMortuaryOpened or IsolationOrdered or QuarantineOrdered or DispensingPointOpened
+                or CrisisCounsellingDeployed when HealthTrigger(simEvent.Payload) is { } cue:
+                From(cue.At, cue.What, cue.Good, cue.Fair);
+                break;
+
             // ---- Logistics (Phase 15): timed from the warning that called for it ----
             case SuppliesOrdered or RepairRequested or UnitServiceOrdered when LogisticsTrigger(simEvent.Payload) is { } prompt:
                 From(prompt.At, prompt.What, prompt.Good, prompt.Fair);
@@ -383,6 +391,8 @@ public sealed partial class AarAnalyzer
             PlumeProjected => "Hazard",
             PressConferenceHeld or RumourRebutted or AssistedEvacuationRequested or VolunteersManaged or FamilyAssistanceCentreOpened => "Public",
             SuppliesOrdered or UnitStaged or UnitServiceOrdered or RepairRequested or ContractAwarded or ReimbursementClaimSubmitted => "Logistics",
+            TransportDestinationSet or BloodRequested or TemporaryMortuaryOpened => "Medical",
+            IsolationOrdered or QuarantineOrdered or DispensingPointOpened or CrisisCounsellingDeployed => "Public health",
             OrderIssued or OrderClosed or ReadBackConfirmed => "Order",
             ApprovalDecided or NotificationSent => "Liaison",
             ReportAssessed or ReportLinked => "Assessment",

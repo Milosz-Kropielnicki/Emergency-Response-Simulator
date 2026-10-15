@@ -164,6 +164,13 @@ public sealed class PerceivedState : ICopService
 
     private readonly LogisticsSituation _logistics = new();
 
+    public HealthSituation Health
+    {
+        get { lock (_lock) return _health.Copy(); }
+    }
+
+    private readonly HealthSituation _health = new();
+
     public IReadOnlyList<MediaEnquiry> MediaEnquiries
     {
         get { lock (_lock) return _enquiries.Values.OrderBy(m => m.ReceivedAt).ToList(); }
@@ -216,6 +223,7 @@ public sealed class PerceivedState : ICopService
     private void ApplyPayload(DomainEvent payload, DateTimeOffset at, Guid? actorId = null)
     {
         ApplyLogistics(payload, at);
+        ApplyHealth(payload, at);
         switch (payload)
         {
             case AgencyRegistered e:
@@ -1338,6 +1346,119 @@ public sealed class PerceivedState : ICopService
                 break;
             case EocLevelReached { Level: >= EocLevel.Partial }:
                 _logistics.MajorEmergencySince ??= at;
+                break;
+        }
+    }
+
+    /// <summary>Patients, hospitals' resources, the dead, public health and behavioural health (Phase 16), as reported.</summary>
+    private void ApplyHealth(DomainEvent payload, DateTimeOffset at)
+    {
+        PatientRecord? Patient(Guid id) => _health.Patients.FirstOrDefault(p => p.Id == id);
+        HospitalResources Resources(Guid id) =>
+            _health.Hospitals.TryGetValue(id, out var r) ? r : _health.Hospitals[id] = new HospitalResources { HospitalId = id };
+        var fatalities = _health.Fatalities;
+
+        switch (payload)
+        {
+            case HospitalServicesRegistered e:
+                var registered = Resources(e.HospitalId);
+                registered.Specialties.Clear();
+                registered.Specialties.AddRange(e.Specialties);
+                (registered.ChildrenOnly, registered.BloodUnits, registered.MorgueSpaces, registered.ReportedAt) = (e.ChildrenOnly, e.BloodUnits, e.MorgueSpaces, at);
+                break;
+            case HospitalResourcesReported e:
+                var reported = Resources(e.HospitalId);
+                reported.Specialties.Clear();
+                reported.Specialties.AddRange(e.Specialties);
+                (reported.BloodUnits, reported.MorgueOccupied, reported.ReportedAt) = (e.BloodUnits, e.MorgueOccupied, at);
+                reported.BloodLowSince = e.BloodUnits < Systems.PatientTrackingSystem.BloodLow ? reported.BloodLowSince ?? at : null;
+                _health.WorriedWell[e.HospitalId] = e.WorriedWell;
+                break;
+            case BloodDelivered e:
+                var supplied = Resources(e.HospitalId);
+                supplied.BloodUnits += e.Units;
+                if (supplied.BloodUnits >= Systems.PatientTrackingSystem.BloodLow) supplied.BloodLowSince = null;
+                break;
+
+            case PatientTagged e:
+                _health.Patients.Add(new PatientRecord
+                {
+                    Id = e.PatientId, Tag = e.Tag, IncidentId = e.IncidentId, Triage = e.Triage, Need = e.Need, Injury = e.Injury, TaggedAt = at, UnitId = e.UnitId,
+                });
+                break;
+            case PatientRetriaged e when Patient(e.PatientId) is { } retriaged:
+                retriaged.Triage = e.Triage;
+                break;
+            case PatientTransported e when Patient(e.PatientId) is { } leaving:
+                (leaving.State, leaving.UnitId, leaving.HospitalId, leaving.LeftSceneAt) = (CasualtyState.Transporting, e.UnitId, e.HospitalId, at);
+                break;
+            case PatientArrived e when Patient(e.PatientId) is { } arrived:
+                (arrived.State, arrived.HospitalId, arrived.ArrivedAt, arrived.RightPlace) = (CasualtyState.AtHospital, e.HospitalId, at, e.RightPlace);
+                break;
+            case PatientTransferred e when Patient(e.PatientId) is { } moved:
+                (moved.HospitalId, moved.RightPlace) = (e.ToHospitalId, true);
+                moved.Transfers++;
+                break;
+            case PatientDied e when Patient(e.PatientId) is { } died:
+                (died.Triage, died.State, died.DiedAt) = (Triage.Deceased, CasualtyState.Deceased, at);
+                break;
+            case TransportDestinationSet e:
+                _health.Destinations.RemoveAll(d => d.IncidentId == e.IncidentId && d.Need == e.Need);
+                if (e.HospitalId is { } to) _health.Destinations.Add(new DestinationRule(e.IncidentId, e.Need, to));
+                break;
+
+            case BodiesReported e:
+                fatalities.AtScene[e.IncidentId] = e.Count;
+                break;
+            case BodiesRecovered e:
+                fatalities.AtScene[e.IncidentId] = Math.Max(0, fatalities.AtScene.GetValueOrDefault(e.IncidentId) - e.Count);
+                fatalities.Recovered += e.Count;
+                if (e.To == fatalities.MortuaryName) fatalities.InMortuary += e.Count;
+                break;
+            case TemporaryMortuaryOpened e:
+                (fatalities.MortuaryId, fatalities.MortuaryName, fatalities.MortuaryLocation, fatalities.MortuaryOpenedAt) = (e.MortuaryId, e.Name, e.Location, at);
+                break;
+            case VictimIdentified:
+                fatalities.Identified++;
+                break;
+            case NotificationSent e when e.Recipient.Contains("coroner", StringComparison.OrdinalIgnoreCase):
+                fatalities.CoronerNotifiedAt ??= at;
+                break;
+
+            case PublicHealthAlert e:
+                _health.Threats.Add(new HealthThreat
+                {
+                    Id = e.ThreatId, Kind = e.Kind, Agent = e.Agent, Area = e.Area, Location = e.Location, IncidentId = e.IncidentId, ReportedAt = at,
+                    EstimatedExposed = e.EstimatedExposed, Advice = e.Advice, UpdatedAt = at,
+                });
+                break;
+            case HealthThreatUpdate e when _health.Threats.FirstOrDefault(t => t.Id == e.ThreatId) is { } threat:
+                (threat.EstimatedExposed, threat.Ill, threat.Hospitalised, threat.Deaths, threat.Protected, threat.UpdatedAt) =
+                    (e.EstimatedExposed, e.Ill, e.Hospitalised, e.Deaths, e.Protected, at);
+                break;
+            case IsolationOrdered e when _health.Threats.FirstOrDefault(t => t.Id == e.ThreatId) is { } isolating:
+                isolating.IsolationOrderedAt ??= at;
+                break;
+            case QuarantineOrdered e when _health.Threats.FirstOrDefault(t => t.Id == e.ThreatId) is { } quarantining:
+                quarantining.QuarantineOrderedAt ??= at;
+                break;
+            case DispensingPointOpened e:
+                _health.Dispensing.Add(new DispensingPoint { Id = e.PodId, ThreatId = e.ThreatId, Name = e.Name, Location = e.Location, OpenedAt = at });
+                break;
+            case DispensingProgress e when _health.Dispensing.FirstOrDefault(d => d.Id == e.PodId) is { } pod:
+                (pod.Ready, pod.Dispensed, pod.Queue) = (e.Ready, e.Dispensed, e.Queue);
+                pod.OutOfStockSince = e.OutOfStock ? pod.OutOfStockSince ?? at : null;
+                break;
+
+            case PsychosocialNeedReported e:
+                _health.Distressed[e.IncidentId] = e.Distressed;
+                break;
+            case CrisisCounsellingDeployed e:
+                _health.Counselling.Add(new CounsellingDeployment { Id = e.DeploymentId, IncidentId = e.IncidentId, Setting = e.Setting, DeployedAt = at });
+                break;
+            case PsychologicalTriageReported e when _health.Counselling.FirstOrDefault(c => c.Id == e.DeploymentId) is { } team:
+                team.WorkingSince ??= at;
+                (team.Seen, team.Low, team.Moderate, team.High, team.Admitted) = (e.Seen, e.Low, e.Moderate, e.High, e.Admitted);
                 break;
         }
     }

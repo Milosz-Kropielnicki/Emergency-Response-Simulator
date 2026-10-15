@@ -127,6 +127,15 @@ public static class AarExport
             html.Append("</table>");
         }
 
+        // Health (Phase 16).
+        if (report.Health.Any)
+        {
+            html.Append("<h2>Medical, fatalities &amp; public health</h2><table>");
+            foreach (var (label, value) in HealthLines(report.Health))
+                html.Append($"<tr><td>{E(label)}</td><td>{E(value)}</td></tr>");
+            html.Append("</table>");
+        }
+
         // Logistics and finance (Phase 15).
         var logistics = report.Logistics;
         if (logistics.Any)
@@ -288,6 +297,39 @@ public static class AarExport
         return svg.Append("</svg>").ToString();
     }
 
+    /// <summary>The health measures (Phase 16), as label and value, for the window and the exports alike.</summary>
+    public static IReadOnlyList<(string Label, string Value)> HealthLines(AarHealth health)
+    {
+        var lines = new List<(string, string)>();
+        if (health.Tagged > 0)
+        {
+            lines.Add(("Patients tagged", health.Tagged.ToString(CultureInfo.InvariantCulture)));
+            lines.Add(("Right hospital first time", $"{health.RightFirstTime} of {health.Arrived} ({health.RightFirstTimePercent}%)"));
+            lines.Add(("Secondary transfers", health.Transfers.ToString(CultureInfo.InvariantCulture)));
+            lines.Add(("Died awaiting transport / in hospital", $"{health.DiedAwaitingTransport} / {health.DiedInHospital}"));
+        }
+        if (health.Fatalities > 0)
+        {
+            lines.Add(("Dead", health.Fatalities.ToString(CultureInfo.InvariantCulture)));
+            lines.Add(("Coroner notified after first dead", health.CoronerAfter is { } coroner ? AarAnalyzer.Duration(coroner) : "never"));
+            lines.Add(("Longest at a scene", health.LongestAtScene is { } longest ? AarAnalyzer.Duration(longest) : "—"));
+            lines.Add(("Identified", $"{health.Identified} of {health.Fatalities}"));
+        }
+        if (health.Exposed > 0)
+        {
+            lines.Add(("Exposed to a public-health threat", health.Exposed.ToString(CultureInfo.InvariantCulture)));
+            lines.Add(("Protected in time", $"{health.ProtectedInTime} ({(int)Math.Round(100.0 * health.ProtectedInTime / health.Exposed)}%)"));
+            lines.Add(("Fell ill", health.Ill.ToString(CultureInfo.InvariantCulture)));
+        }
+        if (health.Distressed > 0)
+        {
+            lines.Add(("People in distress (peak reported)", health.Distressed.ToString(CultureInfo.InvariantCulture)));
+            lines.Add(("Seen by crisis counsellors", health.SeenByCounsellors.ToString(CultureInfo.InvariantCulture)));
+            lines.Add(("Worried well in EDs (peak)", health.WorriedWellPeak.ToString(CultureInfo.InvariantCulture)));
+        }
+        return lines;
+    }
+
     public static string StatusColour(UnitStatus status) => status switch
     {
         UnitStatus.Dispatched or UnitStatus.EnRoute => "#2f7fd1",
@@ -354,6 +396,9 @@ public static class AarExport
                 $"{(note.About is { } about ? $"About: {about}. " : "")}By {note.By}");
         foreach (var item in report.Liabilities)
             Row("Liability", item.At, item.Kind, item.Text, item.Mitigated ? "mitigated" : "", "", "", "");
+        if (report.Health.Any)
+            foreach (var (label, value) in HealthLines(report.Health))
+                Row("Health", null, label, "", value, "", "", "");
         foreach (var outage in report.Logistics.Outages)
             Row("Supply outage", outage.From, Supplies.Name(outage.Kind), outage.Incident,
                 outage.To is { } to ? AarAnalyzer.Duration(to - outage.From) : "to the end", outage.WarnedAt is { } w ? Clock(w) : "",

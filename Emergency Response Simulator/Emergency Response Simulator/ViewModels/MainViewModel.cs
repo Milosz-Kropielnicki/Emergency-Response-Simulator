@@ -57,6 +57,7 @@ public partial class MainViewModel : ObservableObject
         Plume = new PlumeViewModel(this, c2, cop);
         Public = new PublicViewModel(this, c2, cop);
         Logistics = new LogisticsViewModel(this, c2, cop);
+        Health = new HealthViewModel(this, c2, cop);
         LayerGroups = BuildLayerGroups();
         Workspaces = RoleWorkspaces.Choices();
         assessment.Attach(
@@ -126,7 +127,7 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     private void OnPermissionsChanged()
     {
-        foreach (var viewModel in new object[] { this, Command, CommsHub, Crews, Agencies, Ics, Iap, ZoneDrawing, IncidentDetail, Plume, Public, Logistics })
+        foreach (var viewModel in new object[] { this, Command, CommsHub, Crews, Agencies, Ics, Iap, ZoneDrawing, IncidentDetail, Plume, Public, Logistics, Health })
             Permissions.Requery(viewModel);
         Ics.Requery();
         if (Permissions.Role is { } role && role != _workspaceRole)
@@ -155,6 +156,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _showDesk = true;
     [ObservableProperty] private bool _showPublic = true;
     [ObservableProperty] private bool _showLogistics = true;
+    [ObservableProperty] private bool _showHealth = true;
     [ObservableProperty] private bool _showCommandBoard = true;
     [ObservableProperty] private bool _showInstructorBoard = true;
 
@@ -185,6 +187,7 @@ public partial class MainViewModel : ObservableObject
         ShowDesk = Shows(WorkspacePanel.Desk);
         ShowPublic = Shows(WorkspacePanel.Public);
         ShowLogistics = Shows(WorkspacePanel.Logistics);
+        ShowHealth = Shows(WorkspacePanel.Health);
         ShowAssess = Assessment.IsAssessor && Shows(WorkspacePanel.Assess);
         ShowCommandBoard = value.Boards.Contains(WorkspaceBoard.Command);
         ShowInstructorBoard = value.Boards.Contains(WorkspaceBoard.Instructor);
@@ -211,6 +214,9 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>Supplies, staging, the fleet's fuel and repairs, costs, contracts and claims (Phase 15).</summary>
     public LogisticsViewModel Logistics { get; }
+
+    /// <summary>Patients, hospitals, the dead, public health and behavioural health (Phase 16).</summary>
+    public HealthViewModel Health { get; }
 
     public UnitDetailViewModel UnitDetail { get; }
 
@@ -711,6 +717,7 @@ public partial class MainViewModel : ObservableObject
         Desk.Refresh();
         Public.Refresh();
         Logistics.Refresh();
+        Health.Refresh();
         Radio.Refresh();
         RefreshObserving();
         RefreshZones();

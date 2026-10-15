@@ -419,6 +419,7 @@ public sealed class LogisticsSystem : ISimulationSystem
         SupplyKind.MedicalSupplies => "Ambulance crews are improvising: each treatment takes twice as long.",
         SupplyKind.Batteries => "Flat handheld radios can't be swapped: crews will go quiet.",
         SupplyKind.Ppe => "No suits for entry: crews can't work properly in the hot zone.",
+        SupplyKind.Prophylaxis => "The points of dispensing have nothing to give: people queue, and the window for protecting them closes.",
         _ => "No toilets or hand-washing at the scene: crews tire faster, and they're complaining.",
     };
 

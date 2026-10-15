@@ -101,6 +101,15 @@ public static class ServiceCollectionExtensions
                 services.AddSingleton<ISimulationSystem>(_ => new MaintenanceSystem());
             }
 
+            // Phase 16: patients, specialist centres and blood, the dead, public health, behavioural health.
+            if (configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.Health)}", true))
+            {
+                services.AddSingleton<ISimulationSystem>(_ => new PatientTrackingSystem());
+                services.AddSingleton<ISimulationSystem>(_ => new MassFatalitySystem());
+                services.AddSingleton<ISimulationSystem>(_ => new PublicHealthSystem());
+                services.AddSingleton<ISimulationSystem>(_ => new BehaviouralHealthSystem());
+            }
+
             // Phase 13: the Python dispersion model drives real releases, and keeps command's projections current.
             // Without the service (or with this off) the in-engine Gaussian plume carries the session.
             if (configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.DispersionService)}", true))

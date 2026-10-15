@@ -1195,6 +1195,93 @@ The Irish tiers line up with local / state / federal.
 
 **Tests:** `LogisticsTests`.
 
+## Medical, mass casualty & public health (Phase 16)
+
+Health and medical surge. Work it from the new **HEALTH** tab. The IC, Operations, Logistics, Liaison and observers have it.
+
+`Simulation:Health = false` turns it all off: casualties are carried to the nearest hospital as before, and nothing more.
+
+### Triage tags and patient tracking (`PatientTrackingSystem`)
+
+- **Tags:** when an ambulance crew starts treating a casualty it tags them (T-0001, T-0002…) with their priority and what they need: **major trauma**, **burns**, **paediatric**, or an ordinary emergency department. Need follows from how they were hurt (burns from fire, blunt and blast injuries for the P1s and P2s), and about one civilian casualty in eight is a child.
+- **The tracking board** follows every tag: re-triage, leaving the scene (with which unit, to which hospital), arrival, transfer, death.
+- **Transport destinations** (`SetTransportDestinationAsync`, the "Patient distribution" function: Operations): for the selected incident and need, a hospital. Crews follow it while that hospital is open. Without one they take the nearest open hospital, never a children's hospital for an adult. A load of two goes only if both patients have the same need.
+
+### Specialist centres and hospital capacity
+
+| Hospital | ED | Specialist beds (free at start) | Blood | Mortuary |
+|---|---|---|---|---|
+| St. James's | 40 | Burns 8 (3), Trauma 4 (1) | 60 | 12 |
+| Mater (major trauma centre) | 45 | Trauma 10 (4), Psychiatric 6 (2) | 70 | 12 |
+| St. Vincent's | 35 | Psychiatric 8 (2) | 40 | 10 |
+| Beaumont | 40 | Trauma 4 (2) | 50 | 10 |
+| CHI at Temple Street (children only) | 20 | Paediatric 15 (6) | 20 | 4 |
+
+Real services, illustrative numbers.
+
+- **The wrong hospital:** a patient handed over somewhere that can't treat them (no service, or no free bed) is **transferred 45 minutes later** to the nearest hospital that can. A P1 may not survive the wait (1 in 5). With no free bed anywhere, the hospital asks for a national transfer.
+- **Blood:** each hospital uses 2.5% of its usual stock an hour for ordinary work, and much more on arrivals: 6 units for a P1 major trauma, 2 for a P2 trauma or a P1 burn, 1 for any other P1. Below 15 units it raises an alert. A P1 who arrives to no blood may die (2 in 5). `RequestBloodAsync` (Logistics, Liaison) brings units from the **Irish Blood Transfusion Service** after 40 minutes.
+- Hospitals report specialist beds, blood, mortuary and walk-ins every 15 minutes.
+
+### The dead (`MassFatalitySystem`)
+
+- **At the scene:** crews report the dead they find. They stay until recovered, and **recovery waits for the coroner to be notified** (a notification to a recipient with "Coroner" in it; the Garda act for the coroner).
+- **Recovery:** from 20 minutes after the notification, recovery teams bring out 4 bodies every 20 minutes. They go to the **temporary mortuary** (`OpenTemporaryMortuaryAsync`, Operations or Logistics) if one is open, or else to a hospital mortuary with space.
+- **At hospitals:** a patient who dies goes to the hospital mortuary. If that is full, the body is held in the emergency department, taking a place, until a temporary mortuary takes it 30 minutes after it opens.
+- **Identification:** 40 minutes at a temporary mortuary (DVI teams), 90 at a hospital. The **family assistance centre** (Phase 14) tells a family their relative has died only once they are identified.
+
+### Public health (`PublicHealthSystem`)
+
+Timescales are compressed for an exercise: the real ones are days.
+
+| Threat | Comes from | What happens | Countermeasure, window |
+|---|---|---|---|
+| Biological | a plume of biological material (anthrax spores, aerosol) | exposed: outdoors at any level, indoors at moderate and above. A third of the unprotected fall ill 2–5 hours later and go to an ED; 15% of those die | antibiotics, 6 h |
+| Radiological | a plume of radioactive material | no illness in the exercise; the unprotected carry a thyroid dose | iodine tablets, 4 h |
+| Infectious | the **Infectious disease outbreak** inject | each case not isolated infects contacts (1 an hour); 75 minutes' incubation; a fifth go to hospital, 2% die | vaccine, 3 h after exposure |
+
+- **The alert:** HSE Public Health confirms a release after 30 minutes and an outbreak after 15, with an estimate of the exposed and its advice.
+- **Points of dispensing** (`OpenDispensingPointAsync`, Logistics or Liaison):
+  - open 45 minutes after they are ordered and dispense up to 400 an hour;
+  - each dose comes from the incident's **prophylaxis** stock, a new Phase 15 supply (local pharmacies hold 300; the rest is the national stockpile);
+  - people come by word of mouth, four times as fast once a public statement names the point of dispensing or tells them to collect tablets, antibiotics or vaccine;
+  - a dose within the window protects.
+- **Isolation and quarantine** (`OrderIsolationAsync`, `OrderQuarantineAsync`, the IC):
+  - isolation stops cases spreading (20 minutes after the order); quarantine cuts contacts' mixing to a fifth (after 30);
+  - both are refused for a threat that isn't contagious;
+  - under the Health Acts they are a Medical Officer of Health's orders. Ordering either without having notified **HSE Public Health** is a `LegalExposure`, listed under legal & liability.
+
+### Behavioural health (`BehaviouralHealthSystem`)
+
+- **Distress** around each incident: two for each injured person, six for each death, 8% of evacuees, each family asking after a relative, and 30% of those exposed to a public-health threat. It is reported every 15 minutes.
+- **The worried well:** unsupported, 4% of the distressed turn up at the nearest ED every 15 minutes and stay two hours. A helpline cuts that by 60%, a team at the scene by 30%.
+- **Crisis counselling** (`DeployCrisisCounsellingAsync`, Liaison or Logistics):
+  - a team goes to the scene, the rest centres or the family assistance centre (once it is open), and arrives in 30 minutes. A helpline opens in 20;
+  - a team gives psychological first aid and triage to 40 people every half hour, the helpline to 60;
+  - about 60% are low risk, 30% moderate, and 10% high risk, who are referred to an acute psychiatric bed while there are beds.
+
+### The desk and the review
+
+- **The desk:**
+  - specialist patients with no destination set go to Operations;
+  - low blood goes to Logistics and Liaison;
+  - the dead with no coroner notified, and a temporary mortuary needed, go to Liaison and Operations;
+  - threats with no point of dispensing go to Logistics and Liaison; isolation goes to the IC;
+  - distress with no counselling goes to Liaison.
+- **In the review**, under **Medical, fatalities & public health**:
+  - patients tagged, right hospital first time, transfers, deaths awaiting transport and in hospital;
+  - the dead, how long before the coroner was notified, the longest at a scene, identifications;
+  - the exposed, how many were protected in time (ground truth), how many fell ill;
+  - distress, counselling, and the peak of worried well.
+  - **Findings** on each, on every blood shortage and how fast the IBTS was asked, on each threat, and on families of the dead with no counsellors.
+  - **Decisions:** destinations, blood, the mortuary, dispensing, isolation, quarantine and counselling are timed from what called for them.
+  - **Decision log:** isolation, quarantine and the temporary mortuary are significant decisions to log. **The dead left at a scene for over 3 hours** is a liability.
+  - **Exports:** the HTML and CSV exports include it all.
+
+**Injects:** **Infectious disease outbreak** (cases and contacts near the incident) and **Fatalities found** (the dead at the largest incident).
+
+**Tests:** `HealthTests`.
+
 ## Local setup
 
 ### Prerequisites: PostgreSQL and PostGIS

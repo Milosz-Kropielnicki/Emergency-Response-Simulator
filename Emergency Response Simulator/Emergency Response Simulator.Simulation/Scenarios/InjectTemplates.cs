@@ -190,6 +190,33 @@ public static class InjectTemplates
             ]),
             (_, v) => Enum.TryParse<SupplyKind>(v["kind"], out var kind) ? [Truth(new LocalStocksDepleted(kind, v["reason"]))] : [],
             v => $"Local suppliers out of {v["kind"]}: {v["reason"]}"),
+
+        // Phase 16: health.
+        new(new("outbreak", "Infectious disease outbreak", "Cases of an infectious disease among a group of people near the incident (evacuees in a rest centre); it spreads until isolated.",
+            [
+                new("agent", "Disease", InjectParameterKind.Text, "measles"),
+                new("cases", "People already ill", InjectParameterKind.Number, "3"),
+                new("contacts", "Contacts", InjectParameterKind.Number, "200"),
+                new("where", "Among", InjectParameterKind.Text, "evacuees at the rest centre"),
+            ]),
+            (context, v) =>
+            {
+                var at = GeoMath.Destination(Near(context), 135, 900);
+                return [Truth(new HealthThreatStarted(Guid.NewGuid(), HealthThreatKind.Infectious, v["agent"], at, v["where"], null,
+                    Math.Max(1, (int)Number(v, "cases", 3)), Math.Max(10, (int)Number(v, "contacts", 200))))];
+            },
+            v => $"{Capitalise(v["agent"])} outbreak: {Number(v, "cases", 3):0} ill among {Number(v, "contacts", 200):0} {v["where"]}"),
+
+        new(new("fatalities", "Fatalities found", "Crews find the dead at the largest live incident (in a collapsed building, a burnt-out vehicle).",
+            [
+                new("count", "How many", InjectParameterKind.Number, "6"),
+                new("cause", "Where found", InjectParameterKind.Text, "found in the collapsed building"),
+            ]),
+            (context, v) => Largest(context) is { } incident
+                ? [.. Enumerable.Range(0, Math.Clamp((int)Number(v, "count", 6), 1, 50)).Select(i => Truth(new CasualtyInjured(Guid.NewGuid(), incident.Id,
+                    GeoMath.Destination(incident.Location, i * 37 % 360, 15 + i % 5 * 8), Triage.Deceased, v["cause"])))]
+                : [],
+            v => $"{Number(v, "count", 6):0} dead {v["cause"]}"),
     ];
 
     public static IReadOnlyList<InjectTemplate> All => [.. Library.Select(t => t.Info)];

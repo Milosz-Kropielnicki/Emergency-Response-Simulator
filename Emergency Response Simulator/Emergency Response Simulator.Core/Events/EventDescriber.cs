@@ -293,6 +293,39 @@ public static class EventDescriber
                 (e.Value >= CostRates.ProcurementThreshold && string.IsNullOrWhiteSpace(e.Justification) ? " (direct award, no justification recorded)" : ""), e.IncidentId,
                 important: e.Value >= CostRates.ProcurementThreshold),
             CostsReported => null, // the finance section's running figures: the LOGISTICS tab shows them
+            // Medical, mass casualty & public health (Phase 16)
+            HospitalServicesRegistered => null, // set-up
+            HospitalResourcesReported => null, // the HEALTH tab shows them
+            PatientTagged e => Entry("PATIENT", $"Tag {e.Tag}: {TriageLabel(e.Triage)}, {e.Injury}" + (e.Need is { } need ? $" — needs {Health.Name(need).ToLowerInvariant()} care" : ""),
+                e.IncidentId, e.UnitId),
+            PatientRetriaged e => Entry("PATIENT", $"Patient now {TriageLabel(e.Triage)}", important: e.Triage == Triage.Immediate),
+            PatientTransported e => Entry("PATIENT", $"Patient leaving with {Unit(e.UnitId)} for hospital", unit: e.UnitId),
+            PatientArrived e => Entry("PATIENT", e.RightPlace ? "Patient handed over at hospital" : "Patient handed over at a hospital that can't give the care needed: transfer to follow",
+                important: !e.RightPlace),
+            PatientTransferred e => Entry("PATIENT", $"Patient transferred between hospitals: {e.Reason}"),
+            PatientDied e => Entry("PATIENT", $"Patient died {e.Where}", important: true),
+            TransportDestinationSet e => Entry("MEDICAL", $"{Incident(e.IncidentId)}: {Health.Need(e.Need).ToLowerInvariant()} patients " +
+                (e.HospitalId is null ? "to the nearest hospital that can take them" : "to a set hospital"), e.IncidentId),
+            BloodRequested e => Entry("MEDICAL", $"{e.Units} units of blood requested from the IBTS"),
+            BloodDelivered e => Entry("MEDICAL", $"{e.Units} units of blood delivered"),
+            BodiesReported e => Entry("FATALITIES", $"{e.Count} dead at the scene of {Incident(e.IncidentId)}", e.IncidentId, important: true),
+            TemporaryMortuaryOpened e => Entry("FATALITIES", $"Temporary mortuary opened: {e.Name}", e.IncidentId, important: true),
+            BodiesRecovered e => Entry("FATALITIES", $"{e.Count} bodies recovered from {Incident(e.IncidentId)} to {e.To}", e.IncidentId),
+            VictimIdentified e => Entry("FATALITIES", $"A victim identified at {e.Where}: the family can be told"),
+            HealthThreatStarted e => Entry("TRUTH", $"{EventDescriber.Humanize(e.Kind)} threat: {e.Agent} at {e.Area}" +
+                (e.IndexCases > 0 ? $", {e.IndexCases} ill among {e.Contacts}" : ""), important: true),
+            PublicHealthAlert e => Entry("PUBLIC HEALTH", $"{e.Agent} ({EventDescriber.Humanize(e.Kind).ToLowerInvariant()}) at {e.Area}: about {e.EstimatedExposed} exposed. {e.Advice}",
+                e.IncidentId, important: true),
+            HealthThreatUpdate e => Entry("PUBLIC HEALTH", $"Surveillance: {e.Ill} ill, {e.Hospitalised} in hospital, {e.Deaths} dead; {e.Protected} of ~{e.EstimatedExposed} protected"),
+            IsolationOrdered => Entry("PUBLIC HEALTH", "Isolation of cases ordered", important: true),
+            QuarantineOrdered => Entry("PUBLIC HEALTH", "Quarantine of contacts ordered", important: true),
+            DispensingPointOpened e => Entry("PUBLIC HEALTH", $"Point of dispensing opening: {e.Name}", important: true),
+            DispensingProgress e => e.OutOfStock ? Entry("PUBLIC HEALTH", $"Point of dispensing out of doses, {e.Queue} waiting", important: true) : null,
+            PsychosocialNeedReported e => Entry("WELFARE", $"About {e.Distressed} people in distress at {Incident(e.IncidentId)}", e.IncidentId),
+            CrisisCounsellingDeployed e => Entry("WELFARE", $"Crisis counselling: {(e.Setting == CounsellingSetting.Helpline ? "helpline opened" : $"team to {Health.Name(e.Setting)}")}",
+                e.IncidentId),
+            PsychologicalTriageReported e => Entry("WELFARE", $"Psychological triage: {e.Seen} seen — {e.Low} low, {e.Moderate} moderate, {e.High} high risk ({e.Admitted} admitted)"),
+            HealthThreatOutcome => null, // ground truth for the review, every few minutes
             ReimbursementClaimSubmitted e => Entry("FINANCE", $"Claim for {CostRates.Money(e.Amount)} submitted to central government", important: true),
             ReimbursementDecided e => Entry("FINANCE", $"Claim decided: {CostRates.Money(e.Approved)} of {CostRates.Money(e.Claimed)} approved" +
                 (e.Disallowed.Count > 0 ? $"; disallowed: {string.Join("; ", e.Disallowed)}" : ""), important: true),

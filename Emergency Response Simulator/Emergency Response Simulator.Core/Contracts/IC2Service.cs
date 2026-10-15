@@ -269,6 +269,39 @@ public interface IC2Service
     /// </summary>
     Task<CommandResult> SubmitReimbursementClaimAsync(CancellationToken cancellationToken = default);
 
+    // ---- Medical, mass casualty & public health (Phase 16) ----
+
+    /// <summary>
+    /// Says where an incident's patients with one need go (major trauma to the trauma centre, burns to the burns unit,
+    /// children to the children's hospital), or, with no hospital, sends them back to the nearest that can take them.
+    /// Crews follow it while the hospital is open; without one, they go to the nearest.
+    /// </summary>
+    Task<CommandResult> SetTransportDestinationAsync(Guid incidentId, Specialty? need, Guid? hospitalId, CancellationToken cancellationToken = default);
+
+    /// <summary>Asks the Irish Blood Transfusion Service for blood for a hospital.</summary>
+    Task<CommandResult> RequestBloodAsync(Guid hospitalId, int units, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Opens a temporary mortuary: the dead recovered from the scene go there instead of filling hospital mortuaries,
+    /// and are identified faster. Recovery itself waits for the coroner to be notified.
+    /// </summary>
+    Task<CommandResult> OpenTemporaryMortuaryAsync(string name, GeoPoint location, Guid? incidentId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Orders the cases of an infectious disease isolated. The order is HSE Public Health's to make: consult them.</summary>
+    Task<CommandResult> OrderIsolationAsync(Guid threatId, CancellationToken cancellationToken = default);
+
+    /// <summary>Orders the contacts of an infectious disease quarantined. The order is HSE Public Health's to make: consult them.</summary>
+    Task<CommandResult> OrderQuarantineAsync(Guid threatId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Opens a point of dispensing for a threat's countermeasure (antibiotics, iodine tablets, vaccine). It takes a while
+    /// to set up, draws its doses from the incident's prophylaxis stock, and people come when they are told where it is.
+    /// </summary>
+    Task<CommandResult> OpenDispensingPointAsync(Guid threatId, string name, GeoPoint location, CancellationToken cancellationToken = default);
+
+    /// <summary>Sends a crisis counselling team to the scene, the rest centres or the family assistance centre, or opens a helpline.</summary>
+    Task<CommandResult> DeployCrisisCounsellingAsync(Guid? incidentId, CounsellingSetting setting, CancellationToken cancellationToken = default);
+
     // ---- AI role players (Phase 11 M5) ----
 
     /// <summary>

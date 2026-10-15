@@ -76,6 +76,7 @@ Open it with **🎛 Console** in the header. To run it on a second screen or mac
   - hazardous release and release rate changes (Phase 13)
   - **social-media rumour:** you say whether it's true. A true one the PIO denies backfires on them.
   - **delivery delayed** and **local suppliers run out** (Phase 15)
+  - **infectious disease outbreak** and **fatalities found** (Phase 16)
 
 > **Tip:** Hold an inject when the team is already saturated, and fire one early when they are coasting. The review shows every inject that fired early, was held, or was fired ad hoc, so the debrief can account for the difficulty.
 
@@ -192,6 +193,17 @@ These are the parts the simulation plays:
 - **Money:** every hour is costed, overtime past the end of a shift, mutual aid as billed. Contracts over €25,000 need a written justification. A claim to central government is only possible after a major emergency is declared.
 - **Injects:** **Delivery delayed** holds up the next delivery; **Local suppliers run out** forces orders up a tier. The **unit breakdown** inject now needs repairing: "flat tyre" can be fixed on site, "pump seal has failed" needs the workshop.
 
+**Health** (Phase 16). The HEALTH tab is where Operations, Logistics and Liaison work it.
+- **Patients are tagged and tracked:** each casualty an ambulance crew treats gets a tag, and the board follows them to hospital.
+- **Specialist centres:** burns go to St. James's, major trauma to the Mater, children to Temple Street. That happens only if Operations sets destinations. Otherwise crews take the nearest hospital, and a patient there who needs a specialist service is transferred 45 minutes later; a P1 may not survive the wait.
+- **Blood:** a few major trauma patients drain a hospital's blood. The hospital says when it is low; the IBTS restocks 40 minutes after it is asked.
+- **The dead:** nobody is moved until the coroner is notified. A full hospital mortuary keeps the dead in the emergency department. A temporary mortuary takes them and identifies them faster, and families are told only once a body is identified.
+- **Public health:** a biological or radioactive release (the **hazardous release** inject with "biological aerosol" or "radioactive material") or an **infectious disease outbreak** brings an HSE Public Health alert. Points of dispensing need doses (prophylaxis, from the supply chain) and a public statement telling people where to go. Isolation and quarantine without HSE Public Health are a legal exposure.
+- **Behavioural health:** distress brings the worried well to emergency departments. A helpline and counselling teams help, and their psychological triage refers the high-risk to psychiatric beds.
+- **Injects:** **Infectious disease outbreak**, and **Fatalities found** (the dead at the largest incident).
+
+> **Steering tip:** The quickest way to exercise the medical side is **Fatalities found** and an **Incident escalates** with extra casualties on an explosion: tags, destinations, blood, the coroner and the mortuary all follow. For public health, fire an outbreak at a rest centre and watch whether the IC involves HSE Public Health before ordering isolation. `Simulation:Health=false` leaves it all out.
+
 > **Steering tip:** Logistics only bites on longer exercises. For a short one, fire **Local suppliers run out** on foam early in a chemical incident, or a breakdown on a key appliance. To leave it out of a first run, set `Simulation:Logistics=false`.
 
 ---
@@ -216,6 +228,7 @@ These are the parts the simulation plays:
    - **Participants:** roles over time, commands, decision ratings, observer ratings, and combined score and level.
    - **Observer notes and Competencies:** each player's ratings by competency area.
    - **Legal & liability:** how many significant decisions were logged with their reasons, and each exposure an inquiry would ask about. Some will be marked mitigated: an evacuation without the Garda, vulnerable people left behind, an unguarded zone, a volunteer hurt, an untrue denial, families waiting over an hour.
+   - **Medical, fatalities & public health:** patients right first time, transfers and deaths; the coroner, the dead at the scene and identification; the exposed protected in time; distress, counselling and the worried well. The dead left at a scene over 3 hours, and isolation or quarantine without HSE Public Health, show under legal & liability.
    - **Logistics & finance:** each supply outage and breakdown, with when it was warned of and when anyone acted; appliances that ran dry; the cost breakdown and the claim. A contract over €25,000 with no justification shows under legal & liability.
    - **Instructor:** what you injected, held, skipped and role-played. This shows how hard you made it.
    - **Timeline:** filter to one participant, play the recorded radio (▶), and find your bookmarks and exercise-control messages.

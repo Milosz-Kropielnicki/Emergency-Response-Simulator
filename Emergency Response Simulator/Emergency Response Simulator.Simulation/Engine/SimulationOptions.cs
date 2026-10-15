@@ -84,4 +84,11 @@ public sealed class SimulationOptions
     /// costs. Off, nothing runs short, nothing wears out, and nothing is costed.
     /// </summary>
     public bool Logistics { get; set; } = true;
+
+    /// <summary>
+    /// Health and medical surge (Phase 16): triage tags and patient tracking, specialist centres and blood, the dead and
+    /// the mortuary, public-health threats and mass prophylaxis, and behavioural health. Off, casualties are carried to the
+    /// nearest hospital as before and nothing more.
+    /// </summary>
+    public bool Health { get; set; } = true;
 }

@@ -161,6 +161,16 @@ public static class PermissionMatrix
         C2(nameof(IC2Service.AwardContractAsync), "Procurement", Finance, Logistics);
         C2(nameof(IC2Service.SubmitReimbursementClaimAsync), "Cost recovery", Finance);
 
+        // Phase 16: patient distribution is the medical group's (Operations); hospitals, blood and the mortuary are supported by
+        // Logistics; public health and counselling are other agencies' work, arranged through Liaison; quarantine is a decision for the IC.
+        C2(nameof(IC2Service.SetTransportDestinationAsync), "Patient distribution", Ops);
+        C2(nameof(IC2Service.RequestBloodAsync), "Hospital support", Logistics, Liaison);
+        C2(nameof(IC2Service.OpenTemporaryMortuaryAsync), "Mass fatalities", Ops, Logistics);
+        C2(nameof(IC2Service.OrderIsolationAsync), "Public health orders", IC);
+        C2(nameof(IC2Service.OrderQuarantineAsync), "Public health orders", IC);
+        C2(nameof(IC2Service.OpenDispensingPointAsync), "Mass prophylaxis", Logistics, Liaison);
+        C2(nameof(IC2Service.DeployCrisisCounsellingAsync), "Behavioural health", Liaison, Logistics);
+
         // AI role players (Phase 11 M5): politicians ring the IC or the PIO; an agency chief answers for the agency they run.
         C2(nameof(IC2Service.AnswerPoliticalCallAsync), "Political calls", IC, Pio);
         C2(nameof(IC2Service.AnswerAgencyRequestAsync), "Answering for your agency", Chief);

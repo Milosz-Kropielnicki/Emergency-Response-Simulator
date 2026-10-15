@@ -106,6 +106,10 @@ public sealed class ReunificationSystem(IRoutingService? routing = null) : ISimu
             if (context.SimTime < due) continue;
 
             var person = world.Civilians.FirstOrDefault(p => p.Id == subject);
+            // A death is confirmed to the family only once the body has been identified (Phase 16).
+            if (person is not null && world.Health.FatalitiesActive
+                && world.Casualties.Values.FirstOrDefault(c => c.CivilianId == person.Id) is { Alive: false } dead && !world.Health.Identified(dead.Id))
+                continue;
             var (outcome, detail) = Outcome(world, person, context.SimTime);
             var supported = outcome is TraceOutcome.InHospital or TraceOutcome.Deceased;
             context.EmitPerceived(new MissingPersonTraced(enquiryId, outcome, detail, supported), EventSources.Comms);
@@ -124,7 +128,10 @@ public sealed class ReunificationSystem(IRoutingService? routing = null) : ISimu
         var casualty = world.Casualties.Values.FirstOrDefault(c => c.CivilianId == person.Id);
         if (casualty is not null)
         {
-            if (!casualty.Alive) return (TraceOutcome.Deceased, "died at the scene; the coroner has been informed");
+            if (!casualty.Alive)
+                return (TraceOutcome.Deceased, world.Health.Identified(casualty.Id)
+                    ? "died; formally identified, and the coroner has been informed"
+                    : "died at the scene; the coroner has been informed");
             var hospital = casualty.HospitalId is { } h && world.Hospitals.TryGetValue(h, out var where) ? where.Name : null;
             return casualty.State switch
             {

@@ -201,6 +201,33 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(CostsReported), nameof(CostsReported))]
 [JsonDerivedType(typeof(ReimbursementClaimSubmitted), nameof(ReimbursementClaimSubmitted))]
 [JsonDerivedType(typeof(ReimbursementDecided), nameof(ReimbursementDecided))]
+// Medical, mass casualty & public health (Phase 16)
+[JsonDerivedType(typeof(HospitalServicesRegistered), nameof(HospitalServicesRegistered))]
+[JsonDerivedType(typeof(HospitalResourcesReported), nameof(HospitalResourcesReported))]
+[JsonDerivedType(typeof(PatientTagged), nameof(PatientTagged))]
+[JsonDerivedType(typeof(PatientRetriaged), nameof(PatientRetriaged))]
+[JsonDerivedType(typeof(PatientTransported), nameof(PatientTransported))]
+[JsonDerivedType(typeof(PatientArrived), nameof(PatientArrived))]
+[JsonDerivedType(typeof(PatientTransferred), nameof(PatientTransferred))]
+[JsonDerivedType(typeof(PatientDied), nameof(PatientDied))]
+[JsonDerivedType(typeof(TransportDestinationSet), nameof(TransportDestinationSet))]
+[JsonDerivedType(typeof(BloodRequested), nameof(BloodRequested))]
+[JsonDerivedType(typeof(BloodDelivered), nameof(BloodDelivered))]
+[JsonDerivedType(typeof(BodiesReported), nameof(BodiesReported))]
+[JsonDerivedType(typeof(TemporaryMortuaryOpened), nameof(TemporaryMortuaryOpened))]
+[JsonDerivedType(typeof(BodiesRecovered), nameof(BodiesRecovered))]
+[JsonDerivedType(typeof(VictimIdentified), nameof(VictimIdentified))]
+[JsonDerivedType(typeof(HealthThreatStarted), nameof(HealthThreatStarted))]
+[JsonDerivedType(typeof(PublicHealthAlert), nameof(PublicHealthAlert))]
+[JsonDerivedType(typeof(HealthThreatUpdate), nameof(HealthThreatUpdate))]
+[JsonDerivedType(typeof(IsolationOrdered), nameof(IsolationOrdered))]
+[JsonDerivedType(typeof(QuarantineOrdered), nameof(QuarantineOrdered))]
+[JsonDerivedType(typeof(DispensingPointOpened), nameof(DispensingPointOpened))]
+[JsonDerivedType(typeof(DispensingProgress), nameof(DispensingProgress))]
+[JsonDerivedType(typeof(PsychosocialNeedReported), nameof(PsychosocialNeedReported))]
+[JsonDerivedType(typeof(CrisisCounsellingDeployed), nameof(CrisisCounsellingDeployed))]
+[JsonDerivedType(typeof(PsychologicalTriageReported), nameof(PsychologicalTriageReported))]
+[JsonDerivedType(typeof(HealthThreatOutcome), nameof(HealthThreatOutcome))]
 [JsonDerivedType(typeof(HazardEnded), nameof(HazardEnded))]
 [JsonDerivedType(typeof(HazardSitePlaced), nameof(HazardSitePlaced))]
 [JsonDerivedType(typeof(CasualtyInjured), nameof(CasualtyInjured))]
@@ -1175,3 +1202,97 @@ public sealed record ReimbursementClaimSubmitted(Guid ClaimId, decimal Amount) :
 
 /// <summary>Central government decided a claim: how much it will pay, and what it won't, and why.</summary>
 public sealed record ReimbursementDecided(Guid ClaimId, decimal Claimed, decimal Approved, IReadOnlyList<string> Disallowed) : DomainEvent;
+
+// ---- Medical, mass casualty & public health (Phase 16) ----
+
+/// <summary>A hospital's specialist services, blood stock and mortuary, as known at the start; also its true starting state.</summary>
+/// <param name="ChildrenOnly">A children's hospital: adults are not taken there.</param>
+public sealed record HospitalServicesRegistered(Guid HospitalId, IReadOnlyList<SpecialtyBeds> Specialties, int BloodUnits, int MorgueSpaces,
+    bool ChildrenOnly = false) : DomainEvent;
+
+/// <summary>A hospital's report of its specialist beds, blood, mortuary and the walk-ins with no injury (the worried well).</summary>
+public sealed record HospitalResourcesReported(Guid HospitalId, IReadOnlyList<SpecialtyBeds> Specialties, int BloodUnits, int MorgueOccupied, int WorriedWell)
+    : DomainEvent;
+
+/// <summary>An ambulance crew triaged a casualty and put a tag on them: the start of their record on the tracking board.</summary>
+/// <param name="Need">What they need beyond an ordinary emergency department, as the crew sees it.</param>
+public sealed record PatientTagged(Guid PatientId, string Tag, Guid? IncidentId, Triage Triage, Specialty? Need, string Injury, Guid? UnitId) : DomainEvent;
+
+/// <summary>A tagged patient's priority changed, as the crew or the hospital saw it.</summary>
+public sealed record PatientRetriaged(Guid PatientId, Triage Triage) : DomainEvent;
+
+/// <summary>A tagged patient left the scene for a hospital.</summary>
+public sealed record PatientTransported(Guid PatientId, Guid UnitId, Guid HospitalId) : DomainEvent;
+
+/// <summary>A tagged patient was handed over at a hospital, and whether it could give them what they need.</summary>
+public sealed record PatientArrived(Guid PatientId, Guid HospitalId, bool RightPlace) : DomainEvent;
+
+/// <summary>A hospital moved a patient on to one that can treat them (a secondary transfer).</summary>
+public sealed record PatientTransferred(Guid PatientId, Guid FromHospitalId, Guid ToHospitalId, string Reason) : DomainEvent;
+
+/// <summary>A tagged patient died.</summary>
+public sealed record PatientDied(Guid PatientId, string Where) : DomainEvent;
+
+/// <summary>Command said where an incident's patients with one need go (null hospital: back to the nearest that can take them).</summary>
+public sealed record TransportDestinationSet(Guid IncidentId, Specialty? Need, Guid? HospitalId) : DomainEvent;
+
+/// <summary>Command asked the Irish Blood Transfusion Service for blood for a hospital.</summary>
+public sealed record BloodRequested(Guid RequestId, Guid HospitalId, int Units) : DomainEvent;
+
+public sealed record BloodDelivered(Guid HospitalId, int Units) : DomainEvent;
+
+/// <summary>Crews at a scene report bodies there, which stay until recovered on the coroner's authority.</summary>
+public sealed record BodiesReported(Guid IncidentId, int Count) : DomainEvent;
+
+/// <summary>Command opened a temporary mortuary: the dead are brought here, and identified faster.</summary>
+public sealed record TemporaryMortuaryOpened(Guid MortuaryId, string Name, GeoPoint Location, Guid? IncidentId) : DomainEvent;
+
+/// <summary>Recovery teams brought bodies from a scene to a mortuary.</summary>
+public sealed record BodiesRecovered(Guid IncidentId, int Count, string To) : DomainEvent;
+
+/// <summary>A body was identified (disaster victim identification): the family can now be told.</summary>
+public sealed record VictimIdentified(Guid BodyId, string Where) : DomainEvent;
+
+/// <summary>
+/// Ground truth: a public-health threat began — a biological or radiological release (from a plume), or cases of an
+/// infectious disease among a group of people.
+/// </summary>
+/// <param name="HazardId">The release it comes from, when it is a plume.</param>
+/// <param name="IndexCases">Infectious: people already ill.</param>
+/// <param name="Contacts">Infectious: the people around them who could catch it.</param>
+public sealed record HealthThreatStarted(Guid ThreatId, HealthThreatKind Kind, string Agent, GeoPoint Location, string Area, Guid? HazardId,
+    int IndexCases = 0, int Contacts = 0) : DomainEvent;
+
+/// <summary>HSE Public Health identified a threat and told command: what it is, how many may be exposed, and its advice.</summary>
+public sealed record PublicHealthAlert(Guid ThreatId, HealthThreatKind Kind, string Agent, string Area, GeoPoint Location, Guid? IncidentId,
+    int EstimatedExposed, string Advice) : DomainEvent;
+
+/// <summary>HSE Public Health's regular surveillance update on a threat.</summary>
+public sealed record HealthThreatUpdate(Guid ThreatId, int EstimatedExposed, int Ill, int Hospitalised, int Deaths, int Protected) : DomainEvent;
+
+/// <summary>Command ordered the cases of an infectious disease isolated.</summary>
+public sealed record IsolationOrdered(Guid ThreatId) : DomainEvent;
+
+/// <summary>Command ordered the contacts of an infectious disease quarantined.</summary>
+public sealed record QuarantineOrdered(Guid ThreatId) : DomainEvent;
+
+/// <summary>Command opened a point of dispensing for a threat's countermeasure.</summary>
+public sealed record DispensingPointOpened(Guid PodId, Guid ThreatId, string Name, GeoPoint Location) : DomainEvent;
+
+/// <summary>A point of dispensing's report: open or still setting up, doses given, people queuing, and whether it has run out.</summary>
+public sealed record DispensingProgress(Guid PodId, bool Ready, int Dispensed, int Queue, bool OutOfStock) : DomainEvent;
+
+/// <summary>The scene, rest centres and family assistance centre report how many people are in distress (an estimate).</summary>
+public sealed record PsychosocialNeedReported(Guid IncidentId, int Distressed) : DomainEvent;
+
+/// <summary>Command sent a crisis counselling team to a setting, or opened a helpline.</summary>
+public sealed record CrisisCounsellingDeployed(Guid DeploymentId, Guid? IncidentId, CounsellingSetting Setting) : DomainEvent;
+
+/// <summary>What a counselling team's psychological triage has found so far: low, moderate and high risk, and admissions.</summary>
+public sealed record PsychologicalTriageReported(Guid DeploymentId, int Seen, int Low, int Moderate, int High, int Admitted) : DomainEvent;
+
+/// <summary>
+/// Ground truth, for the review: how a threat really stands — everyone exposed, how many were protected and how many of
+/// those in time, how many fell ill and died.
+/// </summary>
+public sealed record HealthThreatOutcome(Guid ThreatId, int Exposed, int Protected, int ProtectedInTime, int Ill, int Deaths) : DomainEvent;

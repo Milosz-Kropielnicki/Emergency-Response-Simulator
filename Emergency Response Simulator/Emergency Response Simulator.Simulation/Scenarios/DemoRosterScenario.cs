@@ -142,10 +142,24 @@ public sealed class DemoRosterScenario : IScenario
         await AddUnit("Garda RP 43", UnitType.Motorcycle, trafficCorps, new GeoPoint(53.3372, -6.2460), "Pearse Street", 1);
 
         // Receiving hospitals: emergency department places and how many are already in use.
-        await Register(new HospitalRegistered(Guid.NewGuid(), "St. James's Hospital", new GeoPoint(53.3415, -6.2949), EdCapacity: 40, Occupied: 35));
-        await Register(new HospitalRegistered(Guid.NewGuid(), "Mater Misericordiae University Hospital", new GeoPoint(53.3597, -6.2659), EdCapacity: 45, Occupied: 33));
-        await Register(new HospitalRegistered(Guid.NewGuid(), "St. Vincent's University Hospital", new GeoPoint(53.3168, -6.2128), EdCapacity: 35, Occupied: 24));
-        await Register(new HospitalRegistered(Guid.NewGuid(), "Beaumont Hospital", new GeoPoint(53.3905, -6.2232), EdCapacity: 40, Occupied: 31));
+        var jamess = Guid.NewGuid();
+        var mater = Guid.NewGuid();
+        var vincents = Guid.NewGuid();
+        var beaumont = Guid.NewGuid();
+        var templeStreet = Guid.NewGuid();
+        await Register(new HospitalRegistered(jamess, "St. James's Hospital", new GeoPoint(53.3415, -6.2949), EdCapacity: 40, Occupied: 35));
+        await Register(new HospitalRegistered(mater, "Mater Misericordiae University Hospital", new GeoPoint(53.3597, -6.2659), EdCapacity: 45, Occupied: 33));
+        await Register(new HospitalRegistered(vincents, "St. Vincent's University Hospital", new GeoPoint(53.3168, -6.2128), EdCapacity: 35, Occupied: 24));
+        await Register(new HospitalRegistered(beaumont, "Beaumont Hospital", new GeoPoint(53.3905, -6.2232), EdCapacity: 40, Occupied: 31));
+        await Register(new HospitalRegistered(templeStreet, "Children's Health Ireland at Temple Street", new GeoPoint(53.3571, -6.2617), EdCapacity: 20, Occupied: 13));
+
+        // Phase 16: specialist services, blood and mortuary spaces (real services, illustrative numbers). The Mater is the
+        // region's major trauma centre, St. James's has the National Burns Unit, children go to Temple Street.
+        await Register(new HospitalServicesRegistered(jamess, [new(Specialty.Burns, 8, 5), new(Specialty.Trauma, 4, 3)], BloodUnits: 60, MorgueSpaces: 12));
+        await Register(new HospitalServicesRegistered(mater, [new(Specialty.Trauma, 10, 6), new(Specialty.Psychiatric, 6, 4)], BloodUnits: 70, MorgueSpaces: 12));
+        await Register(new HospitalServicesRegistered(vincents, [new(Specialty.Psychiatric, 8, 6)], BloodUnits: 40, MorgueSpaces: 10));
+        await Register(new HospitalServicesRegistered(beaumont, [new(Specialty.Trauma, 4, 2)], BloodUnits: 50, MorgueSpaces: 10));
+        await Register(new HospitalServicesRegistered(templeStreet, [new(Specialty.Paediatric, 15, 9)], BloodUnits: 20, MorgueSpaces: 4, ChildrenOnly: true));
 
         await publisher.PublishAsync(
             new WeatherChanged(WindFromDegrees: 270, WindSpeedMps: 4.5, TemperatureC: 14, RelativeHumidity: 0.72),

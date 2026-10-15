@@ -1733,6 +1733,186 @@
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
+                    <!-- Health and medical surge (Phase 16). Last, so tab indices match WorkspacePanel. -->
+                    <TabItem DataContext="{Binding Health}" Visibility="{Binding DataContext.ShowHealth, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
+                        <TabItem.Header>
+                            <TextBlock Text="{Binding TabHeader}" />
+                        </TabItem.Header>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="2">
+                                <!-- Patients -->
+                                <TextBlock Style="{StaticResource PanelHeader}">
+                                    <Run Text="PATIENTS ·" />
+                                    <Run Text="{Binding IncidentLabel, Mode=OneWay}" />
+                                </TextBlock>
+                                <TextBlock Text="{Binding PatientSummary}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,0,0,2" />
+                                <ItemsControl ItemsSource="{Binding Patients}" Margin="0,0,0,6">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:PatientRow}">
+                                            <Border x:Name="Row" BorderBrush="{StaticResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,1">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="55" />
+                                                        <ColumnDefinition Width="35" />
+                                                        <ColumnDefinition Width="85" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{Binding Tag}" FontWeight="SemiBold" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding Triage}" />
+                                                    <TextBlock Grid.Column="2" Text="{Binding Need}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock x:Name="Where" Grid.Column="3" Text="{Binding Where}" TextWrapping="Wrap" FontSize="11" />
+                                                </Grid>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Alarm}" Value="1">
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Alarm}" Value="2">
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Where" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="Where patients go (crews take them to the nearest open hospital otherwise):" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                <Grid Margin="0,2,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox ItemsSource="{Binding Needs}" SelectedItem="{Binding SelectedNeed}" />
+                                    <ComboBox Grid.Column="1" ItemsSource="{Binding HospitalChoices}" SelectedItem="{Binding SelectedHospital}" Margin="4,0" />
+                                    <Button Grid.Column="2" Content="Set" Command="{Binding SetDestinationCommand}" Padding="8,0"
+                                            ToolTip="Send the selected incident's patients with this need to this hospital (Nearest clears it)" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Destinations}" Margin="0,0,0,10">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:DestinationRow}">
+                                            <TextBlock FontSize="11">
+                                                <Run Text="{Binding Need, Mode=OneWay}" FontWeight="SemiBold" />
+                                                <Run Text="→" />
+                                                <Run Text="{Binding Hospital, Mode=OneWay}" />
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Hospitals -->
+                                <TextBlock Text="HOSPITALS: SPECIALIST BEDS, BLOOD, MORTUARY" Style="{StaticResource PanelHeader}" />
+                                <DockPanel Margin="0,0,0,2">
+                                    <TextBox DockPanel.Dock="Right" Text="{Binding BloodUnits, UpdateSourceTrigger=PropertyChanged}" Width="45" ToolTip="Units of blood to ask the IBTS for" />
+                                    <TextBlock Text="Units of blood per request:" FontSize="11" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+                                </DockPanel>
+                                <ItemsControl ItemsSource="{Binding Hospitals}" Margin="0,0,0,10">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:HospitalCareRow}">
+                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,2">
+                                                <DockPanel>
+                                                    <Button DockPanel.Dock="Right" Content="Blood" Padding="5,0" FontSize="11" VerticalAlignment="Center" CommandParameter="{Binding HospitalId}"
+                                                            Command="{Binding DataContext.RequestBloodCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            ToolTip="Ask the Irish Blood Transfusion Service for blood for this hospital (about 40 minutes)" />
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                                        <TextBlock Text="{Binding Ed}" FontSize="11" />
+                                                        <TextBlock Text="{Binding Specialties}" FontSize="11" TextWrapping="Wrap" />
+                                                        <TextBlock x:Name="Supplies" FontSize="10" Foreground="{StaticResource MutedTextBrush}">
+                                                            <Run Text="{Binding Blood, Mode=OneWay}" />
+                                                            <Run Text="·" />
+                                                            <Run Text="{Binding Morgue, Mode=OneWay}" />
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </DockPanel>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding BloodLow}" Value="True">
+                                                    <Setter TargetName="Supplies" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- The dead -->
+                                <TextBlock Text="FATALITIES &amp; MORTUARY" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Text="{Binding FatalitySummary}" TextWrapping="Wrap" Margin="0,0,0,2" />
+                                <Button Content="Notify the coroner" Command="{Binding NotifyCoronerCommand}" HorizontalAlignment="Left" Padding="8,0" Margin="0,2"
+                                        ToolTip="The dead can't be moved without the coroner's authority (the Garda act for the coroner)" />
+                                <DockPanel Margin="0,2,0,10" Visibility="{Binding MortuaryOpen, Converter={x:Static vm:Converters.FalseToVisible}}">
+                                    <Button DockPanel.Dock="Right" Content="Open temporary mortuary" Command="{Binding OpenMortuaryCommand}" Padding="6,0" Margin="4,0,0,0"
+                                            ToolTip="A kilometre and a half upwind of the selected incident: the dead come here from the scene and from full hospital mortuaries, and are identified faster" />
+                                    <TextBox Text="{Binding MortuaryName, UpdateSourceTrigger=PropertyChanged}" />
+                                </DockPanel>
+
+                                <!-- Public health -->
+                                <TextBlock Text="PUBLIC HEALTH" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Style="{StaticResource EmptyHint}" FontSize="11" Margin="0,0,0,2"
+                                           Text="HSE Public Health reports biological and radiological releases, and outbreaks. Name the point of dispensing, open it, then tell the public where it is." />
+                                <TextBox Text="{Binding PodName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,2" ToolTip="Name of the next point of dispensing" />
+                                <ItemsControl ItemsSource="{Binding Threats}" Margin="0,0,0,4">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:ThreatRow}">
+                                            <Border BorderBrush="{StaticResource CriticalBrush}" BorderThickness="3,0,0,1" Padding="5,2" Margin="0,0,0,2">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding Figures}" FontSize="11" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding Advice}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding Orders}" FontSize="10" />
+                                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                        <Button Content="Open point of dispensing" Padding="5,0" FontSize="11" CommandParameter="{Binding ThreatId}"
+                                                                Command="{Binding DataContext.OpenPodCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                                                        <Button Content="Isolate cases" Padding="5,0" FontSize="11" Margin="4,0,0,0" CommandParameter="{Binding ThreatId}"
+                                                                Visibility="{Binding CanIsolate, Converter={StaticResource BoolToVisibility}}"
+                                                                Command="{Binding DataContext.IsolateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                ToolTip="HSE Public Health's order to make: notify them first" />
+                                                        <Button Content="Quarantine contacts" Padding="5,0" FontSize="11" Margin="4,0,0,0" CommandParameter="{Binding ThreatId}"
+                                                                Visibility="{Binding CanQuarantine, Converter={StaticResource BoolToVisibility}}"
+                                                                Command="{Binding DataContext.QuarantineCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                ToolTip="HSE Public Health's order to make: notify them first" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <ItemsControl ItemsSource="{Binding Pods}" Margin="0,0,0,10">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:PodRow}">
+                                            <TextBlock x:Name="Line" FontSize="11" TextWrapping="Wrap">
+                                                <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
+                                                <Run Text="{Binding Status, Mode=OneWay}" />
+                                            </TextBlock>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Alarm}" Value="True">
+                                                    <Setter TargetName="Line" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Behavioural health -->
+                                <TextBlock Text="BEHAVIOURAL HEALTH" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Text="{Binding DistressSummary}" TextWrapping="Wrap" Margin="0,0,0,2" />
+                                <DockPanel Margin="0,0,0,4">
+                                    <Button DockPanel.Dock="Right" Content="Send counselling" Command="{Binding DeployCounsellingCommand}" Padding="6,0" Margin="4,0,0,0"
+                                            ToolTip="A crisis counselling team does psychological first aid and triage; a helpline keeps the worried well out of emergency departments" />
+                                    <ComboBox ItemsSource="{Binding Settings}" SelectedItem="{Binding SelectedSetting}" />
+                                </DockPanel>
+                                <ItemsControl ItemsSource="{Binding Counselling}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:CounsellingRow}">
+                                            <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,1">
+                                                <Run Text="{Binding Where, Mode=OneWay}" FontWeight="SemiBold" />
+                                                <Run Text="{Binding Status, Mode=OneWay}" />
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
                 </TabControl>
             </Border>
         </Grid>

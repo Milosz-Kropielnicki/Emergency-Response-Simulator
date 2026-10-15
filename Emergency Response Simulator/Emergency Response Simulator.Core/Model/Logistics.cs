@@ -30,6 +30,9 @@ public enum SupplyKind
 
     /// <summary>Portable toilets and hand-washing, serviced: one unit serves about 25 person-hours. Units.</summary>
     Sanitation,
+
+    /// <summary>Antibiotics, iodine tablets or vaccine for mass prophylaxis (Phase 16), dispensed at points of dispensing. Doses.</summary>
+    Prophylaxis,
 }
 
 /// <summary>
@@ -125,6 +128,7 @@ public static class Supplies
     {
         SupplyKind.Fuel or SupplyKind.Water or SupplyKind.Foam => "L",
         SupplyKind.Food => "meals",
+        SupplyKind.Prophylaxis => "doses",
         SupplyKind.MedicalSupplies => "kits",
         SupplyKind.Batteries => "packs",
         SupplyKind.Ppe => "sets",
@@ -142,6 +146,7 @@ public static class Supplies
     {
         SupplyKind.Fuel => 1.75m,
         SupplyKind.Food => 12m,
+        SupplyKind.Prophylaxis => 4m,
         SupplyKind.Water => 0.60m,
         SupplyKind.Foam => 6m,
         SupplyKind.MedicalSupplies => 85m,
@@ -155,6 +160,7 @@ public static class Supplies
     {
         SupplyKind.Fuel => 2000,
         SupplyKind.Food => 60,
+        SupplyKind.Prophylaxis => 2000,
         SupplyKind.Water => 200,
         SupplyKind.Foam => 1000,
         SupplyKind.MedicalSupplies => 20,
@@ -173,6 +179,7 @@ public static class Supplies
         SupplyKind.Ppe => 40,
         SupplyKind.MedicalSupplies => 30,
         SupplyKind.Batteries => 48,
+        SupplyKind.Prophylaxis => 300, // what local pharmacies hold: real numbers come from the national stockpile
         _ => TypicalOrder(kind) * 4,
     };
 

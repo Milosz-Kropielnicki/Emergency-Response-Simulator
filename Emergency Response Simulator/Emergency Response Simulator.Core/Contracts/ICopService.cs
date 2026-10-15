@@ -111,6 +111,12 @@ public interface ICopService
     /// </summary>
     LogisticsSituation Logistics { get; }
 
+    /// <summary>
+    /// Health and medical surge (Phase 16): the patient tracking board, transport destinations, hospitals' specialist
+    /// beds, blood and mortuaries, the dead, public-health threats and dispensing, and behavioural health. A copy.
+    /// </summary>
+    HealthSituation Health { get; }
+
     // Networked sessions (Phase 11)
 
     /// <summary>Everyone who has joined the session, present or not, in the order they joined.</summary>

@@ -172,6 +172,50 @@ public static class RoleDesk
             items.Add(new(Function<IC2Service>(nameof(IC2Service.SubmitReimbursementClaimAsync)),
                 $"{CostRates.Money(logistics.Reimbursable)} of eligible costs not yet claimed from central government", declared, DeskUrgency.Routine));
 
+        // ---- Phase 16: health ----
+        var health = cop.Health;
+        string HospitalName(Guid id) => cop.Hospitals.FirstOrDefault(h => h.Id == id)?.Name ?? "A hospital";
+        if (Can<IC2Service>(nameof(IC2Service.SetTransportDestinationAsync)))
+            foreach (var group in health.Patients.Where(p => p is { Need: not null, IncidentId: not null, State: CasualtyState.TreatedOnScene })
+                         .GroupBy(p => (Incident: p.IncidentId!.Value, Need: p.Need!.Value))
+                         .Where(g => health.DestinationFor(g.Key.Incident, g.Key.Need) is null))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.SetTransportDestinationAsync)),
+                    $"{group.Count()} {Health.Name(group.Key.Need).ToLowerInvariant()} patient(s){Incident(group.Key.Incident)} with no destination set: crews will take them to the nearest",
+                    group.Min(p => p.TaggedAt), After(group.Min(p => p.TaggedAt), TimeSpan.FromMinutes(5)), group.Key.Incident));
+
+        if (Can<IC2Service>(nameof(IC2Service.RequestBloodAsync)))
+            foreach (var low in health.Hospitals.Values.Where(h => h.BloodLowSince is not null))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.RequestBloodAsync)),
+                    $"Blood low at {HospitalName(low.HospitalId)}: {low.BloodUnits} units — ask the IBTS", low.BloodLowSince!.Value, DeskUrgency.Urgent, EntityId: low.HospitalId));
+
+        var fatalities = health.Fatalities;
+        var bodiesAtScene = fatalities.AtScene.Values.Sum();
+        if (bodiesAtScene > 0 && fatalities.CoronerNotifiedAt is null && Can<IC2Service>(nameof(IC2Service.NotifyAsync)))
+            items.Add(new(Function<IC2Service>(nameof(IC2Service.NotifyAsync)),
+                $"{bodiesAtScene} dead at the scene: notify the coroner (nobody can be moved without the coroner's authority)", now, DeskUrgency.Overdue));
+        if (fatalities.MortuaryOpenedAt is null && Can<IC2Service>(nameof(IC2Service.OpenTemporaryMortuaryAsync))
+            && (bodiesAtScene >= 3 || health.Hospitals.Values.Any(h => h.MorgueSpaces > 0 && h.MorgueFull)))
+            items.Add(new(Function<IC2Service>(nameof(IC2Service.OpenTemporaryMortuaryAsync)),
+                health.Hospitals.Values.Any(h => h.MorgueSpaces > 0 && h.MorgueFull)
+                    ? "A hospital mortuary is full: open a temporary mortuary"
+                    : $"{bodiesAtScene} dead at the scene: open a temporary mortuary", now, DeskUrgency.Overdue));
+
+        foreach (var threat in health.Threats)
+        {
+            if (Health.Contagious(threat.Kind) && threat.IsolationOrderedAt is null && Can<IC2Service>(nameof(IC2Service.OrderIsolationAsync)))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.OrderIsolationAsync)), $"{threat.Agent}: {threat.Ill} ill — isolate the cases (with HSE Public Health)",
+                    threat.ReportedAt, DeskUrgency.Urgent, threat.IncidentId, threat.Id));
+            if (!health.Dispensing.Any(d => d.ThreatId == threat.Id) && Can<IC2Service>(nameof(IC2Service.OpenDispensingPointAsync)))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.OpenDispensingPointAsync)),
+                    $"{threat.Agent}: ~{threat.EstimatedExposed} need {Health.Countermeasure(threat.Kind)} — open points of dispensing",
+                    threat.ReportedAt, DeskUrgency.Urgent, threat.IncidentId, threat.Id));
+        }
+
+        if (Can<IC2Service>(nameof(IC2Service.DeployCrisisCounsellingAsync)))
+            foreach (var (incidentId, distressed) in health.Distressed.Where(d => d.Value >= 20 && !health.Counselling.Any(c => c.IncidentId == d.Key || c.IncidentId is null)))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.DeployCrisisCounsellingAsync)),
+                    $"About {distressed} people in distress{Incident(incidentId)}: send crisis counselling", now, DeskUrgency.Routine, incidentId));
+
         if (Can<IC2Service>(nameof(IC2Service.AnswerPoliticalCallAsync)))
             foreach (var call in cop.PoliticalCalls.Where(c => c.Waiting))
                 items.Add(new(Function<IC2Service>(nameof(IC2Service.AnswerPoliticalCallAsync)), $"Call back {call.Caller} (for the {call.To})",
