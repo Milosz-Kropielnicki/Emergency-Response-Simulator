@@ -307,4 +307,39 @@ public sealed class InstructorService(SimulationEngine engine, IEnumerable<ISimu
             EventSources.Instructor, cancellationToken);
         return CommandResult.Ok(recorded.Sequence) with { Detail = to is null ? "Sent to everyone" : $"Sent to {to}" };
     }
+
+    // ---- Scenario design & adaptive training (Phase 19) ----
+
+    public async Task<CommandResult> LoadScenarioAsync(ScenarioDefinition scenario, CancellationToken cancellationToken = default)
+    {
+        var problems = ScenarioDesign.Validate(scenario, InjectTemplates.All);
+        if (problems.Count > 0) return CommandResult.Fail(string.Join(" ", problems.Take(3)) + (problems.Count > 3 ? $" (and {problems.Count - 3} more)" : ""));
+        if (Script is not { } script) return CommandResult.Fail("This session can't take a scenario: it has no script runner.");
+        return await engine.ApplyAsync(context =>
+        {
+            var first = script.NextNumber;
+            script.Append(ScenarioCompiler.Compile(scenario, first), script.Elapsed(context), scenario.Name);
+            return new CommandResult(true, Detail: $"{scenario.Name}: {scenario.Steps.Count} step(s) added to the script as injects {first}–{script.NextNumber - 1}, timed from now");
+        }, cancellationToken);
+    }
+
+    public Task<TrainingStatus> GetTrainingAsync(CancellationToken cancellationToken = default) =>
+        engine.ApplyAsync(context =>
+        {
+            var training = context.World.Training;
+            return new TrainingStatus(training.Settings.Mode, training.Level, training.Settings.RandomEvents, training.Settings.MeanMinutes,
+                training.LastScore, training.LastAssessedAt, [.. training.History]);
+        }, cancellationToken);
+
+    public async Task<CommandResult> SetTrainingAsync(TrainingSettings settings, CancellationToken cancellationToken = default)
+    {
+        if (settings.Level is < 1 or > 5) return CommandResult.Fail("Difficulty runs from 1 to 5.");
+        if (settings.RandomEvents && settings.MeanMinutes < 2) return CommandResult.Fail("Random events can't come more often than every 2 minutes on average.");
+        var recorded = await engine.PublishAsync(new TrainingSettingsChanged(settings), EventVisibility.Truth, EventSources.Instructor, cancellationToken);
+        return CommandResult.Ok(recorded.Sequence) with
+        {
+            Detail = $"{(settings.Mode == DifficultyMode.Adaptive ? "Adaptive" : "Fixed")} difficulty from level {settings.Level}" +
+                     (settings.RandomEvents ? $"; random events about every {settings.MeanMinutes:0} min" : "; no random events"),
+        };
+    }
 }

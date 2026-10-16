@@ -82,7 +82,7 @@ public sealed partial class AarAnalyzer
             Findings =
             [
                 .. Findings(metrics, branches), .. HandoverFindings(), .. PoliticalFindings(), .. MediaFindings(), .. PlumeFindings(), .. PublicFindings(),
-                .. LogisticsFindings(), .. HealthFindings(), .. ProtectionFindings(),
+                .. LogisticsFindings(), .. HealthFindings(), .. ProtectionFindings(), .. TrainingFindings(),
             ],
             Participants = Participants(),
             Instructor = _instructor,
@@ -93,6 +93,7 @@ public sealed partial class AarAnalyzer
             Logistics = LogisticsSummary(),
             Health = HealthSummary(),
             Protection = ProtectionSummary(),
+            Training = TrainingSummary(),
         };
     }
 
@@ -114,6 +115,7 @@ public sealed partial class AarAnalyzer
         TrackLogistics(simEvent); // Phase 15: supplies, the fleet and the money
         TrackHealth(simEvent); // Phase 16: patients, the dead, public health, behavioural health
         TrackProtection(simEvent); // Phase 17: evacuation, shelter, infrastructure, cyber and GPS, the environment
+        TrackTraining(simEvent); // Phase 19: the scenario, difficulty, random events, incidents within the incident
 
         // Bookkeeping the analysis needs whichever way the event went.
         switch (payload)

@@ -98,4 +98,14 @@ public sealed class SimulationOptions
     /// evacuees just walk or drive out and nothing more is modelled.
     /// </summary>
     public bool Protection { get; set; } = true;
+
+    /// <summary>
+    /// Adaptive training (Phase 19): adaptive difficulty, random events and the incidents within an incident (secondary
+    /// devices, active shooters), and real weather for scenarios that ask for it. All are still off until a scenario or the
+    /// instructor turns them on; this removes them altogether.
+    /// </summary>
+    public bool Training { get; set; } = true;
+
+    /// <summary>Fetch the real weather where the session happens, now and every half hour, whatever the scenario says (Phase 19).</summary>
+    public bool LiveWeather { get; set; }
 }

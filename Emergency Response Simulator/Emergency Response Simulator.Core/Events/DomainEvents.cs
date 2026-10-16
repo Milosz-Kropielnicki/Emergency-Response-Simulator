@@ -265,6 +265,18 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(WildlifeHarmed), nameof(WildlifeHarmed))]
 [JsonDerivedType(typeof(EnvironmentalImpactReported), nameof(EnvironmentalImpactReported))]
 [JsonDerivedType(typeof(EnvironmentOutcome), nameof(EnvironmentOutcome))]
+// Scenario design & adaptive training (Phase 19)
+[JsonDerivedType(typeof(ScenarioLoaded), nameof(ScenarioLoaded))]
+[JsonDerivedType(typeof(TrainingSettingsChanged), nameof(TrainingSettingsChanged))]
+[JsonDerivedType(typeof(DifficultyAssessed), nameof(DifficultyAssessed))]
+[JsonDerivedType(typeof(DifficultyAdjusted), nameof(DifficultyAdjusted))]
+[JsonDerivedType(typeof(RandomEventOccurred), nameof(RandomEventOccurred))]
+[JsonDerivedType(typeof(SecondaryDevicePlaced), nameof(SecondaryDevicePlaced))]
+[JsonDerivedType(typeof(SecondaryDeviceRenderedSafe), nameof(SecondaryDeviceRenderedSafe))]
+[JsonDerivedType(typeof(SecondaryDeviceDetonated), nameof(SecondaryDeviceDetonated))]
+[JsonDerivedType(typeof(ActiveShooterStarted), nameof(ActiveShooterStarted))]
+[JsonDerivedType(typeof(ActiveShooterNeutralised), nameof(ActiveShooterNeutralised))]
+[JsonDerivedType(typeof(ResponderDown), nameof(ResponderDown))]
 [JsonDerivedType(typeof(HazardEnded), nameof(HazardEnded))]
 [JsonDerivedType(typeof(HazardSitePlaced), nameof(HazardSitePlaced))]
 [JsonDerivedType(typeof(CasualtyInjured), nameof(CasualtyInjured))]
@@ -1459,3 +1471,38 @@ public sealed record EnvironmentalImpactReported(Guid ImpactId, Guid? IncidentId
 /// </summary>
 public sealed record EnvironmentOutcome(Guid? IncidentId, double RunoffLitres, double ToWaterLitres, double ContainedLitres,
     double ContaminatedSquareMeters, int Wildlife) : DomainEvent;
+
+// ---- Scenario design & adaptive training (Phase 19) ----
+
+/// <summary>Ground truth: a designed scenario was loaded into the session: where it happens, its weather and training settings.</summary>
+public sealed record ScenarioLoaded(string Key, string Name, GeoPoint Centre, ScenarioWeather Weather, TrainingSettings Training, int Steps) : DomainEvent;
+
+/// <summary>Ground truth: the instructor (or a scenario) set how difficulty and random events run.</summary>
+public sealed record TrainingSettingsChanged(TrainingSettings Settings) : DomainEvent;
+
+/// <summary>Ground truth: how the trainees are coping, 0–100, at a regular assessment, and what pulled the score down.</summary>
+public sealed record DifficultyAssessed(int Score, int Level, string Reason) : DomainEvent;
+
+/// <summary>Ground truth: adaptive difficulty moved the level.</summary>
+public sealed record DifficultyAdjusted(int From, int To, int Score, string Reason) : DomainEvent;
+
+/// <summary>Ground truth: a random event went off (a wind shift, a breakdown, a new incident).</summary>
+public sealed record RandomEventOccurred(string Kind, string Description) : DomainEvent;
+
+/// <summary>Ground truth: a secondary device is at the scene, set to go off after <paramref name="FuseMinutes"/>.</summary>
+public sealed record SecondaryDevicePlaced(Guid DeviceId, GeoPoint Location, string Description, double FuseMinutes) : DomainEvent;
+
+/// <summary>Ground truth: the bomb disposal team made the device safe.</summary>
+public sealed record SecondaryDeviceRenderedSafe(Guid DeviceId) : DomainEvent;
+
+/// <summary>Ground truth: the device went off, hurting those still close (<paramref name="Responders"/> of them responders).</summary>
+public sealed record SecondaryDeviceDetonated(Guid DeviceId, int Hurt, int Responders) : DomainEvent;
+
+/// <summary>Ground truth: someone is shooting people near the incident.</summary>
+public sealed record ActiveShooterStarted(Guid ThreatId, GeoPoint Location) : DomainEvent;
+
+/// <summary>Ground truth: armed gardaí stopped the shooter, after <paramref name="Victims"/> people were shot.</summary>
+public sealed record ActiveShooterNeutralised(Guid ThreatId, int Victims) : DomainEvent;
+
+/// <summary>Ground truth: a responder is hurt at the scene (assaulted, struck, collapsed) — an incident within the incident.</summary>
+public sealed record ResponderDown(Guid UnitId, string Who, string Cause) : DomainEvent;

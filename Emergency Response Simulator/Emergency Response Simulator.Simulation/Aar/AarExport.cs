@@ -127,6 +127,15 @@ public static class AarExport
             html.Append("</table>");
         }
 
+        // Training (Phase 19).
+        if (report.Training.Any)
+        {
+            html.Append("<h2>Scenario &amp; training</h2><table>");
+            foreach (var (label, value) in TrainingLines(report.Training))
+                html.Append($"<tr><td>{E(label)}</td><td>{E(value)}</td></tr>");
+            html.Append("</table>");
+        }
+
         // Evacuation, shelter & infrastructure (Phase 17).
         if (report.Protection.Any)
         {
@@ -306,6 +315,21 @@ public static class AarExport
         return svg.Append("</svg>").ToString();
     }
 
+    /// <summary>The scenario, difficulty, random events and incidents within the incident (Phase 19), as label and value.</summary>
+    public static IReadOnlyList<(string Label, string Value)> TrainingLines(AarTraining training)
+    {
+        var lines = new List<(string, string)>();
+        if (training.Scenario is { } scenario) lines.Add(("Scenario", scenario));
+        lines.Add(("Difficulty", $"{training.Mode.ToString().ToLowerInvariant()}, level {training.StartLevel} → {training.EndLevel}"));
+        if (training.Scores.Count > 0)
+            lines.Add(("Coping score (avg / low / high)", $"{training.Scores.Average():0} / {training.Scores.Min()} / {training.Scores.Max()}"));
+        lines.AddRange(training.Adjustments.Select(a => ("Adjustment", a)));
+        lines.AddRange(training.RandomEvents.Select(e => ("Random event", e)));
+        lines.AddRange(training.Complications.Select(c => ("Incident within the incident", c)));
+        if (training.RespondersHurt > 0) lines.Add(("Responders hurt", training.RespondersHurt.ToString(CultureInfo.InvariantCulture)));
+        return lines;
+    }
+
     /// <summary>The evacuation, shelter, infrastructure, cyber and environment measures (Phase 17), as label and value.</summary>
     public static IReadOnlyList<(string Label, string Value)> ProtectionLines(AarProtection protection)
     {
@@ -447,6 +471,9 @@ public static class AarExport
         if (report.Protection.Any)
             foreach (var (label, value) in ProtectionLines(report.Protection))
                 Row("Protection", null, label, "", value, "", "", "");
+        if (report.Training.Any)
+            foreach (var (label, value) in TrainingLines(report.Training))
+                Row("Training", null, label, "", value, "", "", "");
         foreach (var outage in report.Logistics.Outages)
             Row("Supply outage", outage.From, Supplies.Name(outage.Kind), outage.Incident,
                 outage.To is { } to ? AarAnalyzer.Duration(to - outage.From) : "to the end", outage.WarnedAt is { } w ? Clock(w) : "",

@@ -1,0 +1,45 @@
+{
+  "Key": "docklands-chlorine-night",
+  "Name": "Night shift: chlorine at the docks",
+  "Description": "A chlorine leak in the port at night with an easterly wind carrying it over the inner city. If shelter-in-place isn't ordered within twenty minutes the leak gets worse and schools are affected. Adaptive difficulty, with random weather and equipment trouble.",
+  "Author": "Emergency Response Simulator",
+  "Version": 1,
+  "Centre": { "Latitude": 53.3463, "Longitude": -6.2124 },
+  "Weather": { "WindFromDegrees": 90, "WindSpeedMps": 5, "TemperatureC": 9, "RelativeHumidity": 0.85, "Source": "Fixed" },
+  "Training": { "Mode": "Adaptive", "Level": 3, "RandomEvents": true, "MeanMinutes": 25, "RandomWeather": true, "RandomEquipment": true, "RandomIncidents": false },
+  "Steps": [
+    {
+      "Id": "leak", "Name": "Leak starts",
+      "Trigger": { "Kind": "AtTime", "Minutes": 1 },
+      "Actions": [ { "Template": "release", "Values": { "material": "chlorine", "rate": "0.4", "quantity": "1500", "distance": "0", "casualties": "1" } } ]
+    },
+    {
+      "Id": "first-call", "Name": "First call",
+      "Trigger": { "Kind": "AtTime", "Minutes": 2 },
+      "Actions": [ { "Template": "call", "Values": { "caller": "999 caller (landline)", "summary": "Strong smell of bleach at the port gates, a lorry driver is coughing badly", "distance": "150" } } ]
+    },
+    {
+      "Id": "shelter", "Name": "Shelter-in-place ordered in time",
+      "Trigger": { "Kind": "WhenCondition", "Minutes": 6, "Condition": "ShelterInPlaceDeclared", "WindowMinutes": 14 },
+      "Actions": [ { "Template": "call", "Values": { "summary": "We've been told to stay in with the windows shut, how long will it be?", "distance": "700" } } ]
+    },
+    {
+      "Id": "worse", "Name": "Too late: the leak worsens",
+      "Trigger": { "Kind": "AfterStep", "Minutes": 0, "StepId": "shelter", "Outcome": "Expired" },
+      "Actions": [
+        { "Template": "release-rate", "Values": { "rate": "1.2", "reason": "the valve on the next tanker has failed" } },
+        { "Template": "call", "Values": { "summary": "The children at the school on Seville Place are coughing and some are being sick", "distance": "900" } }
+      ]
+    },
+    {
+      "Id": "radio", "Name": "Radio failure", "Optional": true,
+      "Trigger": { "Kind": "AtTime", "Minutes": 18 },
+      "Actions": [ { "Template": "radio-failure", "Values": { "callsign": "Engine 12" } } ]
+    },
+    {
+      "Id": "responder", "Name": "Firefighter overcome", "Optional": true,
+      "Trigger": { "Kind": "WhenCondition", "Minutes": 20, "Condition": "UnitsOnScene", "Value": 3, "WindowMinutes": 30 },
+      "Actions": [ { "Template": "responder-down", "Values": { "cause": "overcome by fumes at the decontamination line" } } ]
+    }
+  ]
+}

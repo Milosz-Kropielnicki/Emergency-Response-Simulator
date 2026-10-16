@@ -138,9 +138,28 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<ISimulationSystem>(_ => new MediaCoverageSystem());
         services.AddSingleton<ISimulationSystem>(sp => new AttentionMonitor(
             sp.GetRequiredService<ICopService>(), sp.GetRequiredService<AttentionOptions>(), sp.GetRequiredService<IRoutingService>()));
-        if (configuration[$"{SimulationOptions.SectionName}:Scenario"] == BarrowStreetScenario.Key)
+        var scenarioKey = configuration[$"{SimulationOptions.SectionName}:Scenario"];
+        if (scenarioKey == BarrowStreetScenario.Key)
             services.AddSingleton<ISimulationSystem>(_ => BarrowStreetScenario.Create(
                 configuration.GetValue<bool>($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.DemoAutoResponse)}")));
+        // Phase 19: a designed scenario from the library; anything else gets an empty script the instructor can load one into.
+        else if (scenarioKey?.StartsWith(ScenarioLibrary.Prefix, StringComparison.OrdinalIgnoreCase) == true)
+        {
+            var definition = ScenarioLibrary.Find(scenarioKey) ?? throw new InvalidOperationException($"Scenario '{scenarioKey}' is not in the library.");
+            services.AddSingleton<ISimulationSystem>(_ => new ScriptedInjectSystem(definition.Name, ScenarioCompiler.Compile(definition, 1)));
+        }
+        else services.AddSingleton<ISimulationSystem>(_ => new ScriptedInjectSystem(ScenarioCatalog.FreePlayName, []));
+
+        // Phase 19: difficulty, random events, incidents within the incident, real weather.
+        if (configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.Training)}", true))
+        {
+            services.AddSingleton<ISimulationSystem>(sp => new AdaptiveDifficultySystem(sp.GetRequiredService<ICopService>()));
+            services.AddSingleton<ISimulationSystem>(_ => new RandomEventSystem());
+            services.AddSingleton<ISimulationSystem>(_ => new CompoundThreatSystem());
+            services.AddSingleton<ISimulationSystem>(sp => new RealWeatherSystem(sp.GetRequiredService<IWeatherFeed>(),
+                configuration.GetValue<bool>($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.LiveWeather)}")));
+        }
+        services.AddHttpClient<IWeatherFeed, OpenMeteoWeatherFeed>(http => http.Timeout = TimeSpan.FromSeconds(10));
 
         // The plume service and the GIS database are both optional: C2 only needs them to run a projection (Phase 13).
         services.AddSingleton<IC2Service>(sp => new C2Service(sp.GetRequiredService<ICopService>(), sp.GetRequiredService<IEventPublisher>(),

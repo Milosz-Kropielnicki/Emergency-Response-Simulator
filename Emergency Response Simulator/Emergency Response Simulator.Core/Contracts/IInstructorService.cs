@@ -69,4 +69,18 @@ public interface IInstructorService
     /// screens show it at once; nobody in the simulation hears it, and the review lists it.
     /// </summary>
     Task<CommandResult> SendExerciseMessageAsync(string text, Guid? participantId = null, CancellationToken cancellationToken = default);
+
+    // ---- Scenario design & adaptive training (Phase 19) ----
+
+    /// <summary>
+    /// Loads a designed scenario into the running session: its steps join the script (timed from now), and its weather and
+    /// training settings take effect. Refused if it doesn't validate.
+    /// </summary>
+    Task<CommandResult> LoadScenarioAsync(ScenarioDefinition scenario, CancellationToken cancellationToken = default);
+
+    /// <summary>Difficulty and random events as they stand, with the last assessment and the adjustments so far.</summary>
+    Task<TrainingStatus> GetTrainingAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Sets difficulty (fixed or adaptive, and the level) and random events.</summary>
+    Task<CommandResult> SetTrainingAsync(TrainingSettings settings, CancellationToken cancellationToken = default);
 }

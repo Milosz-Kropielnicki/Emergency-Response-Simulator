@@ -1,0 +1,213 @@
+<Window x:Class="Emergency_Response_Simulator.ScenarioEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Emergency_Response_Simulator.ViewModels"
+        Title="Scenario Editor &amp; Training" Width="1320" Height="860" MinWidth="1000" MinHeight="600"
+        Background="{StaticResource BackgroundBrush}" Foreground="{StaticResource TextBrush}" FontSize="12"
+        WindowStartupLocation="CenterOwner">
+    <Window.Resources>
+        <Style x:Key="Header" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="Margin" Value="0,8,0,2" />
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="Margin" Value="0,0,4,4" />
+        </Style>
+    </Window.Resources>
+    <DockPanel Margin="12">
+        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,6,0,0" />
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="320" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="320" />
+            </Grid.ColumnDefinitions>
+
+            <!-- The scenario and its steps -->
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top">
+                    <TextBlock Text="LIBRARY" Style="{StaticResource Header}" Margin="0,0,0,2" />
+                    <ComboBox ItemsSource="{Binding Library}" SelectedItem="{Binding SelectedLibrary}" DisplayMemberPath="Name"
+                              ToolTip="Open a scenario from the library (shipped, or saved from here)" />
+                    <WrapPanel Margin="0,4,0,0">
+                        <Button Content="New" Command="{Binding NewCommand}" />
+                        <Button Content="Open file / import CSV…" Command="{Binding ImportCommand}"
+                                ToolTip="A scenario file, or a CSV of historical incidents (time, type, latitude, longitude…)" />
+                    </WrapPanel>
+                    <TextBlock Text="NAME" Style="{StaticResource Header}" />
+                    <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Text="DESCRIPTION" Style="{StaticResource Header}" />
+                    <TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True" Height="54" />
+                    <TextBlock Text="AUTHOR" Style="{StaticResource Header}" />
+                    <TextBox Text="{Binding Author, UpdateSourceTrigger=PropertyChanged}" />
+                    <DockPanel Margin="0,8,0,2">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button Content="▲" Command="{Binding MoveUpCommand}" Padding="4,0" />
+                            <Button Content="▼" Command="{Binding MoveDownCommand}" Padding="4,0" />
+                            <Button Content="+ Step" Command="{Binding AddStepCommand}" />
+                            <Button Content="Remove" Command="{Binding RemoveStepCommand}" />
+                        </StackPanel>
+                        <TextBlock Text="STEPS" Style="{StaticResource Header}" Margin="0" VerticalAlignment="Center" />
+                    </DockPanel>
+                </StackPanel>
+                <ListBox ItemsSource="{Binding Steps}" SelectedItem="{Binding SelectedStep}" Background="{StaticResource PanelBrush}"
+                         Foreground="{StaticResource TextBrush}" BorderBrush="{StaticResource BorderBrush}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:StepEntry}">
+                            <StackPanel Margin="0,2">
+                                <TextBlock Text="{Binding Id}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding Summary}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" MaxWidth="290" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+
+            <!-- The selected step -->
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                <StackPanel DataContext="{Binding SelectedStep}">
+                    <TextBlock Text="STEP" Style="{StaticResource Header}" Margin="0,0,0,2" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="120" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Text="{Binding Id, UpdateSourceTrigger=PropertyChanged}" ToolTip="The step's id: other steps refer to it" />
+                        <TextBox Grid.Column="2" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" ToolTip="What the instructor sees in the script" />
+                        <CheckBox Grid.Column="4" Content="Optional" IsChecked="{Binding Optional}" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"
+                                  ToolTip="Extra pressure: held back while adaptive difficulty finds the trainees struggling (level 1–2)" />
+                    </Grid>
+
+                    <TextBlock Text="WHEN" Style="{StaticResource Header}" />
+                    <WrapPanel>
+                        <ComboBox ItemsSource="{Binding DataContext.TriggerKinds, RelativeSource={RelativeSource AncestorType=Window}}" SelectedItem="{Binding Kind}" Width="140" Margin="0,0,6,4" />
+                        <TextBlock Text="minutes" VerticalAlignment="Center" Margin="0,0,4,4" />
+                        <TextBox Text="{Binding Minutes, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="0,0,10,4"
+                                 ToolTip="At time: after the start (of the session, or of loading it). After a step: the delay. Condition: the earliest it counts." />
+                    </WrapPanel>
+                    <WrapPanel Visibility="{Binding IsAfterStep, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="after step" VerticalAlignment="Center" Margin="0,0,4,4" />
+                        <ComboBox ItemsSource="{Binding DataContext.StepIds, RelativeSource={RelativeSource AncestorType=Window}}" SelectedItem="{Binding StepId}" Width="140" Margin="0,0,6,4" />
+                        <ComboBox ItemsSource="{Binding DataContext.Outcomes, RelativeSource={RelativeSource AncestorType=Window}}" SelectedItem="{Binding Outcome}" Width="100" Margin="0,0,6,4"
+                                  ToolTip="Fired: it went off. Expired: its condition wasn't met in its window (the other branch)." />
+                    </WrapPanel>
+                    <WrapPanel Visibility="{Binding IsCondition, Converter={StaticResource BoolToVisibility}}">
+                        <CheckBox Content="unless (wait for it to be false)" IsChecked="{Binding Negate}" VerticalAlignment="Center" Margin="0,0,8,4" Foreground="{StaticResource TextBrush}" />
+                        <ComboBox ItemsSource="{Binding DataContext.Conditions, RelativeSource={RelativeSource AncestorType=Window}}" SelectedItem="{Binding Condition}" Width="190" Margin="0,0,6,4" />
+                        <TextBlock Text="value" VerticalAlignment="Center" Margin="0,0,4,4" />
+                        <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Width="40" Margin="0,0,6,4" />
+                        <TextBlock Text="text" VerticalAlignment="Center" Margin="0,0,4,4" />
+                        <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" Width="110" Margin="0,0,6,4" ToolTip="For 'Notified': part of the name notified" />
+                        <TextBlock Text="window (min)" VerticalAlignment="Center" Margin="0,0,4,4" />
+                        <TextBox Text="{Binding Window, UpdateSourceTrigger=PropertyChanged}" Width="40" Margin="0,0,6,4"
+                                 ToolTip="How long to wait before it expires (blank: for ever). Steps can follow its expiry: a branch." />
+                    </WrapPanel>
+
+                    <DockPanel Margin="0,8,0,2">
+                        <Button DockPanel.Dock="Right" Content="+ Inject" Command="{Binding AddActionCommand}" />
+                        <TextBlock Text="WHAT HAPPENS" Style="{StaticResource Header}" Margin="0" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <ItemsControl ItemsSource="{Binding Actions}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:ActionEntry}">
+                                <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="6" Margin="0,0,0,6" Background="{StaticResource PanelBrush}">
+                                    <StackPanel>
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Content="Remove" Command="{Binding RemoveCommand}" />
+                                            <ComboBox ItemsSource="{Binding Templates}" SelectedItem="{Binding Template}" DisplayMemberPath="Name" Margin="0,0,6,4" />
+                                        </DockPanel>
+                                        <TextBlock Text="{Binding Template.Description}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,4" />
+                                        <ItemsControl ItemsSource="{Binding Parameters}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type vm:ParameterEntry}">
+                                                    <DockPanel Margin="0,1">
+                                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Label}" Width="230" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                        <Grid>
+                                                            <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+                                                                     Visibility="{Binding IsChoice, Converter={x:Static vm:Converters.FalseToVisible}}" />
+                                                            <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding Value}"
+                                                                      Visibility="{Binding IsChoice, Converter={StaticResource BoolToVisibility}}" />
+                                                        </Grid>
+                                                    </DockPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Place, weather, training; checks; the running session -->
+            <ScrollViewer Grid.Column="4" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="WHERE (centre)" Style="{StaticResource Header}" Margin="0,0,0,2" />
+                    <UniformGrid Columns="2">
+                        <TextBox Text="{Binding Latitude, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,4,0" ToolTip="Latitude" />
+                        <TextBox Text="{Binding Longitude, UpdateSourceTrigger=PropertyChanged}" ToolTip="Longitude" />
+                    </UniformGrid>
+
+                    <TextBlock Text="WEATHER" Style="{StaticResource Header}" />
+                    <ComboBox ItemsSource="{Binding WeatherSources}" SelectedItem="{Binding WeatherSource}" Margin="0,0,0,4"
+                              ToolTip="Fixed: as below. Live: the real weather there now (every 30 min). Historical: the archive's for the date and hour." />
+                    <UniformGrid Columns="4">
+                        <TextBox Text="{Binding WindFrom, UpdateSourceTrigger=PropertyChanged}" ToolTip="Wind from (degrees)" Margin="0,0,4,0" />
+                        <TextBox Text="{Binding WindSpeed, UpdateSourceTrigger=PropertyChanged}" ToolTip="Wind speed (m/s)" Margin="0,0,4,0" />
+                        <TextBox Text="{Binding Temperature, UpdateSourceTrigger=PropertyChanged}" ToolTip="Temperature (°C)" Margin="0,0,4,0" />
+                        <TextBox Text="{Binding Humidity, UpdateSourceTrigger=PropertyChanged}" ToolTip="Relative humidity (0–1)" />
+                    </UniformGrid>
+                    <TextBox Text="{Binding HistoricalAt, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,0" ToolTip="Historical: date and hour (UTC), e.g. 2011-10-24 18:00" />
+
+                    <TextBlock Text="TRAINING" Style="{StaticResource Header}" />
+                    <UniformGrid Columns="2">
+                        <ComboBox ItemsSource="{Binding Modes}" SelectedItem="{Binding Mode}" Margin="0,0,4,0"
+                                  ToolTip="Adaptive: the level follows how the trainees cope, assessed every 5 minutes" />
+                        <ComboBox ItemsSource="{Binding Levels}" SelectedItem="{Binding Level}" ToolTip="Difficulty: 1 gentle to 5 hard" />
+                    </UniformGrid>
+                    <DockPanel Margin="0,4,0,0">
+                        <TextBox DockPanel.Dock="Right" Text="{Binding MeanMinutes, UpdateSourceTrigger=PropertyChanged}" Width="40" ToolTip="Average minutes between random events at level 3" />
+                        <CheckBox Content="Random events, every ~ min:" IsChecked="{Binding RandomEvents}" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <WrapPanel Margin="16,2,0,0">
+                        <CheckBox Content="weather" IsChecked="{Binding RandomWeather}" Foreground="{StaticResource TextBrush}" Margin="0,0,8,0" />
+                        <CheckBox Content="equipment" IsChecked="{Binding RandomEquipment}" Foreground="{StaticResource TextBrush}" Margin="0,0,8,0" />
+                        <CheckBox Content="new incidents" IsChecked="{Binding RandomIncidents}" Foreground="{StaticResource TextBrush}" />
+                    </WrapPanel>
+
+                    <TextBlock Text="CHECK AND SAVE" Style="{StaticResource Header}" />
+                    <WrapPanel>
+                        <Button Content="Check" Command="{Binding ValidateCommand}" />
+                        <Button Content="Save to library" Command="{Binding SaveToLibraryCommand}" ToolTip="New sessions can open on it (it joins the scenario list)" />
+                        <Button Content="Save as file…" Command="{Binding ExportCommand}" />
+                    </WrapPanel>
+                    <ItemsControl ItemsSource="{Binding Problems}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Foreground="{StaticResource CriticalBrush}" TextWrapping="Wrap" FontSize="11" Margin="0,1" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="THIS SESSION" Style="{StaticResource Header}" />
+                    <WrapPanel>
+                        <Button Content="▶ Run in this session" Command="{Binding RunCommand}" FontWeight="SemiBold"
+                                ToolTip="Its steps join the script, timed from now; its weather and training take effect" />
+                        <Button Content="Apply training only" Command="{Binding ApplyTrainingCommand}" ToolTip="Set difficulty and random events now, without loading steps" />
+                        <Button Content="⟳" Command="{Binding RefreshTrainingCommand}" ToolTip="Read the level and score now" />
+                    </WrapPanel>
+                    <TextBlock Text="{Binding TrainingStatus}" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </DockPanel>
+</Window>

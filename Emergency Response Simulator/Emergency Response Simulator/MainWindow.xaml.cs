@@ -31,6 +31,7 @@ namespace Emergency_Response_Simulator
             viewModel.IapRequested += (_, _) => ShowIapBuilder();
             viewModel.AarRequested += (_, _) => ShowAar(services);
             viewModel.FormsRequested += (_, _) => ShowForms(services);
+            viewModel.ScenariosRequested += (_, _) => ShowScenarios(services);
             viewModel.ConsoleRequested += (_, _) => ShowConsole(services);
             // Push-to-talk (Phase 11 M7): held down, the radio transmits; anywhere in the window, even while typing.
             PreviewKeyDown += async (_, e) =>
@@ -85,6 +86,25 @@ namespace Emergency_Response_Simulator
                 if (_aarWindow.WindowState == WindowState.Minimized)
                     _aarWindow.WindowState = WindowState.Normal;
                 _aarWindow.Activate();
+            }
+        }
+
+        private ScenarioEditorWindow? _scenarioWindow;
+
+        /// <summary>One scenario editor; asking again brings it to the front (Phase 19).</summary>
+        private void ShowScenarios(IServiceProvider services)
+        {
+            if (_scenarioWindow is null)
+            {
+                _scenarioWindow = new ScenarioEditorWindow(services.GetRequiredService<ScenarioEditorViewModel>()) { Owner = this };
+                _scenarioWindow.Closed += (_, _) => _scenarioWindow = null;
+                _scenarioWindow.Show();
+            }
+            else
+            {
+                if (_scenarioWindow.WindowState == WindowState.Minimized)
+                    _scenarioWindow.WindowState = WindowState.Normal;
+                _scenarioWindow.Activate();
             }
         }
 

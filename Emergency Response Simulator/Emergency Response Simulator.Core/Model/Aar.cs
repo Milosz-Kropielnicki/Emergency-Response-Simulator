@@ -191,6 +191,25 @@ public sealed record AarProtection(
     public int OutPercent => Population == 0 ? 100 : (int)Math.Round(100.0 * Out / Population);
 }
 
+/// <summary>How the session was run as training (Phase 19): the scenario, difficulty, random events and the incidents within the incident.</summary>
+/// <param name="Adjustments">"14:20 raised to 4 (score 86)", in order.</param>
+/// <param name="Complications">"Secondary device made safe 12 min after it was placed", one per incident within the incident.</param>
+public sealed record AarTraining(
+    string? Scenario,
+    DifficultyMode Mode,
+    int StartLevel,
+    int EndLevel,
+    IReadOnlyList<string> Adjustments,
+    IReadOnlyList<int> Scores,
+    IReadOnlyList<string> RandomEvents,
+    IReadOnlyList<string> Complications,
+    int RespondersHurt)
+{
+    public static readonly AarTraining None = new(null, DifficultyMode.Fixed, 3, 3, [], [], [], [], 0);
+
+    public bool Any => Scenario is not null || Adjustments.Count > 0 || RandomEvents.Count > 0 || Complications.Count > 0 || Scores.Count > 0;
+}
+
 /// <summary>A unit's status over the session, for the commitment chart.</summary>
 public sealed record AarStatusSpan(DateTimeOffset From, DateTimeOffset To, UnitStatus Status);
 
@@ -305,6 +324,9 @@ public sealed class AarReport
 
     /// <summary>Evacuation, rest centres, infrastructure, cyber and GPS, and the environment (Phase 17).</summary>
     public AarProtection Protection { get; init; } = AarProtection.None;
+
+    /// <summary>The scenario, difficulty, random events and incidents within the incident (Phase 19).</summary>
+    public AarTraining Training { get; init; } = AarTraining.None;
 
     /// <summary>The decisions one participant made (everyone's with null).</summary>
     public IEnumerable<AarDecision> DecisionsOf(Guid? participantId) =>

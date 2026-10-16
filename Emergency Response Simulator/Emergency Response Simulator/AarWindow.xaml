@@ -167,6 +167,17 @@
                             </DataGrid>
                         </StackPanel>
 
+                        <!-- Scenario and training (Phase 19) -->
+                        <StackPanel Visibility="{Binding HasTraining, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="SCENARIO &amp; TRAINING" Style="{StaticResource PanelHeader}" />
+                            <DataGrid ItemsSource="{Binding TrainingFigures}" Margin="0,0,0,12" HorizontalAlignment="Left" Width="720">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Measure" Binding="{Binding Category}" Width="180" />
+                                    <DataGridTextColumn Header="" Binding="{Binding Amount}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+
                         <!-- Evacuation, shelter & infrastructure (Phase 17) -->
                         <StackPanel Visibility="{Binding HasProtection, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="EVACUATION, SHELTER &amp; INFRASTRUCTURE" Style="{StaticResource PanelHeader}" />

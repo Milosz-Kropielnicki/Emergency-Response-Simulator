@@ -55,6 +55,10 @@ public class CompositionTests
         Assert.Contains(typeof(InfrastructureNetworkSystem), systems);
         Assert.Contains(typeof(CyberSystem), systems);
         Assert.Contains(typeof(EnvironmentSystem), systems);
+        Assert.Contains(typeof(AdaptiveDifficultySystem), systems); // Phase 19
+        Assert.Contains(typeof(RandomEventSystem), systems);
+        Assert.Contains(typeof(CompoundThreatSystem), systems);
+        Assert.Contains(typeof(RealWeatherSystem), systems);
 
         // Routing plans with the lagged feed; vehicles drive by live traffic.
         Assert.IsType<TrafficFeed>(provider.GetRequiredService<ITrafficModel>());

@@ -78,6 +78,7 @@ Open it with **🎛 Console** in the header. To run it on a second screen or mac
   - **delivery delayed** and **local suppliers run out** (Phase 15)
   - **infectious disease outbreak** and **fatalities found** (Phase 16)
   - **infrastructure failure**, **GPS jamming or spoofing** and **ransomware attack** (Phase 17)
+  - **new incident** (at exact coordinates), **responder down**, **active shooter** and **secondary device** (Phase 19)
 
 > **Tip:** Hold an inject when the team is already saturated, and fire one early when they are coasting. The review shows every inject that fired early, was held, or was fired ad hoc, so the debrief can account for the difficulty.
 
@@ -203,6 +204,16 @@ These are the parts the simulation plays:
 - **Behavioural health:** distress brings the worried well to emergency departments. A helpline and counselling teams help, and their psychological triage refers the high-risk to psychiatric beds.
 - **Injects:** **Infectious disease outbreak**, and **Fatalities found** (the dead at the largest incident).
 
+**Scenarios and adaptive training** (Phase 19). Open **🧩 Scenarios** in the header.
+- **Design a scenario:** steps that fire injects at a time, after another step, or when the trainees have (or haven't) done something within a window. A step that expires starts its branch. Mark the extra pressure *optional*.
+- **Check, save, run:** *Check* catches mistakes. *Save to library* makes the scenario one new sessions can open on. *Run in this session* adds its steps to your console's script, from now.
+- **Difficulty:** fixed, or adaptive. Adaptive scores the team every 5 minutes on what you would watch for: incidents with nobody sent, calls queuing, overdue desk items, unacknowledged alerts, casualties waiting. It raises the level when they cope and lowers it when they struggle. The level sets how often random events come and how big they are, and holds optional steps back at 1–2.
+- **Random events:** wind shifts, breakdowns and radio failures, and new incidents. Seeded, so two teams on the same settings get the same ones.
+- **Real-world data:** live or historical weather (Open-Meteo), and **import CSV** turns a list of past incidents into a scenario, with that day's weather.
+- **Incident within the incident:** responder down, active shooter (ends when an armed response unit gets there), secondary device (made safe by bomb disposal, or it goes off among the crews still near it).
+
+> **Steering tip:** Adaptive difficulty is the instructor's assistant, not a replacement: watch the score in the editor, and if a team is drowning at level 1 hold the script too. For a debrief on scene safety, fire **secondary device** ten minutes after crews arrive, and see whether anyone pulls them back before the fuse runs out.
+
 **Evacuation, shelter & infrastructure** (Phase 17). The EVAC & INFRA tab is where Operations, Logistics, Liaison, Planning and Safety work it.
 - **Evacuation:** the gardaí report each zone's population, how many are out and when it will be clear. Without a route people go straight out, downwind included. Buses carry those on foot; traffic control points keep the cars moving. Re-entry sends everyone home: if the hazard is still there, or the ground is contaminated, that is recorded.
 - **Rest centres:** a quarter of evacuees (more of the elderly) need one. Until one opens they have nowhere to go, and the desk says so. A centre needs meals, water and bedding from the incident's stock, staff to register people, and security once it fills.
@@ -239,6 +250,7 @@ These are the parts the simulation plays:
    - **Participants:** roles over time, commands, decision ratings, observer ratings, and combined score and level.
    - **Observer notes and Competencies:** each player's ratings by competency area.
    - **Legal & liability:** how many significant decisions were logged with their reasons, and each exposure an inquiry would ask about. Some will be marked mitigated: an evacuation without the Garda, vulnerable people left behind, an unguarded zone, a volunteer hurt, an untrue denial, families waiting over an hour.
+   - **Scenario & training (Phase 19):** the difficulty the team reached and every adjustment, the random events they got, and how each incident within the incident ended. Read the other numbers against it: a team at level 4 had a harder session than one at level 2.
    - **Forms (📄 Forms, Phase 18):** before the debrief, export every form for the incident in one document. The decision log and each player's ICS 214 show every order, request and approval they gave, when, in which role, and the reason they logged. A command with no reason is the question to ask. The IAP package's cover shows how the plan changed version by version.
    - **Evacuation, shelter & infrastructure:** for each zone how many really got out and when it was clear; rest centres, registration and shortages; infrastructure failures and gas ignitions; ransomware and GPS; run-off and wildlife. Residents sent home to danger, trains run through it, no boil water notice, and pollution not reported to the EPA show under legal & liability.
    - **Medical, fatalities & public health:** patients right first time, transfers and deaths; the coroner, the dead at the scene and identification; the exposed protected in time; distress, counselling and the worried well. The dead left at a scene over 3 hours, and isolation or quarantine without HSE Public Health, show under legal & liability.

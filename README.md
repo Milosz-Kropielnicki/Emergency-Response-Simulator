@@ -1432,6 +1432,115 @@ Phase 5 already versions plans within operational periods (draft, submit, approv
 
 **Tests:** `FormsTests`.
 
+## Scenario design & adaptive training (Phase 19)
+
+Reusable, dynamic training content. The instructor works it from **🧩 Scenarios** in the header (beside the console): the scenario editor and the live training controls.
+
+`Simulation:Training = false` removes adaptive difficulty, random events, the incidents within an incident and real weather. All of them stay off anyway until a scenario or the instructor turns them on.
+
+### The scenario editor
+
+A **designed scenario** is data (JSON), not code:
+
+- **Where it happens:** a centre point, which injects use for "near the incident" until there is one.
+- **Weather:** fixed, live, or historical.
+- **Training settings:** difficulty and random events.
+- **Steps:** each step fires one or more injects from the template library, with their settings.
+
+Every inject the instructor can fire by hand (Phase 11) is a building block. Each step has a trigger:
+
+| Trigger | Goes off |
+|---|---|
+| At a time | that many minutes after the start (of the session, or of loading it live) |
+| After a step | that many minutes after another step **fired**, or after it **expired** |
+| When a condition holds | from a time, once the condition is true (or false, with *unless*), within a window. If the window passes, the step **expires**, and the steps following its expiry run: a **branch** |
+
+- **Conditions:** incidents opened, units on scene, casualties, an evacuation or shelter-in-place declared, a closure or hot zone declared, a major emergency declared, someone notified (by name), a Mayday, 999 calls waiting.
+- **Branching:** "if the trainees order shelter-in-place within 20 minutes, a reassured caller rings; if not, the leak worsens and a school is affected".
+- **Optional** steps are extra pressure: they are held back while adaptive difficulty finds the trainees struggling.
+
+**Check** validates a scenario before it is saved or run. It catches:
+
+- unknown injects, and settings a template doesn't have or values it won't take;
+- steps following steps that don't exist, or following themselves round in a circle;
+- a branch on the expiry of a step that has no window;
+- duplicate ids, and steps that do nothing.
+
+**Save to library** puts the scenario in the user's library (`%LOCALAPPDATA%\EmergencyResponseSimulator\scenarios`, or the `ERS_SCENARIOS` folder). It then joins the scenario list new sessions open on (as `library:<key>`), networked or not. **Run in this session** loads it into the running session: its steps join the instructor console's script, timed from now, and its weather and training take effect.
+
+**Shipped scenarios:**
+
+- **Night shift: chlorine at the docks.** Adaptive, with random weather and equipment. A branch on whether shelter-in-place is ordered in time.
+- **Match day: explosion and a secondary device.** A branch on whether a major emergency is declared, and an optional active shooter.
+
+### Adaptive difficulty (`AdaptiveDifficultySystem`)
+
+Difficulty runs from 1 (gentle) to 5 (hard), fixed at the instructor's level or **adaptive**. Every 5 minutes, adaptive scores how the trainees are coping, from 100 down:
+
+| What a controller would see | Points |
+|---|---|
+| An incident open 3 minutes with nobody sent | −15 each |
+| 999 calls queuing beyond the first | −8 each (to −24) |
+| Overdue or urgent items on the role desks | −3 each (to −30) |
+| Alerts unacknowledged for 5 minutes | −4 each (to −20) |
+| Casualties waiting over 15 minutes for treatment (ground truth) | −2 each (to −16) |
+
+Two scores of 80 or more in a row raise the level; one below 45 lowers it. The level sets:
+
+- **how often random events come:** half as often at 1, twice as often at 5;
+- **how big new incidents are;**
+- **optional steps:** at levels 1–2 they wait.
+
+Each assessment and adjustment is recorded with its reason, for the instructor and the review.
+
+### Randomised events (`RandomEventSystem`)
+
+When switched on, events come at random, on average every *n* minutes at level 3 and never closer than 2 minutes apart:
+
+- **Weather:** the wind veers or backs 30–90° and changes speed; the met service reports it.
+- **Equipment:** a committed unit breaks down (two times in three) or its radio fails.
+- **New incidents:** a fire, a crash or a flood 0.6–2.5 km away, with a 999 call.
+
+The sequence is seeded, so the same settings give the same events and sessions can be compared.
+
+### Real-world data
+
+- **Weather API:** a scenario's weather can be **live** (the real conditions at its centre now, refreshed every 30 minutes) or **historical** (the conditions at a date and hour). Both come from **Open-Meteo**: free, no key, with an archive going back decades. The fetch runs off the simulation tick. If the service can't be reached, the scenario's own weather stands and the log says so. `Simulation:LiveWeather = true` uses live weather in every session.
+- **Historical incidents:** **Open file / import CSV** turns a CSV of past incidents into a scenario. Each row starts its incident with a 999 call at its time, with the gaps compressed (an hour of real time to 10 minutes), and the weather is the archive's for the first incident's hour.
+  - Columns: `time` (or `date` + `time`), `type`, `latitude`, `longitude`, and optionally `severity`, `casualties`, `description`.
+  - Types are the simulator's own, or near words (fire, crash, RTA, flood, explosion, collapse, chemical, gas leak).
+  - `scenarios/historical-incidents-sample.csv` shows the format; its rows are illustrative, not real records.
+- **GIS data:** the scenario's places sit on the real roads, buildings and terrain imported from OpenStreetMap and elevation data (Phase 3). The *New incident* inject takes exact coordinates.
+
+### Incident within the incident (`CompoundThreatSystem`)
+
+New injects, usable by hand or in a scenario:
+
+- **Responder down:**
+  - a firefighter working in the fire calls a Mayday (Phase 8's Mayday and rescue);
+  - anyone else (a paramedic, a garda) is hurt where they stand, and their crewmate radios for help.
+- **Active shooter:**
+  - callers report shots at once;
+  - every 2 minutes the shooter hits someone in the open within 200 m (people sheltering indoors are much safer), and an unarmed crew working there may lose someone;
+  - it ends when an **armed response unit** has been on scene within range for 3 minutes. Otherwise the shooter stops after an hour or twelve victims, never caught.
+- **Secondary device:**
+  - left where responders gather. A crew within 150 m spots it, or a passer-by rings after 5 minutes;
+  - a **bomb disposal** unit on scene makes it safe after 10 minutes' work;
+  - otherwise it goes off at the end of its fuse, hurting everyone still within 60 m, one member of each unit there included, and starting a fire. Pulling crews back is what saves them.
+- **New incident:** any type, at a distance and bearing or at exact coordinates, with an optional 999 call.
+
+### In the review
+
+Under **Scenario & training**:
+
+- the scenario, the difficulty from start to end, the coping scores (average, lowest, highest), every adjustment and why, every random event, and each incident within the incident with its outcome;
+- **findings:** a secondary device made safe (a strength), or gone off with responders in range; how soon armed gardaí stopped the shooter, or that they never did; the coping score against the level reached;
+- **liability:** responders exposed to a secondary device nobody made safe.
+
+The HTML and CSV exports include it all.
+
+**Tests:** `ScenarioTests`.
+
 ## Local setup
 
 ### Prerequisites: PostgreSQL and PostGIS

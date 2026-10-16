@@ -4,6 +4,7 @@ using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
 using Emergency_Response_Simulator.Simulation.Comms;
 using Emergency_Response_Simulator.Simulation.Engine;
+using Emergency_Response_Simulator.Simulation.State;
 using static Emergency_Response_Simulator.Simulation.Scenarios.Inject;
 
 namespace Emergency_Response_Simulator.Simulation.Scenarios;
@@ -286,7 +287,97 @@ public static class InjectTemplates
                     $"{Protection.Name(target)}{(hospital is null ? "" : $" at {hospital.Name}")} encrypted"))];
             },
             v => $"Ransomware: {v["target"].ToLowerInvariant()}"),
+
+        // Phase 19: building blocks for designed scenarios, and the incidents within an incident.
+        new(new("new-incident", "New incident", "A new incident really starts: at a place given by latitude and longitude, or at a distance and bearing from the incident.",
+            [
+                new("type", "What", InjectParameterKind.Choice, nameof(IncidentType.StructureFire), NewIncidentTypes),
+                new("latitude", "Latitude (blank: from the incident)", InjectParameterKind.Text, ""),
+                new("longitude", "Longitude (blank: from the incident)", InjectParameterKind.Text, ""),
+                new("distance", "Metres from the incident", InjectParameterKind.Number, "600"),
+                new("bearing", "Bearing (degrees)", InjectParameterKind.Number, "90"),
+                new("severity", "Severity (0–1)", InjectParameterKind.Number, "0.4"),
+                new("casualties", "Casualties", InjectParameterKind.Number, "2"),
+                new("call", "What the 999 caller says (blank: no call)", InjectParameterKind.Text, ""),
+            ]),
+            (context, v) =>
+            {
+                var at = Coordinates(v) ?? GeoMath.Destination(Near(context), Number(v, "bearing", 90), Number(v, "distance", 600));
+                if (v["call"] is { Length: > 0 } summary)
+                    CommsNet.EmergencyCall(context, new PendingCall
+                    {
+                        Caller = "999 caller (mobile)", Summary = summary, Location = GeoMath.Destination(at, 45, 40), AccuracyMeters = 60,
+                        Patience = TimeSpan.FromMinutes(2),
+                    });
+                return [Truth(new WorldIncidentStarted(Guid.NewGuid(), Enum.Parse<IncidentType>(v["type"]), at,
+                    Math.Clamp(Number(v, "severity", 0.4), 0.05, 1), Math.Max(0, (int)Number(v, "casualties", 2))))];
+            },
+            v => $"New {EventDescriber.Humanize(Enum.Parse<IncidentType>(v["type"])).ToLowerInvariant()}" +
+                 (v["latitude"].Length > 0 ? $" at {v["latitude"]}, {v["longitude"]}" : $" {Number(v, "distance", 600):0} m from the incident")),
+
+        new(new("responder-down", "Responder down", "A responder working at the incident is hurt: a firefighter in trouble inside (a Mayday), or a paramedic or garda assaulted or struck.",
+            [
+                new("callsign", "Unit (blank: one working at the incident)", InjectParameterKind.Text, ""),
+                new("cause", "What happened", InjectParameterKind.Text, "assaulted by a bystander"),
+            ]),
+            (context, v) => ResponderDown(context, v["callsign"], v["cause"]),
+            v => $"Responder down{(v["callsign"].Length > 0 ? $" ({v["callsign"]})" : "")}: {v["cause"]}"),
+
+        new(new("active-shooter", "Active shooter", "Someone starts shooting people near the incident. It goes on until armed gardaí reach them; crews nearby are at risk.",
+            [new("distance", "Metres from the incident", InjectParameterKind.Number, "150")]),
+            (context, v) => [Truth(new ActiveShooterStarted(Guid.NewGuid(), GeoMath.Destination(Near(context), 200, Number(v, "distance", 150))))],
+            v => $"Active shooter {Number(v, "distance", 150):0} m from the incident"),
+
+        new(new("secondary-device", "Secondary device", "A device is left where responders gather (the rendezvous point, the cordon). Unless bomb disposal makes it safe, it goes off.",
+            [
+                new("description", "What and where", InjectParameterKind.Text, "a holdall left beside the ambulance loading point"),
+                new("distance", "Metres from the incident", InjectParameterKind.Number, "80"),
+                new("fuse", "Goes off after (min)", InjectParameterKind.Number, "25"),
+            ]),
+            (context, v) => [Truth(new SecondaryDevicePlaced(Guid.NewGuid(), GeoMath.Destination(Near(context), 160, Number(v, "distance", 80)), v["description"],
+                Math.Clamp(Number(v, "fuse", 25), 1, 240)))],
+            v => $"Secondary device: {v["description"]}, {Number(v, "fuse", 25):0} min fuse"),
     ];
+
+    private static readonly string[] NewIncidentTypes =
+    [
+        nameof(IncidentType.StructureFire), nameof(IncidentType.RoadAccident), nameof(IncidentType.Explosion), nameof(IncidentType.HazmatRelease),
+        nameof(IncidentType.Flood), nameof(IncidentType.StructuralCollapse), nameof(IncidentType.MassCasualty), nameof(IncidentType.WildlandFire),
+    ];
+
+    private static GeoPoint? Coordinates(IReadOnlyDictionary<string, string> values) =>
+        double.TryParse(values.GetValueOrDefault("latitude"), NumberStyles.Float, CultureInfo.InvariantCulture, out var lat)
+        && double.TryParse(values.GetValueOrDefault("longitude"), NumberStyles.Float, CultureInfo.InvariantCulture, out var lon)
+            ? new GeoPoint(lat, lon) : null;
+
+    /// <summary>
+    /// A firefighter working in the fire calls a Mayday (the Mayday and rescue play out as Phase 8's); anyone else is hurt
+    /// where they stand, and their crewmate radios for help.
+    /// </summary>
+    private static IEnumerable<(EventVisibility, DomainEvent)> ResponderDown(SimulationContext context, string callsign, string cause)
+    {
+        var world = context.World;
+        var largest = Largest(context);
+        var unit = callsign.Length > 0 && Unit(context, callsign) is { } named ? world.Units[named]
+            : world.Units.Values.Where(u => u.Phase is ResponsePhase.OnScene or ResponsePhase.Operating && !u.RadioFailed)
+                .OrderBy(u => largest is null ? 0 : GeoMath.DistanceMeters(u.Location, largest.Location)).FirstOrDefault();
+        if (unit is null) return [];
+
+        if (State.CrewFactors.IsFireCrew(unit.Type) && unit.Phase == ResponsePhase.Operating && unit.Crew.Available.FirstOrDefault(m => m.Role != CrewRole.Driver) is { } member)
+            return [Truth(new FirefighterInDistress(Guid.NewGuid(), unit.Id, member.Id, cause, GeoMath.Destination(unit.Location, 90, 20), 12))];
+
+        var who = $"a responder from {unit.Callsign}";
+        var hurt = new CasualtyInjured(Guid.NewGuid(), largest?.Id, unit.Location, Triage.Urgent, cause, who);
+        world.Casualties.TryAdd(hurt.CasualtyId, new State.WorldCasualty
+        {
+            Id = hurt.CasualtyId, IncidentId = largest?.Id, Location = unit.Location, Triage = Triage.Urgent, State = CasualtyState.AwaitingTreatment,
+            Cause = cause, InjuredAt = context.SimTime,
+        });
+        CommsNet.Report(context, unit, new ReportReceived(Guid.NewGuid(), null, ReportSource.FieldUnit, unit.Callsign,
+            $"{unit.Callsign}: urgent, one of our crew is down, {cause}. Need an ambulance and assistance at our location.", Confidence.High,
+            VerificationStatus.Confirmed, unit.Location, 15, unit.Id), priority: 8);
+        return [Truth(hurt), Truth(new ResponderDown(unit.Id, who, cause))];
+    }
 
     public static IReadOnlyList<InjectTemplate> All => [.. Library.Select(t => t.Info)];
 
@@ -312,9 +403,10 @@ public static class InjectTemplates
     private static State.WorldIncident? Largest(SimulationContext context) =>
         context.World.Incidents.Values.Where(i => !i.Extinguished).OrderByDescending(i => i.Severity).FirstOrDefault();
 
-    /// <summary>The largest live incident, else the middle of the area's stations.</summary>
+    /// <summary>The largest live incident, else where the loaded scenario happens (Phase 19), else the middle of the area's stations.</summary>
     private static GeoPoint Near(SimulationContext context) =>
         Largest(context)?.Location
+        ?? context.World.Training.Centre
         ?? (context.World.Units.Count > 0
             ? new GeoPoint(context.World.Units.Values.Average(u => u.Home.Latitude), context.World.Units.Values.Average(u => u.Home.Longitude))
             : BarrowStreetScenario.FireLocation);

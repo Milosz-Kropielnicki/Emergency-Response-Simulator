@@ -1,0 +1,42 @@
+{
+  "Key": "stadium-secondary-device",
+  "Name": "Match day: explosion and a secondary device",
+  "Description": "An explosion outside a stadium as the crowd leaves, with many hurt. A second device is left where the ambulances gather; later, the threat becomes an active shooter. Tests scene safety, the major emergency declaration and armed response. Fixed difficulty, no random events.",
+  "Author": "Emergency Response Simulator",
+  "Version": 1,
+  "Centre": { "Latitude": 53.3607, "Longitude": -6.2512 },
+  "Weather": { "WindFromDegrees": 250, "WindSpeedMps": 4, "TemperatureC": 15, "RelativeHumidity": 0.7, "Source": "Fixed" },
+  "Training": { "Mode": "Fixed", "Level": 3, "RandomEvents": false, "MeanMinutes": 20, "RandomWeather": true, "RandomEquipment": true, "RandomIncidents": true },
+  "Steps": [
+    {
+      "Id": "blast", "Name": "Explosion",
+      "Trigger": { "Kind": "AtTime", "Minutes": 1 },
+      "Actions": [ { "Template": "new-incident", "Values": { "type": "Explosion", "distance": "0", "severity": "0.5", "casualties": "8", "call": "There's been a bang outside the stadium, people are hurt everywhere" } } ]
+    },
+    {
+      "Id": "calls", "Name": "More callers",
+      "Trigger": { "Kind": "AtTime", "Minutes": 3 },
+      "Actions": [ { "Template": "call", "Values": { "summary": "People are running everywhere, there's a girl here with her leg badly cut", "distance": "200" } } ]
+    },
+    {
+      "Id": "device", "Name": "Secondary device",
+      "Trigger": { "Kind": "AtTime", "Minutes": 14 },
+      "Actions": [ { "Template": "secondary-device", "Values": { "description": "a rucksack under the barriers at the ambulance loading point", "distance": "70", "fuse": "22" } } ]
+    },
+    {
+      "Id": "major", "Name": "Major emergency declared",
+      "Trigger": { "Kind": "WhenCondition", "Minutes": 10, "Condition": "MajorEmergency", "WindowMinutes": 20 },
+      "Actions": [ { "Template": "call", "Values": { "caller": "Mater Hospital ED", "summary": "We've activated our major emergency plan, send us numbers when you have them", "distance": "1500" } } ]
+    },
+    {
+      "Id": "no-major", "Name": "No declaration: hospitals swamped",
+      "Trigger": { "Kind": "AfterStep", "Minutes": 0, "StepId": "major", "Outcome": "Expired" },
+      "Actions": [ { "Template": "hospital-pressure", "Values": { "places": "6", "reason": "walking wounded arriving with no warning" } } ]
+    },
+    {
+      "Id": "shooter", "Name": "Active shooter", "Optional": true,
+      "Trigger": { "Kind": "AtTime", "Minutes": 30 },
+      "Actions": [ { "Template": "active-shooter", "Values": { "distance": "250" } } ]
+    }
+  ]
+}

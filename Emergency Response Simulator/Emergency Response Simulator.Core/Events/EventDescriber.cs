@@ -368,6 +368,19 @@ public static class EventDescriber
             WildlifeHarmed e => Entry("TRUTH", $"{e.Count} {e.What} killed ({e.Cause})", e.IncidentId, important: true),
             EnvironmentalImpactReported e => Entry("ENVIRONMENT", e.What, e.IncidentId, important: true),
             EnvironmentOutcome => null, // ground truth for the review
+            // Scenario design & adaptive training (Phase 19)
+            ScenarioLoaded e => Entry("TRAINING", $"Scenario loaded: {e.Name} ({e.Steps} steps)", important: true),
+            TrainingSettingsChanged e => Entry("TRAINING", $"Training: {Humanize(e.Settings.Mode).ToLowerInvariant()} difficulty, level {e.Settings.Level}" +
+                (e.Settings.RandomEvents ? $", random events about every {e.Settings.MeanMinutes:0} min" : ", no random events")),
+            DifficultyAssessed => null, // every few minutes: the review charts it
+            DifficultyAdjusted e => Entry("TRAINING", $"Difficulty {(e.To > e.From ? "raised" : "lowered")} to {e.To} (score {e.Score}): {e.Reason}", important: true),
+            RandomEventOccurred e => Entry("TRUTH", $"Random event: {e.Description}", important: true),
+            SecondaryDevicePlaced e => Entry("TRUTH", $"Secondary device: {e.Description}, set for {e.FuseMinutes:0} min", important: true),
+            SecondaryDeviceRenderedSafe => Entry("TRUTH", "Secondary device made safe", important: true),
+            SecondaryDeviceDetonated e => Entry("TRUTH", $"Secondary device exploded: {e.Hurt} hurt, {e.Responders} of them responders", important: true),
+            ActiveShooterStarted => Entry("TRUTH", "Active shooter near the incident", important: true),
+            ActiveShooterNeutralised e => Entry("TRUTH", $"Shooter stopped by armed gardaí after {e.Victims} people were shot", important: true),
+            ResponderDown e => Entry("TRUTH", $"Responder down: {e.Who}, {e.Cause}", unit: e.UnitId, important: true),
             ReimbursementClaimSubmitted e => Entry("FINANCE", $"Claim for {CostRates.Money(e.Amount)} submitted to central government", important: true),
             ReimbursementDecided e => Entry("FINANCE", $"Claim decided: {CostRates.Money(e.Approved)} of {CostRates.Money(e.Claimed)} approved" +
                 (e.Disallowed.Count > 0 ? $"; disallowed: {string.Join("; ", e.Disallowed)}" : ""), important: true),

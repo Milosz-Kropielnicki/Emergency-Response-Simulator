@@ -256,6 +256,12 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenAar() => AarRequested?.Invoke(this, EventArgs.Empty);
 
+    /// <summary>Raised when the instructor opens the scenario editor and training controls (Phase 19).</summary>
+    public event EventHandler? ScenariosRequested;
+
+    [RelayCommand]
+    private void OpenScenarios() => ScenariosRequested?.Invoke(this, EventArgs.Empty);
+
     /// <summary>Raised when someone opens the ICS forms and documentation (Phase 18).</summary>
     public event EventHandler? FormsRequested;
 

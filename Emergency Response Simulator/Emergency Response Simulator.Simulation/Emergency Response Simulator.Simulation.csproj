@@ -10,6 +10,11 @@
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.12" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Phase 19: the designed scenarios shipped with the simulator. -->
+    <EmbeddedResource Include="Scenarios\Library\*.scenario.json" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Emergency_Response_Simulator.Simulation</RootNamespace>

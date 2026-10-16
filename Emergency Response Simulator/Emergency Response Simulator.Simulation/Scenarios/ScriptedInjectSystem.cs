@@ -15,17 +15,46 @@ public sealed class ScriptedInjectSystem : ISimulationSystem
 {
     private readonly List<Inject> _injects;
     private readonly Dictionary<int, (InjectStatus Status, DateTimeOffset? FiredAt)> _state = [];
+
+    /// <summary>When each inject went off or expired (Phase 19: what a following step times itself from).</summary>
+    private readonly Dictionary<int, DateTimeOffset> _settledAt = [];
+
+    /// <summary>Time into the session each inject's offsets count from: zero, or when its scenario was loaded (Phase 19).</summary>
+    private readonly List<TimeSpan> _origin = [];
+
     private DateTimeOffset? _start;
 
     public ScriptedInjectSystem(string scenarioName, IReadOnlyList<Inject> injects)
     {
         ScenarioName = scenarioName;
-        _injects = [.. injects];
-        for (var number = 1; number <= _injects.Count; number++)
-            _state[number] = (InjectStatus.Pending, null);
+        _injects = [];
+        Append(injects, TimeSpan.Zero);
     }
 
-    public string ScenarioName { get; }
+    public string ScenarioName { get; private set; }
+
+    /// <summary>The number the next appended inject will get.</summary>
+    public int NextNumber => _injects.Count + 1;
+
+    /// <summary>
+    /// Adds a loaded scenario's injects to the script (Phase 19), their times counted from <paramref name="origin"/> into
+    /// the session (now, for one loaded live). A session that had no script takes the scenario's name.
+    /// </summary>
+    public void Append(IReadOnlyList<Inject> injects, TimeSpan origin, string? scenarioName = null)
+    {
+        foreach (var inject in injects)
+        {
+            _injects.Add(inject);
+            _origin.Add(origin);
+            _state[_injects.Count] = (InjectStatus.Pending, null);
+        }
+        if (scenarioName is not null && (_injects.Count == injects.Count || ScenarioName == ScenarioCatalog.FreePlayName)) ScenarioName = scenarioName;
+    }
+
+    /// <summary>Time into the session now (zero before the first tick).</summary>
+    public TimeSpan Elapsed(SimulationContext context) => _start is { } start ? context.SimTime - start : TimeSpan.Zero;
+
+    public InjectStatus StatusOf(int number) => _state.TryGetValue(number, out var state) ? state.Status : InjectStatus.Pending;
 
     public int Order => -10; // before systems that react to what the injects start
 
@@ -37,12 +66,22 @@ public sealed class ScriptedInjectSystem : ISimulationSystem
         for (var number = 1; number <= _injects.Count; number++)
         {
             var inject = _injects[number - 1];
-            if (_state[number].Status != InjectStatus.Pending || elapsed < inject.At) continue;
-            if (inject.Until is { } until && elapsed > until)
+            var since = elapsed - _origin[number - 1];
+            if (_state[number].Status != InjectStatus.Pending || since < inject.At) continue;
+            // Phase 19: a step that follows another waits for it to go off (or expire), and then for its delay.
+            if (inject.After is { } after)
+            {
+                if (StatusOf(after.Number) != after.Outcome || !_settledAt.TryGetValue(after.Number, out var settled)
+                    || context.SimTime < settled + after.Delay) continue;
+            }
+            if (inject.Until is { } until && since > until)
             {
                 _state[number] = (InjectStatus.Expired, null); // window passed without the condition being met
+                _settledAt[number] = context.SimTime;
                 continue;
             }
+            // Pressure the scenario can do without waits while the trainees are struggling (adaptive difficulty).
+            if (inject.Optional && context.World.Training.HoldOptional) continue;
             if (inject.Condition is { } condition && !condition(context)) continue;
             Fire(context, number, early: false);
         }
@@ -52,6 +91,7 @@ public sealed class ScriptedInjectSystem : ISimulationSystem
     {
         var inject = _injects[number - 1];
         _state[number] = (InjectStatus.Fired, context.SimTime);
+        _settledAt[number] = context.SimTime;
         context.EmitTruth(new InjectFired(number, inject.Description, early), early ? EventSources.Instructor : EventSources.Scenario);
         foreach (var (visibility, payload) in inject.Produce(context))
             context.Emit(visibility, payload, EventSources.Scenario);
@@ -61,7 +101,8 @@ public sealed class ScriptedInjectSystem : ISimulationSystem
 
     /// <summary>The script as the console lists it, in time order.</summary>
     public IReadOnlyList<InjectInfo> Script() =>
-        [.. _injects.Select((inject, i) => new InjectInfo(i + 1, inject.At, inject.Description, _state[i + 1].Status, inject.Condition is not null, _state[i + 1].FiredAt))
+        [.. _injects.Select((inject, i) => new InjectInfo(i + 1, _origin[i] + inject.At, inject.Description, _state[i + 1].Status,
+                inject.Condition is not null || inject.After is not null, _state[i + 1].FiredAt))
             .OrderBy(i => i.At).ThenBy(i => i.Number)];
 
     /// <summary>Fires an inject now, whatever its time or condition. Null when done, else why not.</summary>
@@ -69,7 +110,7 @@ public sealed class ScriptedInjectSystem : ISimulationSystem
     {
         if ((Refuse(number, InjectStatus.Fired, "has already gone off") ?? Refuse(number, InjectStatus.Skipped, "was skipped")) is { } refused) return refused;
         _start ??= context.SimTime;
-        Fire(context, number, early: context.SimTime - _start.Value < _injects[number - 1].At);
+        Fire(context, number, early: context.SimTime - _start.Value - _origin[number - 1] < _injects[number - 1].At);
         return null;
     }
 
@@ -118,14 +159,21 @@ public sealed class ScriptedInjectSystem : ISimulationSystem
 /// <param name="Description">What the instructor sees in the scenario script.</param>
 /// <param name="Condition">If set, the inject waits after <paramref name="At"/> until this holds.</param>
 /// <param name="Until">If set with a condition, the inject is dropped when the condition hasn't held by then.</param>
+/// <param name="After">Phase 19: it waits for another inject to go off (or expire), and then for a delay.</param>
+/// <param name="Optional">Phase 19: held back while adaptive difficulty finds the trainees struggling.</param>
 public sealed record Inject(
     TimeSpan At,
     string Description,
     Func<SimulationContext, IEnumerable<(EventVisibility Visibility, DomainEvent Payload)>> Produce,
     Func<SimulationContext, bool>? Condition = null,
-    TimeSpan? Until = null)
+    TimeSpan? Until = null,
+    InjectDependency? After = null,
+    bool Optional = false)
 {
     public static (EventVisibility, DomainEvent) Truth(DomainEvent payload) => (EventVisibility.Truth, payload);
 
     public static (EventVisibility, DomainEvent) Perceived(DomainEvent payload) => (EventVisibility.Perceived, payload);
 }
+
+/// <summary>An inject that follows another: once inject <paramref name="Number"/> has <paramref name="Outcome"/>, after <paramref name="Delay"/>.</summary>
+public sealed record InjectDependency(int Number, InjectStatus Outcome, TimeSpan Delay);

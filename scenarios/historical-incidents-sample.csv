@@ -1,0 +1,9 @@
+# Sample for the historical-incident importer (Scenario Editor > Open file / import CSV).
+# ILLUSTRATIVE ONLY: these rows show the format; they are not records of real incidents.
+# Replace them with an export of real incident records (date and time in UTC, type, latitude, longitude).
+# Optional columns: severity (0-1), casualties, description (what the 999 caller says).
+time,type,latitude,longitude,severity,casualties,description
+2024-01-20 17:40,house fire,53.3381,-6.2457,0.5,1,"Smoke pouring from a terraced house, an elderly man lives there alone"
+2024-01-20 18:25,RTA,53.3448,-6.2297,0.3,2,"Two cars collided at the junction, one is on its side"
+2024-01-20 19:10,flood,53.3305,-6.2333,0.4,0,"The river's burst its banks onto the road, water's coming into the houses"
+2024-01-20 20:05,gas leak,53.3402,-6.2523,0.4,0,"Strong smell of gas all along the street"

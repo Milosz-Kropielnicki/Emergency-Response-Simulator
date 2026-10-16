@@ -73,6 +73,9 @@
                     <Button Content="🎛 Console" Command="{Binding OpenConsoleCommand}" Margin="0,0,8,0"
                             Visibility="{Binding IsConsoleAvailable, Converter={StaticResource BoolToVisibility}}"
                             ToolTip="Instructor console: fire, hold and skip injects, watch the players, role-play, take over AI roles" />
+                    <Button Content="🧩 Scenarios" Command="{Binding OpenScenariosCommand}" Margin="0,0,8,0"
+                            Visibility="{Binding IsConsoleAvailable, Converter={StaticResource BoolToVisibility}}"
+                            ToolTip="Scenario editor: design scenarios with triggers, branches and injects, save them to the library, run them now; difficulty and random events" />
                     <Button Content="📄 Forms" Command="{Binding OpenFormsCommand}" Margin="0,0,8,0"
                             ToolTip="ICS forms 201–220, the IAP package, situation reports and the decision log" />
                     <Button Content="📊 AAR" Command="{Binding OpenAarCommand}" Margin="0,0,8,0"
