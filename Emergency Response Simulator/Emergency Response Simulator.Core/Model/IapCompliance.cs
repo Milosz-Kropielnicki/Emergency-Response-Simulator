@@ -154,6 +154,13 @@ public static class IapCompliance
         if (plan.Safety.Ppe.All(string.IsNullOrWhiteSpace))
             Warn(IapSection.Safety, "No PPE requirements.");
 
+        // Phase 18: the safety analysis (ICS 215A) covers every division and group working in the hazards.
+        if (plan.Safety.Hazards.Any(h => !string.IsNullOrWhiteSpace(h.Hazard)))
+            foreach (var group in plan.Groups.Where(g => !plan.Safety.Analysis.Any(r => string.Equals(r.Area.Trim(), g.Name.Trim(), StringComparison.OrdinalIgnoreCase))))
+                Warn(IapSection.Safety, $"The safety analysis (ICS 215A) doesn't cover {group.Name}.");
+        foreach (var row in plan.Safety.Analysis.Where(r => !string.IsNullOrWhiteSpace(r.Hazards) && string.IsNullOrWhiteSpace(r.Mitigations)))
+            Warn(IapSection.Safety, $"No mitigations in the safety analysis for {row.Area}.");
+
         // ---- Period ----
         if (period is not null && period.End <= period.Start)
             Error(IapSection.Period, "The operational period ends before it starts.");

@@ -535,6 +535,21 @@ public sealed class IapService(
             && cop.Zones.FirstOrDefault(z => z.IncidentId == incident.Id && z.Type == ZoneType.StagingArea) is { } staging)
             medical.CasualtyClearingStation = $"Beside {staging.Name}";
 
+        // Phase 18: the medical surge arrangements (Phase 16) belong in the plan everyone is briefed on.
+        foreach (var unit in incident.AssignedUnits.Where(u => ResourceGroups.AgencyFor(u.Type) == AgencyType.Ems).OrderBy(u => u.Callsign, StringComparer.Ordinal))
+        {
+            var entry = $"{unit.Callsign} ({ResourceGroups.Label(unit.Type).ToLowerInvariant()})";
+            if (!medical.MedicalUnits.Any(m => m.StartsWith(unit.Callsign + " ", StringComparison.Ordinal))) medical.MedicalUnits.Add(entry);
+        }
+        var health = cop.Health;
+        foreach (var rule in health.Destinations.Where(d => d.IncidentId == incident.Id))
+        {
+            var entry = $"{Health.Need(rule.Need)} → {cop.Hospitals.FirstOrDefault(h => h.Id == rule.HospitalId)?.Name ?? "a set hospital"}";
+            if (!medical.PatientDestinations.Contains(entry)) medical.PatientDestinations.Add(entry);
+        }
+        if (string.IsNullOrWhiteSpace(medical.Mortuary) && health.Fatalities.MortuaryName is { } mortuary)
+            medical.Mortuary = mortuary;
+
         if (string.IsNullOrWhiteSpace(medical.EmergencyProcedures))
         {
             var command = plan.Communications.Channels.FirstOrDefault(c => c.Function.Contains("command", StringComparison.OrdinalIgnoreCase))?.Channel
@@ -585,6 +600,34 @@ public sealed class IapService(
         }
         if (string.IsNullOrWhiteSpace(safety.Accountability))
             safety.Accountability = "Entry control at the inner cordon; tally system for every crew";
+
+        // Phase 18: the safety analysis (ICS 215A), one line per division or group (or all crews, with none), from the hazards
+        // the plan lists and what that kind of work adds.
+        var hazards = safety.Hazards.Where(h => !string.IsNullOrWhiteSpace(h.Hazard)).ToList();
+        if (hazards.Count == 0) return;
+        var areas = plan.Groups.Count > 0 ? plan.Groups.Select(g => g.Name).ToList() : ["All crews"];
+        foreach (var area in areas.Where(a => !safety.Analysis.Any(r => SameName(r.Area, a))))
+        {
+            var (extraHazard, extraMitigation) = WorkHazard(area);
+            safety.Analysis.Add(new SafetyAnalysisRow
+            {
+                Area = area,
+                Hazards = string.Join("; ", hazards.Select(h => h.Hazard).Append(extraHazard).OfType<string>()),
+                Mitigations = string.Join("; ", hazards.Select(h => h.Mitigation).Append(extraMitigation).Where(m => !string.IsNullOrWhiteSpace(m)).Distinct()),
+            });
+        }
+    }
+
+    /// <summary>The hazard a kind of work brings with it, from the group's name.</summary>
+    private static (string? Hazard, string? Mitigation) WorkHazard(string area)
+    {
+        bool Is(params string[] words) => words.Any(w => area.Contains(w, StringComparison.OrdinalIgnoreCase));
+        return Is("medical", "triage", "treatment", "casualty") ? ("Contaminated or distressed casualties", "Decontaminate before treatment; gloves and eye protection")
+            : Is("evacuat", "traffic", "cordon") ? ("Moving traffic and crowds", "Hi-vis; work facing traffic; police at every closure")
+            : Is("rescue", "search", "usar") ? ("Unstable structure, collapse", "Structural engineer's survey; shoring; timed entries")
+            : Is("hazmat", "decon", "chemical") ? ("Chemical exposure", "Gas-tight suits; decontamination corridor; monitored stay times")
+            : Is("water", "supply", "relay") ? ("Charged hose lines, wet surfaces", "Pressure checks; secure couplings")
+            : (null, null);
     }
 
     // ---- Helpers ----

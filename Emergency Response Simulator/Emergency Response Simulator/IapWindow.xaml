@@ -725,6 +725,37 @@
                                 <TextBlock Text="IF A RESPONDER IS INJURED" Style="{StaticResource PanelHeader}" Margin="0,14,0,4" />
                                 <TextBox Style="{StaticResource MultiLine}" Text="{Binding EmergencyProcedures, UpdateSourceTrigger=PropertyChanged}" Height="60"
                                          IsReadOnly="{Binding IsReadOnly}" />
+
+                                <!-- Phase 18: the medical surge arrangements -->
+                                <TextBlock Text="MEDICAL UNITS (pulled from the COP)" Style="{StaticResource PanelHeader}" Margin="0,14,0,4" />
+                                <ItemsControl ItemsSource="{Binding MedicalUnits}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type iap:TextEntry}">
+                                            <DockPanel Margin="0,1">
+                                                <TextBlock DockPanel.Dock="Left" Text="•" Width="14" VerticalAlignment="Center" />
+                                                <Button DockPanel.Dock="Right" Style="{StaticResource RemoveButton}" />
+                                                <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" />
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <DockPanel Margin="0,14,0,4">
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource EditButton}" Content="+ Destination" Command="{Binding AddDestinationCommand}" />
+                                    <TextBlock Text="PATIENT DESTINATIONS (need → hospital)" Style="{StaticResource PanelHeader}" Margin="0" VerticalAlignment="Center" />
+                                </DockPanel>
+                                <ItemsControl ItemsSource="{Binding PatientDestinations}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type iap:TextEntry}">
+                                            <DockPanel Margin="0,1">
+                                                <TextBlock DockPanel.Dock="Left" Text="•" Width="14" VerticalAlignment="Center" />
+                                                <Button DockPanel.Dock="Right" Style="{StaticResource RemoveButton}" />
+                                                <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" />
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="TEMPORARY MORTUARY" Style="{StaticResource PanelHeader}" Margin="0,14,0,4" />
+                                <TextBox Text="{Binding Mortuary, UpdateSourceTrigger=PropertyChanged}" ToolTip="Where the dead are taken, if one is open" />
                             </StackPanel>
                         </ScrollViewer>
                     </Grid>
@@ -793,6 +824,42 @@
                                 <TextBlock Text="SAFETY MESSAGE (read at every briefing)" Style="{StaticResource PanelHeader}" Margin="0,14,0,4" />
                                 <TextBox Style="{StaticResource MultiLine}" Text="{Binding SafetyMessage, UpdateSourceTrigger=PropertyChanged}" Height="80"
                                          IsReadOnly="{Binding IsReadOnly}" />
+
+                                <!-- Phase 18: the ICS 215A safety analysis -->
+                                <DockPanel Margin="0,14,0,4">
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource EditButton}" Content="+ Row" Command="{Binding AddAnalysisRowCommand}" />
+                                    <TextBlock Text="SAFETY ANALYSIS (ICS 215A) · each division or group's hazards and how they are controlled" Style="{StaticResource PanelHeader}"
+                                               Margin="0" VerticalAlignment="Center" />
+                                </DockPanel>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="160" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="30" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Division / group" Style="{StaticResource ColumnHeader}" />
+                                    <TextBlock Grid.Column="1" Text="Hazards / risks" Style="{StaticResource ColumnHeader}" />
+                                    <TextBlock Grid.Column="2" Text="Mitigations" Style="{StaticResource ColumnHeader}" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Analysis}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type iap:SafetyAnalysisEntry}">
+                                            <Grid Margin="0,1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="160" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="30" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox Text="{Binding Area, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,4,0" />
+                                                <TextBox Grid.Column="1" Text="{Binding Hazards, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" Margin="0,0,4,0" />
+                                                <TextBox Grid.Column="2" Text="{Binding Mitigations, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" />
+                                                <Button Grid.Column="3" Style="{StaticResource RemoveButton}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                             </StackPanel>
                         </ScrollViewer>
                     </Grid>

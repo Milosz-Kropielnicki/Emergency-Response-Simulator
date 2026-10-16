@@ -254,6 +254,16 @@ public sealed partial class HazardEntry(IapBuilderViewModel owner, IList parent,
     public SafetyHazard ToModel() => new() { Hazard = Hazard, Mitigation = Mitigation };
 }
 
+/// <summary>One line of the ICS 215A safety analysis: a division or group, its hazards and mitigations (Phase 18).</summary>
+public sealed partial class SafetyAnalysisEntry(IapBuilderViewModel owner, IList parent, SafetyAnalysisRow row) : IapEntry(owner, parent)
+{
+    [ObservableProperty] private string _area = row.Area;
+    [ObservableProperty] private string _hazards = row.Hazards;
+    [ObservableProperty] private string _mitigations = row.Mitigations;
+
+    public SafetyAnalysisRow ToModel() => new() { Area = Area, Hazards = Hazards, Mitigations = Mitigations };
+}
+
 /// <summary>A single line of text in a list, e.g. one PPE requirement.</summary>
 public sealed partial class TextEntry(IapBuilderViewModel owner, IList parent, string text) : IapEntry(owner, parent)
 {

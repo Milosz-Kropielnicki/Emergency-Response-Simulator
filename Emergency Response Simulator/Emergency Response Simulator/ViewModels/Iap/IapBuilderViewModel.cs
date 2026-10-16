@@ -57,6 +57,9 @@ public sealed partial class IapBuilderViewModel : ObservableObject
         Hospitals.CollectionChanged += (_, _) => MarkDirty();
         Hazards.CollectionChanged += (_, _) => MarkDirty();
         Ppe.CollectionChanged += (_, _) => MarkDirty();
+        Analysis.CollectionChanged += (_, _) => MarkDirty();
+        MedicalUnits.CollectionChanged += (_, _) => MarkDirty();
+        PatientDestinations.CollectionChanged += (_, _) => MarkDirty();
         _newPeriodLength = PeriodLengths[1];
     }
 
@@ -200,6 +203,12 @@ public sealed partial class IapBuilderViewModel : ObservableObject
     partial void OnMedicalLeadChanged(string value) => MarkDirty();
     partial void OnEmergencyProceduresChanged(string value) => MarkDirty();
 
+    // Phase 18: the medical surge arrangements, carried in the plan.
+    public ObservableCollection<TextEntry> MedicalUnits { get; } = [];
+    public ObservableCollection<TextEntry> PatientDestinations { get; } = [];
+    [ObservableProperty] private string _mortuary = "";
+    partial void OnMortuaryChanged(string value) => MarkDirty();
+
     // ICS 208
     public ObservableCollection<HazardEntry> Hazards { get; } = [];
     public ObservableCollection<TextEntry> Ppe { get; } = [];
@@ -209,6 +218,9 @@ public sealed partial class IapBuilderViewModel : ObservableObject
     [ObservableProperty] private string _accountability = "";
     partial void OnSafetyMessageChanged(string value) => MarkDirty();
     partial void OnAccountabilityChanged(string value) => MarkDirty();
+
+    /// <summary>The ICS 215A safety analysis (Phase 18).</summary>
+    public ObservableCollection<SafetyAnalysisEntry> Analysis { get; } = [];
 
     // Review
     public ObservableCollection<IssueRow> Issues { get; } = [];
@@ -414,6 +426,13 @@ public sealed partial class IapBuilderViewModel : ObservableObject
             AmbulanceLoadingPoint = content.Medical.AmbulanceLoadingPoint ?? "";
             MedicalLead = content.Medical.MedicalLead ?? "";
             EmergencyProcedures = content.Medical.EmergencyProcedures ?? "";
+            MedicalUnits.Clear();
+            foreach (var unit in content.Medical.MedicalUnits)
+                MedicalUnits.Add(new TextEntry(this, MedicalUnits, unit));
+            PatientDestinations.Clear();
+            foreach (var destination in content.Medical.PatientDestinations)
+                PatientDestinations.Add(new TextEntry(this, PatientDestinations, destination));
+            Mortuary = content.Medical.Mortuary ?? "";
 
             Hazards.Clear();
             foreach (var hazard in content.Safety.Hazards)
@@ -423,6 +442,9 @@ public sealed partial class IapBuilderViewModel : ObservableObject
                 Ppe.Add(new TextEntry(this, Ppe, ppe));
             SafetyMessage = content.Safety.Message ?? "";
             Accountability = content.Safety.Accountability ?? "";
+            Analysis.Clear();
+            foreach (var row in content.Safety.Analysis)
+                Analysis.Add(new SafetyAnalysisEntry(this, Analysis, row));
         }
         finally
         {
@@ -452,6 +474,9 @@ public sealed partial class IapBuilderViewModel : ObservableObject
             MedicalLead = MedicalLead,
             EmergencyProcedures = EmergencyProcedures,
             Hospitals = Hospitals.Select(h => h.ToModel()).ToList(),
+            MedicalUnits = MedicalUnits.Select(u => u.Text).Where(t => !string.IsNullOrWhiteSpace(t)).ToList(),
+            PatientDestinations = PatientDestinations.Select(d => d.Text).Where(t => !string.IsNullOrWhiteSpace(t)).ToList(),
+            Mortuary = string.IsNullOrWhiteSpace(Mortuary) ? null : Mortuary,
         },
         Safety = new SafetyPlan
         {
@@ -459,6 +484,7 @@ public sealed partial class IapBuilderViewModel : ObservableObject
             Ppe = Ppe.Select(p => p.Text).ToList(),
             Message = SafetyMessage,
             Accountability = Accountability,
+            Analysis = Analysis.Select(a => a.ToModel()).ToList(),
         },
     };
 
@@ -622,6 +648,13 @@ public sealed partial class IapBuilderViewModel : ObservableObject
             ReturnedBy = _plan.ReturnedBy, ReturnComments = _plan.ReturnComments,
         };
         DocumentText = IapDocument.Render(preview, incident, _cop.ObjectiveProgress);
+        // Phase 18: what this version changes from the last one, for the approver and the briefing.
+        if (period is not null && _cop.VersionsOf(period.Id).LastOrDefault(v => v.Version < _plan.Version) is { } previous)
+        {
+            var changes = IapVersions.Compare(previous.Content, content);
+            DocumentText += $"{Environment.NewLine}{Environment.NewLine}CHANGES FROM VERSION {previous.Version}{Environment.NewLine}" +
+                            (changes.Count == 0 ? "None." : string.Join(Environment.NewLine, changes.Select(c => "• " + c)));
+        }
 
         Findings.Clear();
         if (period is not null && _cop.ApprovedPlan(period.Id) is { } inForce)
@@ -826,6 +859,12 @@ public sealed partial class IapBuilderViewModel : ObservableObject
 
     [RelayCommand]
     private void AddHazard() => Hazards.Add(new HazardEntry(this, Hazards, new SafetyHazard()));
+
+    [RelayCommand]
+    private void AddAnalysisRow() => Analysis.Add(new SafetyAnalysisEntry(this, Analysis, new SafetyAnalysisRow { Area = "All crews" }));
+
+    [RelayCommand]
+    private void AddDestination() => PatientDestinations.Add(new TextEntry(this, PatientDestinations, ""));
 
     [RelayCommand]
     private void AddPpe()

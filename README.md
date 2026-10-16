@@ -1372,6 +1372,66 @@ Power is the root (`InfrastructureSystem`, Phase 6). This follows what hangs off
 
 **Tests:** `ProtectionTests`.
 
+## Documentation & ICS forms (Phase 18)
+
+Standardised documentation. Open it with **📄 Forms** in the header: every role can, because the forms are the record. They are generated from what command knows, the COP and the perceived event stream, never ground truth. Regenerated later, a form says the same about the same events. Nothing is typed into a form; it is filled from what was done.
+
+### The forms (`FormBuilder`)
+
+| Form | What it holds | Owner |
+|---|---|---|
+| ICS 201 Incident Briefing | situation, zones and facilities, current objectives, every action so far and who took it, organisation, resources with when each was sent and arrived | IC |
+| ICS 202 Incident Objectives | the plan's objectives (numbered, responsible, target), command emphasis, situational awareness, site safety plan, attachments | IC |
+| ICS 203 Organisation Assignment List | positions, divisions and groups with supervisors, agencies in unified command | Planning |
+| ICS 204 Assignment List | one section per division or group (and those reporting to Operations): supervisor, radio, work assignment, special instructions, safety, resources | Planning |
+| ICS 205 Radio Communications Plan | the plan's channels; without a plan, the channels the units are actually on | Logistics |
+| ICS 205A Communications List | agencies, hospitals, everyone notified, rest centres | Logistics |
+| ICS 206 Medical Plan | the plan's medical arrangements, medical units, hospitals with travel time, specialist beds and ED load now, patient destinations, mortuary, patients so far | Logistics |
+| ICS 207 Organisation Chart | the command tree down to each group's resources | Planning |
+| ICS 208 Safety Message / Plan | safety message, hazards and mitigations, PPE, accountability, Safety Officer | Safety |
+| ICS 209 Incident Status Summary | situation, resources by agency and status, casualties and the dead, evacuation and rest centres, infrastructure, cyber and GPS, zones, cost to date, EOC, IAP in force | Planning |
+| ICS 210 Resource Status Change | every dispatch and status change, and who gave it (a person, or the crew's own status button) | Planning |
+| ICS 211 Check-in List | each resource as it arrived on scene: time, type, agency, crew, home station, assignment | Planning |
+| ICS 213 General Message | every message sent to another organisation, who sent it, and the reply | IC |
+| ICS 214 Activity Log | one person's time-stamped activity and reasons, or everyone's, each under their name | Planning |
+| ICS 215 Operational Planning Worksheet | each division or group's work, resources held by type, overhead, where to report, special equipment | Operations |
+| ICS 215A IAP Safety Analysis | each division or group's hazards and mitigations | Safety |
+| ICS 220 Air Operations Summary | aircraft (helicopters, air ambulance, drones), air-to-ground channels, landing zones | Operations |
+| Situation report | EOC level and due times, a draft of the next report, and every report sent and who sent it | Planning |
+| Decision log | every order, request, approval, plan and message, time-stamped, with who gave it, in which role, and why | IC |
+| IAP package | cover with version history and changes, then 202, 203, 204, 205, 206, 207, 208, 215A and 220 | Planning |
+
+- **Prepared by:** each form names its owning position and whoever holds it (named on the chart, or the participant playing the role); unfilled, it falls to the Incident Commander.
+- **Choosing:** the window picks the incident, the IAP version (the one in force by default) and, for the ICS 214 and the decision log, the person.
+- **Export:** one form, or every form for the incident in one printable HTML document (the record so far). **Copy** puts the text on the clipboard.
+
+### Decision log, with actor attribution
+
+Every command the C2 and IAP services accept is on the log with its time, the participant who gave it, and the role they held then. The server stamps these from the connection (Phase 11); in a single-seat session the actor is "Command". It also carries:
+
+- **Kinds:** order (orders, dispatches, status changes, staging, evacuation signals), request (resources, assistance, supplies, generators, buses…), approval (approvals, IAP approval and return, agency answers, disputes, visits), plan, message (notifications, statements, situation reports), and other decisions.
+- **Why:** a decision-log entry (Phase 14) written about a command becomes that command's reason. One written on its own is its own row.
+- **Requests to command:** approvals someone asked command for appear with who asked.
+- **Left out:** bookkeeping (draft saves, alert acknowledgements, radio traffic).
+
+### IAP versioning and operational periods
+
+Phase 5 already versions plans within operational periods (draft, submit, approve, supersede). Phase 18 adds what changed:
+
+- **`IapVersions.Compare`** lists the changes between two versions: intent, objectives added, reworded, reassigned, retimed or dropped (matched by id), positions, groups formed and stood down, units assigned, reassigned or released, radio, hospitals, patient destinations, the casualty clearing station, the mortuary, new hazards, the safety analysis and the safety message.
+- **The builder's review** shows the changes from the previous version under the document, for the approver and the briefing.
+- **The IAP package cover** carries the period's version history: who drafted, submitted, returned, approved and briefed each version, which were superseded, and how many changes each made.
+
+### Safety and medical plans embedded in the IAP
+
+- **ICS 215A safety analysis** (a new part of the safety plan): one row per division or group with its hazards and mitigations. *Pull from COP* fills it from the plan's hazards plus what the work brings: casualties for a medical group, traffic for an evacuation group, collapse for rescue, chemicals for hazmat, charged lines for water supply. The compliance check warns when a group isn't covered, or a row has no mitigations.
+- **Medical plan:** it now carries the medical surge arrangements (Phase 16): medical units committed, patient destinations by need, and the temporary mortuary. *Pull from COP* fills them.
+- Both are editable in the builder (Medical and Safety steps), rendered in the IAP document, compared between versions, and printed on the ICS 204, 206, 208 and 215A.
+
+**Situation reports:** **Draft** on the AGENCIES tab now writes the full report from the COP: each incident's status, threats, casualties, tagged patients and dead, resources, evacuation, people needing shelter, the IAP in force, unified command, rest centres, infrastructure down, cyber, and outstanding requests.
+
+**Tests:** `FormsTests`.
+
 ## Local setup
 
 ### Prerequisites: PostgreSQL and PostGIS

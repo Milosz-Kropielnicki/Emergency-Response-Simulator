@@ -30,6 +30,7 @@ namespace Emergency_Response_Simulator
                 services.GetRequiredService<LiveTraffic>());
             viewModel.IapRequested += (_, _) => ShowIapBuilder();
             viewModel.AarRequested += (_, _) => ShowAar(services);
+            viewModel.FormsRequested += (_, _) => ShowForms(services);
             viewModel.ConsoleRequested += (_, _) => ShowConsole(services);
             // Push-to-talk (Phase 11 M7): held down, the radio transmits; anywhere in the window, even while typing.
             PreviewKeyDown += async (_, e) =>
@@ -84,6 +85,26 @@ namespace Emergency_Response_Simulator
                 if (_aarWindow.WindowState == WindowState.Minimized)
                     _aarWindow.WindowState = WindowState.Normal;
                 _aarWindow.Activate();
+            }
+        }
+
+        private FormsWindow? _formsWindow;
+
+        /// <summary>One forms window; asking again brings it to the front and regenerates (Phase 18).</summary>
+        private void ShowForms(IServiceProvider services)
+        {
+            if (_formsWindow is null)
+            {
+                _formsWindow = new FormsWindow(services.GetRequiredService<FormsViewModel>()) { Owner = this };
+                _formsWindow.Closed += (_, _) => _formsWindow = null;
+                _formsWindow.Show();
+            }
+            else
+            {
+                if (_formsWindow.WindowState == WindowState.Minimized)
+                    _formsWindow.WindowState = WindowState.Normal;
+                _formsWindow.Activate();
+                _ = services.GetRequiredService<FormsViewModel>().OpenAsync();
             }
         }
 

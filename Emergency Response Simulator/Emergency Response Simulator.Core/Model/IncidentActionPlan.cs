@@ -214,6 +214,17 @@ public sealed class MedicalPlan
 
     /// <summary>What to do if a responder is injured.</summary>
     public string? EmergencyProcedures { get; set; }
+
+    // Phase 18: the medical plan carries the medical surge arrangements (Phase 16), so everyone briefed on the plan knows them.
+
+    /// <summary>Ambulances and medical units committed to the incident, e.g. "Ambulance 14 (advanced life support)".</summary>
+    public List<string> MedicalUnits { get; set; } = [];
+
+    /// <summary>Where patients with each need go, e.g. "Burns → St. James's Hospital".</summary>
+    public List<string> PatientDestinations { get; set; } = [];
+
+    /// <summary>The temporary mortuary, if one is open.</summary>
+    public string? Mortuary { get; set; }
 }
 
 public sealed class ReceivingHospital
@@ -240,6 +251,19 @@ public sealed class SafetyPlan
 
     /// <summary>Personnel accountability, e.g. "BA entry control at Bridge Street".</summary>
     public string? Accountability { get; set; }
+
+    /// <summary>The ICS 215A safety analysis (Phase 18): for each division or group, its hazards and how they are controlled.</summary>
+    public List<SafetyAnalysisRow> Analysis { get; set; } = [];
+}
+
+/// <summary>One line of the ICS 215A: a division or group's work, its hazards and their mitigations.</summary>
+public sealed class SafetyAnalysisRow
+{
+    /// <summary>The division or group (or "All crews").</summary>
+    public string Area { get; set; } = "";
+
+    public string Hazards { get; set; } = "";
+    public string Mitigations { get; set; } = "";
 }
 
 public sealed class SafetyHazard

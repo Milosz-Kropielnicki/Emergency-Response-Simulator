@@ -256,6 +256,12 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenAar() => AarRequested?.Invoke(this, EventArgs.Empty);
 
+    /// <summary>Raised when someone opens the ICS forms and documentation (Phase 18).</summary>
+    public event EventHandler? FormsRequested;
+
+    [RelayCommand]
+    private void OpenForms() => FormsRequested?.Invoke(this, EventArgs.Empty);
+
     /// <summary>Raised when the instructor opens their console (Phase 11 M4).</summary>
     public event EventHandler? ConsoleRequested;
 

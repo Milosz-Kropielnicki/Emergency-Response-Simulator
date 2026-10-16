@@ -106,6 +106,9 @@ public static class IapDocument
             Line($"Hospital: {hospital.Name}" + (facts.Count > 0 ? $" ({string.Join(", ", facts)})" : ""));
         }
         if (medical.EmergencyProcedures is { Length: > 0 } procedures) Line($"Injured responder: {procedures}");
+        foreach (var unit in medical.MedicalUnits) Line($"Medical unit: {unit}");
+        foreach (var destination in medical.PatientDestinations) Line($"Patients: {destination}");
+        if (medical.Mortuary is { Length: > 0 } mortuary) Line($"Temporary mortuary: {mortuary}");
 
         Heading("SAFETY PLAN (ICS 208)");
         foreach (var hazard in c.Safety.Hazards.Where(h => !string.IsNullOrWhiteSpace(h.Hazard)))
@@ -117,6 +120,13 @@ public static class IapDocument
         {
             Line();
             Line($"SAFETY MESSAGE: {message.Trim()}");
+        }
+
+        if (c.Safety.Analysis.Count > 0)
+        {
+            Heading("SAFETY ANALYSIS (ICS 215A)");
+            foreach (var row in c.Safety.Analysis)
+                Line($"{row.Area}: {row.Hazards}" + (row.Mitigations is { Length: > 0 } m ? $" → {m}" : ""));
         }
 
         return text.ToString().TrimEnd();

@@ -1,0 +1,48 @@
+<Window x:Class="Emergency_Response_Simulator.FormsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="ICS Forms &amp; Documentation" Width="1200" Height="820" MinWidth="860" MinHeight="520"
+        Background="{StaticResource BackgroundBrush}" Foreground="{StaticResource TextBrush}" FontSize="12"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="12">
+        <!-- Choices -->
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Content="⟳ Refresh" Command="{Binding RefreshCommand}" Padding="8,2" Margin="4,0,0,0"
+                        ToolTip="Regenerate from the COP and the record as they stand now" />
+                <Button Content="Copy" Command="{Binding CopyCommand}" Padding="8,2" Margin="4,0,0,0" ToolTip="Copy the form as text" />
+                <Button Content="Export HTML" Command="{Binding ExportCommand}" Padding="8,2" Margin="4,0,0,0" ToolTip="Save this form as a printable page" />
+                <Button Content="Export all forms" Command="{Binding ExportAllCommand}" Padding="8,2" Margin="4,0,0,0"
+                        ToolTip="Every form for the incident in one printable document: the record so far" />
+            </StackPanel>
+            <WrapPanel>
+                <StackPanel Margin="0,0,12,0">
+                    <TextBlock Text="INCIDENT" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                    <ComboBox ItemsSource="{Binding Incidents}" SelectedItem="{Binding SelectedIncident}" Width="240" />
+                </StackPanel>
+                <StackPanel Margin="0,0,12,0" Visibility="{Binding UsesPlan, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="IAP VERSION" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                    <ComboBox ItemsSource="{Binding Plans}" SelectedItem="{Binding SelectedPlan}" Width="240" />
+                </StackPanel>
+                <StackPanel Margin="0,0,12,0" Visibility="{Binding UsesPerson, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="PERSON" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                    <ComboBox ItemsSource="{Binding People}" SelectedItem="{Binding SelectedPerson}" Width="240" />
+                </StackPanel>
+            </WrapPanel>
+        </DockPanel>
+        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Foreground="{StaticResource MutedTextBrush}" Margin="0,6,0,0" />
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280" />
+                <ColumnDefinition Width="10" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <ListBox ItemsSource="{Binding Forms}" SelectedItem="{Binding SelectedForm}" Background="{StaticResource PanelBrush}"
+                     Foreground="{StaticResource TextBrush}" BorderBrush="{StaticResource BorderBrush}" />
+            <TextBox Grid.Column="2" Text="{Binding Preview, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" FontSize="12"
+                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap"
+                     Background="{StaticResource PanelBrush}" Foreground="{StaticResource TextBrush}" BorderBrush="{StaticResource BorderBrush}" Padding="8" />
+        </Grid>
+    </DockPanel>
+</Window>

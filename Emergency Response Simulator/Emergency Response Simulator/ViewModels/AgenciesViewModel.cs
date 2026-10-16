@@ -147,11 +147,8 @@ public partial class AgenciesViewModel : ObservableObject
             SitrepText = "No incident open.";
             return;
         }
-        SitrepText = string.Join(" ", incidents.Select(i =>
-            $"{i.Number} {MainViewModel.Humanize(i.Type).ToLowerInvariant()}{(i.Address is null ? "" : $", {i.Address}")}: {MainViewModel.Humanize(i.Status).ToLowerInvariant()}, " +
-            $"priority {i.Priority}, {i.AssignedUnits.Count} units committed, {Math.Max(i.CasualtiesReported, i.CasualtiesConfirmed)} casualties reported" +
-            (i.Zones.Count > 0 ? $", {string.Join(", ", i.Zones.Select(z => z.Name))} in force" : "") +
-            (i.Command.IsUnified ? $"; unified command with {string.Join(", ", i.Command.Unified.Select(m => m.Agency))}" : "") + "."));
+        // Phase 18: the standard situation report, from the COP.
+        SitrepText = Simulation.Documentation.FormBuilder.DraftSitrep(_cop);
     }
 
     private bool CanSitrep => _owner.Permissions.C2(nameof(IC2Service.SubmitSitrepAsync));
