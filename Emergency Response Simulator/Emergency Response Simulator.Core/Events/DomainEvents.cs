@@ -228,6 +228,43 @@ namespace Emergency_Response_Simulator.Core.Events;
 [JsonDerivedType(typeof(CrisisCounsellingDeployed), nameof(CrisisCounsellingDeployed))]
 [JsonDerivedType(typeof(PsychologicalTriageReported), nameof(PsychologicalTriageReported))]
 [JsonDerivedType(typeof(HealthThreatOutcome), nameof(HealthThreatOutcome))]
+// Evacuation, shelter & infrastructure (Phase 17)
+[JsonDerivedType(typeof(EvacuationRouteSet), nameof(EvacuationRouteSet))]
+[JsonDerivedType(typeof(TrafficControlPointPlaced), nameof(TrafficControlPointPlaced))]
+[JsonDerivedType(typeof(TrafficControlPointStaffed), nameof(TrafficControlPointStaffed))]
+[JsonDerivedType(typeof(EvacuationBusesRequested), nameof(EvacuationBusesRequested))]
+[JsonDerivedType(typeof(EvacuationBusesArrived), nameof(EvacuationBusesArrived))]
+[JsonDerivedType(typeof(EvacuationProgressReported), nameof(EvacuationProgressReported))]
+[JsonDerivedType(typeof(ReEntryAuthorised), nameof(ReEntryAuthorised))]
+[JsonDerivedType(typeof(EvacuationOutcome), nameof(EvacuationOutcome))]
+[JsonDerivedType(typeof(UnsafeReEntry), nameof(UnsafeReEntry))]
+[JsonDerivedType(typeof(ShelterOpened), nameof(ShelterOpened))]
+[JsonDerivedType(typeof(ShelterStatusReported), nameof(ShelterStatusReported))]
+[JsonDerivedType(typeof(ShelterSecurityArranged), nameof(ShelterSecurityArranged))]
+[JsonDerivedType(typeof(ShelterIncident), nameof(ShelterIncident))]
+[JsonDerivedType(typeof(ShelterNeedReported), nameof(ShelterNeedReported))]
+[JsonDerivedType(typeof(InfrastructureDamaged), nameof(InfrastructureDamaged))]
+[JsonDerivedType(typeof(InfrastructureStatusReported), nameof(InfrastructureStatusReported))]
+[JsonDerivedType(typeof(GeneratorRequested), nameof(GeneratorRequested))]
+[JsonDerivedType(typeof(GasIsolationRequested), nameof(GasIsolationRequested))]
+[JsonDerivedType(typeof(GasIgnited), nameof(GasIgnited))]
+[JsonDerivedType(typeof(RailServiceExposed), nameof(RailServiceExposed))]
+[JsonDerivedType(typeof(GnssInterferenceStarted), nameof(GnssInterferenceStarted))]
+[JsonDerivedType(typeof(GnssInterferenceEnded), nameof(GnssInterferenceEnded))]
+[JsonDerivedType(typeof(GnssInterferenceReported), nameof(GnssInterferenceReported))]
+[JsonDerivedType(typeof(ManualPositionReportingSet), nameof(ManualPositionReportingSet))]
+[JsonDerivedType(typeof(CyberAttackStarted), nameof(CyberAttackStarted))]
+[JsonDerivedType(typeof(CyberIncidentReported), nameof(CyberIncidentReported))]
+[JsonDerivedType(typeof(CyberFallbackActivated), nameof(CyberFallbackActivated))]
+[JsonDerivedType(typeof(CyberSystemsRestored), nameof(CyberSystemsRestored))]
+[JsonDerivedType(typeof(DrinkingWaterUnsafe), nameof(DrinkingWaterUnsafe))]
+[JsonDerivedType(typeof(EnvironmentalMonitoringDeployed), nameof(EnvironmentalMonitoringDeployed))]
+[JsonDerivedType(typeof(EnvironmentalReading), nameof(EnvironmentalReading))]
+[JsonDerivedType(typeof(RunoffContainmentOrdered), nameof(RunoffContainmentOrdered))]
+[JsonDerivedType(typeof(PollutionReachedWater), nameof(PollutionReachedWater))]
+[JsonDerivedType(typeof(WildlifeHarmed), nameof(WildlifeHarmed))]
+[JsonDerivedType(typeof(EnvironmentalImpactReported), nameof(EnvironmentalImpactReported))]
+[JsonDerivedType(typeof(EnvironmentOutcome), nameof(EnvironmentOutcome))]
 [JsonDerivedType(typeof(HazardEnded), nameof(HazardEnded))]
 [JsonDerivedType(typeof(HazardSitePlaced), nameof(HazardSitePlaced))]
 [JsonDerivedType(typeof(CasualtyInjured), nameof(CasualtyInjured))]
@@ -1296,3 +1333,129 @@ public sealed record PsychologicalTriageReported(Guid DeploymentId, int Seen, in
 /// those in time, how many fell ill and died.
 /// </summary>
 public sealed record HealthThreatOutcome(Guid ThreatId, int Exposed, int Protected, int ProtectedInTime, int Ill, int Deaths) : DomainEvent;
+
+// ---- Evacuation, shelter & infrastructure (Phase 17) ----
+
+/// <summary>Command told an evacuation zone's people which way to go: a route ending where they should make for (a rest centre, if it ends at one).</summary>
+public sealed record EvacuationRouteSet(Guid ZoneId, IReadOnlyList<GeoPoint> Route, Guid? ShelterId) : DomainEvent;
+
+/// <summary>Command asked the Garda for a traffic control point: members at a junction keeping evacuation traffic moving.</summary>
+public sealed record TrafficControlPointPlaced(Guid PointId, string Name, GeoPoint Location) : DomainEvent;
+
+/// <summary>Gardaí are at the traffic control point.</summary>
+public sealed record TrafficControlPointStaffed(Guid PointId) : DomainEvent;
+
+/// <summary>Command asked the bus companies for buses to take people without a car out of an evacuation zone.</summary>
+public sealed record EvacuationBusesRequested(Guid RequestId, Guid ZoneId, int Buses) : DomainEvent;
+
+/// <summary>The buses are at the zone and loading.</summary>
+public sealed record EvacuationBusesArrived(Guid RequestId, Guid ZoneId, int Buses) : DomainEvent;
+
+/// <summary>
+/// The gardaí's estimate of an evacuation: who lives or works in the zone, how many have left, how many are still in,
+/// and how long until it is clear at the present rate (null when nobody is moving).
+/// </summary>
+public sealed record EvacuationProgressReported(Guid ZoneId, int Estimated, int Left, int Remaining, int? ClearanceMinutes) : DomainEvent;
+
+/// <summary>Command let the residents of an evacuation zone go home: the zone is lifted with it.</summary>
+public sealed record ReEntryAuthorised(Guid ZoneId) : DomainEvent;
+
+/// <summary>
+/// Ground truth, for the review: how an evacuation really stands — everyone who was in the zone when it was ordered, how many are out,
+/// how many are still in, how many were hurt inside it, and when 90% of those able to leave were out.
+/// </summary>
+public sealed record EvacuationOutcome(Guid ZoneId, int Population, int Out, int StillInside, int Hurt, double? ClearedAfterMinutes) : DomainEvent;
+
+/// <summary>Ground truth: residents went home to somewhere still dangerous (the hazard still there, or the ground contaminated).</summary>
+public sealed record UnsafeReEntry(Guid ZoneId, int Count, string Reason) : DomainEvent;
+
+/// <summary>Command asked the council to open a rest centre for evacuees.</summary>
+public sealed record ShelterOpened(Guid ShelterId, string Name, GeoPoint Location, int Capacity, Guid? IncidentId) : DomainEvent;
+
+/// <summary>A rest centre manager's report: open or still setting up, how many there and registered, what has run out, and security.</summary>
+public sealed record ShelterStatusReported(Guid ShelterId, bool Ready, int Occupants, int Registered, int Capacity, IReadOnlyList<SupplyKind> Short,
+    bool Secured, int Incidents) : DomainEvent;
+
+/// <summary>Command arranged security for a rest centre (gardaí or a contracted firm).</summary>
+public sealed record ShelterSecurityArranged(Guid ShelterId) : DomainEvent;
+
+/// <summary>Ground truth: trouble inside a rest centre (a theft, a fight), and whether security stopped it.</summary>
+public sealed record ShelterIncident(Guid ShelterId, string What, bool Prevented) : DomainEvent;
+
+/// <summary>The gardaí and the council report evacuees with nowhere to go: no rest centre open, or all full.</summary>
+public sealed record ShelterNeedReported(Guid IncidentId, int People) : DomainEvent;
+
+/// <summary>Ground truth: a hazard (or an inject) damaged a piece of infrastructure: a pumping station, a gas main, a rail line.</summary>
+public sealed record InfrastructureDamaged(Guid SiteId, string Cause) : DomainEvent;
+
+/// <summary>An operator's report on one of its assets: how it stands, why, and how many customers are without.</summary>
+public sealed record InfrastructureStatusReported(Guid SiteId, InfrastructureKind Kind, string Name, GeoPoint Location, double RadiusMeters,
+    InfrastructureStatus Status, string Detail, int Customers) : DomainEvent;
+
+/// <summary>Command asked for a mobile generator for an asset that has lost (or will lose) its power.</summary>
+public sealed record GeneratorRequested(Guid SiteId) : DomainEvent;
+
+/// <summary>Command asked Gas Networks Ireland to isolate a leaking main: the leak stops, and so does the supply it feeds.</summary>
+public sealed record GasIsolationRequested(Guid SiteId) : DomainEvent;
+
+/// <summary>Ground truth: leaking gas found a source of ignition.</summary>
+public sealed record GasIgnited(Guid SiteId) : DomainEvent;
+
+/// <summary>Ground truth: trains or trams kept running through a hazard or an evacuation zone because nobody told the operator to stop.</summary>
+public sealed record RailServiceExposed(Guid SiteId, string Where) : DomainEvent;
+
+/// <summary>
+/// Ground truth: satellite navigation is being jammed or spoofed over an area, for a while (spoofed fixes are moved
+/// <paramref name="OffsetMeters"/> towards <paramref name="BearingDegrees"/>).
+/// </summary>
+public sealed record GnssInterferenceStarted(Guid InterferenceId, GnssInterferenceKind Kind, GeoPoint Centre, double RadiusMeters,
+    double OffsetMeters = 0, double BearingDegrees = 0, double DurationMinutes = 60) : DomainEvent;
+
+public sealed record GnssInterferenceEnded(Guid InterferenceId) : DomainEvent;
+
+/// <summary>Crews have noticed: positions lost, or AVL putting them somewhere they are not.</summary>
+public sealed record GnssInterferenceReported(Guid InterferenceId, GnssInterferenceKind Kind, GeoPoint Centre, double RadiusMeters) : DomainEvent;
+
+/// <summary>Command told crews in an area of GPS interference to give their positions by voice (or stopped it).</summary>
+public sealed record ManualPositionReportingSet(bool Enabled) : DomainEvent;
+
+/// <summary>Ground truth: ransomware has encrypted a system the response relies on.</summary>
+/// <param name="HospitalId">The hospital, for a hospital's IT.</param>
+public sealed record CyberAttackStarted(Guid AttackId, CyberTarget Target, Guid? HospitalId, string Description) : DomainEvent;
+
+/// <summary>The system's owners report the attack and what it has stopped working.</summary>
+public sealed record CyberIncidentReported(Guid AttackId, CyberTarget Target, string System, string Impact) : DomainEvent;
+
+/// <summary>Command told the system's users to fall back to manual working.</summary>
+public sealed record CyberFallbackActivated(Guid AttackId) : DomainEvent;
+
+/// <summary>The system is restored from backups and back in use.</summary>
+public sealed record CyberSystemsRestored(Guid AttackId) : DomainEvent;
+
+/// <summary>Ground truth: with the treatment works' controls lost, the water it puts into supply can't be guaranteed safe.</summary>
+public sealed record DrinkingWaterUnsafe(Guid AttackId, GeoPoint Location, double RadiusMeters) : DomainEvent;
+
+/// <summary>Command sent an environmental monitoring team (the EPA, the council) to sample the air, water or soil at a place.</summary>
+public sealed record EnvironmentalMonitoringDeployed(Guid MonitorId, EnvironmentMedium Medium, GeoPoint Location) : DomainEvent;
+
+/// <summary>A monitoring team's reading, graded against guideline values.</summary>
+public sealed record EnvironmentalReading(Guid MonitorId, EnvironmentMedium Medium, PollutionLevel Level, string Detail) : DomainEvent;
+
+/// <summary>Command ordered an incident's firefighting run-off contained: drain covers, booms, bunding.</summary>
+public sealed record RunoffContainmentOrdered(Guid IncidentId) : DomainEvent;
+
+/// <summary>Ground truth: contaminated run-off or a spill has reached a watercourse (the total so far, in litres).</summary>
+public sealed record PollutionReachedWater(Guid? IncidentId, string Watercourse, double Litres) : DomainEvent;
+
+/// <summary>Ground truth: wildlife killed by the incident: a fish kill, birds in the cloud.</summary>
+public sealed record WildlifeHarmed(Guid? IncidentId, string What, int Count, string Cause) : DomainEvent;
+
+/// <summary>Someone reports harm to the environment: anglers find dead fish, a park ranger dead birds.</summary>
+public sealed record EnvironmentalImpactReported(Guid ImpactId, Guid? IncidentId, EnvironmentMedium Medium, string What, GeoPoint Location) : DomainEvent;
+
+/// <summary>
+/// Ground truth, for the review: an incident's environmental toll so far — contaminated run-off, how much reached water and how much was
+/// held back, contaminated ground, and wildlife killed.
+/// </summary>
+public sealed record EnvironmentOutcome(Guid? IncidentId, double RunoffLitres, double ToWaterLitres, double ContainedLitres,
+    double ContaminatedSquareMeters, int Wildlife) : DomainEvent;

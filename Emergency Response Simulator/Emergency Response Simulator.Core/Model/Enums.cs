@@ -246,6 +246,18 @@ public enum HazardSiteKind
 
     /// <summary>A mobile phone mast: runs a while on batteries in a power cut, then fails (Phase 7).</summary>
     CellTower,
+
+    /// <summary>
+    /// A water pumping station (Phase 17): keeps mains pressure up across the area it serves. In a power cut it runs on its
+    /// standby generator for <c>Quantity</c> hours (0: it has none), then fails; fire or flood takes it out.
+    /// </summary>
+    WaterPumping,
+
+    /// <summary>A gas main or pressure-regulating station (Phase 17): fire, flood or an explosion sets it leaking.</summary>
+    GasMain,
+
+    /// <summary>A stretch of electric rail or tram line (Phase 17): stops in a power cut, and runs on through a hazard unless stopped.</summary>
+    Rail,
 }
 
 /// <summary>Casualty priority (triage sieve): P1 immediate, P2 urgent, P3 delayed.</summary>

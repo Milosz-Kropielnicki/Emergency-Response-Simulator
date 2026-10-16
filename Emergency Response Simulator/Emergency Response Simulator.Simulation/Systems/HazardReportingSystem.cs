@@ -179,6 +179,10 @@ public sealed class HazardReportingSystem(IRoutingService? routing = null) : ISi
                 HazardSiteKind.ChemicalStore => random.NextDouble() < 0.7 && site.Substance is { } substance
                     ? $"Exposure at risk: hazard placards for {substance} on {site.Name}, fire is about to reach it"
                     : $"Exposure at risk: {site.Name}, contents unknown, fire is about to reach it",
+                HazardSiteKind.GasMain => $"Exposure at risk: gas main ({site.Name}) right beside the fire",
+                HazardSiteKind.WaterPumping => $"Exposure at risk: water pumping station ({site.Name}) right beside the fire",
+                HazardSiteKind.Rail => $"Exposure at risk: the rail line ({site.Name}) right beside the fire",
+                HazardSiteKind.CellTower => $"Exposure at risk: mobile mast ({site.Name}) right beside the fire",
                 _ => $"Exposure at risk: electricity substation ({site.Name}) right beside the fire",
             });
         }

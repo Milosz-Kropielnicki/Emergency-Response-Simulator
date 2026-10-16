@@ -171,6 +171,13 @@ public sealed class PerceivedState : ICopService
 
     private readonly HealthSituation _health = new();
 
+    public ProtectionSituation Protection
+    {
+        get { lock (_lock) return _protection.Copy(); }
+    }
+
+    private readonly ProtectionSituation _protection = new();
+
     public IReadOnlyList<MediaEnquiry> MediaEnquiries
     {
         get { lock (_lock) return _enquiries.Values.OrderBy(m => m.ReceivedAt).ToList(); }
@@ -224,6 +231,7 @@ public sealed class PerceivedState : ICopService
     {
         ApplyLogistics(payload, at);
         ApplyHealth(payload, at);
+        ApplyProtection(payload, at);
         switch (payload)
         {
             case AgencyRegistered e:
@@ -1459,6 +1467,110 @@ public sealed class PerceivedState : ICopService
             case PsychologicalTriageReported e when _health.Counselling.FirstOrDefault(c => c.Id == e.DeploymentId) is { } team:
                 team.WorkingSince ??= at;
                 (team.Seen, team.Low, team.Moderate, team.High, team.Admitted) = (e.Seen, e.Low, e.Moderate, e.High, e.Admitted);
+                break;
+        }
+    }
+
+    /// <summary>Evacuation, rest centres, infrastructure, GPS and cyber, and the environment (Phase 17), as reported.</summary>
+    private void ApplyProtection(DomainEvent payload, DateTimeOffset at)
+    {
+        var p = _protection;
+        Shelter? ShelterById(Guid id) => p.Shelters.FirstOrDefault(s => s.Id == id);
+        switch (payload)
+        {
+            case ZoneDeclared { Type: ZoneType.EvacuationZone } e:
+                p.Evacuations.RemoveAll(z => z.ZoneId == e.ZoneId);
+                p.Evacuations.Add(new EvacuationZoneStatus { ZoneId = e.ZoneId, Name = e.Name, IncidentId = e.IncidentId, OrderedAt = at });
+                break;
+            case EvacuationRouteSet e when p.Evacuation(e.ZoneId) is { } routed:
+                routed.Route.Clear();
+                routed.Route.AddRange(e.Route);
+                routed.ShelterId = e.ShelterId;
+                break;
+            case EvacuationProgressReported e when p.Evacuation(e.ZoneId) is { } progress:
+                (progress.Estimated, progress.Left, progress.Remaining, progress.ClearanceMinutes, progress.ReportedAt) =
+                    (e.Estimated, e.Left, e.Remaining, e.ClearanceMinutes, at);
+                break;
+            case EvacuationBusesRequested e when p.Evacuation(e.ZoneId) is { } bussed:
+                bussed.BusesRequested += e.Buses;
+                break;
+            case EvacuationBusesArrived e when p.Evacuation(e.ZoneId) is { } arrived:
+                arrived.BusesWorking += e.Buses;
+                break;
+            case ReEntryAuthorised e when p.Evacuation(e.ZoneId) is { } reEntry:
+                reEntry.ReEntryAt ??= at;
+                break;
+            case TrafficControlPointPlaced e:
+                p.ControlPoints.Add(new TrafficControlPoint { Id = e.PointId, Name = e.Name, Location = e.Location, PlacedAt = at });
+                break;
+            case TrafficControlPointStaffed e when p.ControlPoints.FirstOrDefault(c => c.Id == e.PointId) is { } staffed:
+                staffed.StaffedAt ??= at;
+                break;
+
+            case ShelterOpened e:
+                p.Shelters.Add(new Shelter { Id = e.ShelterId, Name = e.Name, Location = e.Location, Capacity = e.Capacity, IncidentId = e.IncidentId, OpenedAt = at });
+                break;
+            case ShelterStatusReported e when ShelterById(e.ShelterId) is { } shelter:
+                (shelter.Ready, shelter.Occupants, shelter.Registered, shelter.Secured, shelter.Incidents, shelter.ReportedAt) =
+                    (e.Ready, e.Occupants, e.Registered, e.Secured, e.Incidents, at);
+                shelter.Short.Clear();
+                shelter.Short.AddRange(e.Short);
+                break;
+            case ShelterSecurityArranged e when ShelterById(e.ShelterId) is { } guarded:
+                guarded.SecurityArrangedAt ??= at;
+                break;
+            case ShelterNeedReported e:
+                p.Unsheltered[e.IncidentId] = e.People;
+                break;
+
+            case InfrastructureStatusReported e:
+                var asset = p.Infrastructure.FirstOrDefault(a => a.Id == e.SiteId);
+                if (asset is null)
+                    p.Infrastructure.Add(asset = new InfrastructureAsset
+                    {
+                        Id = e.SiteId, Kind = e.Kind, Name = e.Name, Location = e.Location, RadiusMeters = e.RadiusMeters,
+                    });
+                (asset.Status, asset.Detail, asset.Customers, asset.ReportedAt) = (e.Status, e.Detail, e.Customers, at);
+                break;
+            case GeneratorRequested e when p.Infrastructure.FirstOrDefault(a => a.Id == e.SiteId) is { } generator:
+                generator.GeneratorRequestedAt ??= at;
+                break;
+            case GasIsolationRequested e when p.Infrastructure.FirstOrDefault(a => a.Id == e.SiteId) is { } main:
+                main.IsolationRequestedAt ??= at;
+                break;
+
+            case GnssInterferenceReported e:
+                p.Gnss.RemoveAll(g => g.Id == e.InterferenceId);
+                p.Gnss.Add(new GnssInterference { Id = e.InterferenceId, Kind = e.Kind, Centre = e.Centre, RadiusMeters = e.RadiusMeters, ReportedAt = at });
+                break;
+            case GnssInterferenceEnded e when p.Gnss.FirstOrDefault(g => g.Id == e.InterferenceId) is { } ended:
+                ended.EndedAt ??= at;
+                break;
+            case ManualPositionReportingSet e:
+                p.ManualPositionReporting = e.Enabled;
+                break;
+            case CyberIncidentReported e:
+                if (p.Cyber.FirstOrDefault(c => c.Id == e.AttackId) is { } known) known.Impact = e.Impact;
+                else p.Cyber.Add(new CyberIncident { Id = e.AttackId, Target = e.Target, System = e.System, Impact = e.Impact, ReportedAt = at });
+                break;
+            case CyberFallbackActivated e when p.Cyber.FirstOrDefault(c => c.Id == e.AttackId) is { } manual:
+                manual.FallbackAt ??= at;
+                break;
+            case CyberSystemsRestored e when p.Cyber.FirstOrDefault(c => c.Id == e.AttackId) is { } restored:
+                restored.RestoredAt ??= at;
+                break;
+
+            case EnvironmentalMonitoringDeployed e:
+                p.Monitors.Add(new EnvironmentalMonitor { Id = e.MonitorId, Medium = e.Medium, Location = e.Location, DeployedAt = at });
+                break;
+            case EnvironmentalReading e when p.Monitors.FirstOrDefault(m => m.Id == e.MonitorId) is { } monitor:
+                (monitor.Level, monitor.Reading, monitor.ReadingAt) = (e.Level, e.Detail, at);
+                break;
+            case RunoffContainmentOrdered e:
+                p.RunoffContained.TryAdd(e.IncidentId, at);
+                break;
+            case EnvironmentalImpactReported e:
+                p.Impacts.Add(new EnvironmentalImpact(e.ImpactId, e.IncidentId, e.Medium, e.What, e.Location, at));
                 break;
         }
     }

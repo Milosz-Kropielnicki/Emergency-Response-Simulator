@@ -302,6 +302,51 @@ public interface IC2Service
     /// <summary>Sends a crisis counselling team to the scene, the rest centres or the family assistance centre, or opens a helpline.</summary>
     Task<CommandResult> DeployCrisisCounsellingAsync(Guid? incidentId, CounsellingSetting setting, CancellationToken cancellationToken = default);
 
+    // ---- Evacuation, shelter & infrastructure (Phase 17) ----
+
+    /// <summary>
+    /// Tells an evacuation zone's people which way to go: a route of at least two points, the last where they make for.
+    /// Without one they go straight out from the middle of the zone, whatever lies that way. With a rest centre, the
+    /// route ends there and the evacuees who need shelter go to it.
+    /// </summary>
+    Task<CommandResult> SetEvacuationRouteAsync(Guid zoneId, IReadOnlyList<GeoPoint> route, Guid? shelterId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Asks the Garda for a traffic control point at a junction: evacuation traffic flows faster through it, and dark signals are worked by hand.</summary>
+    Task<CommandResult> PlaceTrafficControlPointAsync(string name, GeoPoint location, CancellationToken cancellationToken = default);
+
+    /// <summary>Asks the bus companies for buses to carry the people without a car out of an evacuation zone, to its route's end or rest centre.</summary>
+    Task<CommandResult> RequestEvacuationBusesAsync(Guid zoneId, int buses, CancellationToken cancellationToken = default);
+
+    /// <summary>Lets an evacuation zone's residents go home, and lifts the zone. Checked against what command knows of the hazard there.</summary>
+    Task<CommandResult> AuthoriseReEntryAsync(Guid zoneId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Asks the council to open a rest centre: evacuees with nowhere else to go come here once it is set up, are
+    /// registered, fed and given a bed — from the incident's stock of food, water and bedding.
+    /// </summary>
+    Task<CommandResult> OpenShelterAsync(string name, GeoPoint location, int capacity, Guid? incidentId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Arranges security at a rest centre (gardaí or a contracted firm).</summary>
+    Task<CommandResult> ArrangeShelterSecurityAsync(Guid shelterId, CancellationToken cancellationToken = default);
+
+    /// <summary>Sends a mobile generator to an infrastructure asset without mains power (a pumping station, a mast).</summary>
+    Task<CommandResult> DeployGeneratorAsync(Guid siteId, CancellationToken cancellationToken = default);
+
+    /// <summary>Asks Gas Networks Ireland to isolate a leaking gas main: the leak stops, and so does supply to everyone it feeds.</summary>
+    Task<CommandResult> IsolateGasAsync(Guid siteId, CancellationToken cancellationToken = default);
+
+    /// <summary>Tells crews in an area of GPS interference to give their positions by voice (or stops it).</summary>
+    Task<CommandResult> SetManualPositionReportingAsync(bool enabled, CancellationToken cancellationToken = default);
+
+    /// <summary>Tells the users of a system hit by ransomware to fall back to manual working until it is restored.</summary>
+    Task<CommandResult> ActivateCyberFallbackAsync(Guid attackId, CancellationToken cancellationToken = default);
+
+    /// <summary>Sends an environmental monitoring team to sample the air, water or soil at a place; it reports readings until stood down.</summary>
+    Task<CommandResult> DeployEnvironmentalMonitoringAsync(EnvironmentMedium medium, GeoPoint location, CancellationToken cancellationToken = default);
+
+    /// <summary>Orders an incident's firefighting run-off contained (drain covers, booms, bunding) before it reaches a river or canal.</summary>
+    Task<CommandResult> ContainRunoffAsync(Guid incidentId, CancellationToken cancellationToken = default);
+
     // ---- AI role players (Phase 11 M5) ----
 
     /// <summary>

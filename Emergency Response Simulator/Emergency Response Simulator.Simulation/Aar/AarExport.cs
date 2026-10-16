@@ -127,6 +127,15 @@ public static class AarExport
             html.Append("</table>");
         }
 
+        // Evacuation, shelter & infrastructure (Phase 17).
+        if (report.Protection.Any)
+        {
+            html.Append("<h2>Evacuation, shelter &amp; infrastructure</h2><table>");
+            foreach (var (label, value) in ProtectionLines(report.Protection))
+                html.Append($"<tr><td>{E(label)}</td><td>{E(value)}</td></tr>");
+            html.Append("</table>");
+        }
+
         // Health (Phase 16).
         if (report.Health.Any)
         {
@@ -297,6 +306,42 @@ public static class AarExport
         return svg.Append("</svg>").ToString();
     }
 
+    /// <summary>The evacuation, shelter, infrastructure, cyber and environment measures (Phase 17), as label and value.</summary>
+    public static IReadOnlyList<(string Label, string Value)> ProtectionLines(AarProtection protection)
+    {
+        static string N(double value) => value.ToString("N0", CultureInfo.InvariantCulture);
+        var lines = new List<(string, string)>();
+        if (protection.Zones > 0)
+        {
+            lines.Add(("Evacuation zones", N(protection.Zones)));
+            lines.Add(("Got out", $"{N(protection.Out)} of {N(protection.Population)} ({protection.OutPercent}%)"));
+            lines.Add(("Still inside / hurt inside", $"{N(protection.StillInside)} / {N(protection.HurtInZones)}"));
+            lines.Add(("Slowest zone clear after", protection.LongestClearanceMinutes is { } clear ? AarAnalyzer.Duration(TimeSpan.FromMinutes(clear)) : "never"));
+            lines.Add(("Sent home to danger", N(protection.UnsafeReEntries)));
+        }
+        if (protection.ShelterArrivals > 0 || protection.UnshelteredPeak > 0)
+        {
+            lines.Add(("In rest centres (peak) / registered", $"{N(protection.ShelterArrivals)} / {N(protection.Registered)}"));
+            lines.Add(("Fullest rest centre", $"{protection.ShelterPeak}% of capacity"));
+            lines.Add(("Trouble in rest centres", N(protection.ShelterIncidents)));
+            lines.Add(("Nowhere to go (peak)", N(protection.UnshelteredPeak)));
+        }
+        if (protection.InfrastructureFailures > 0 || protection.GasIgnitions > 0)
+        {
+            lines.Add(("Infrastructure failed", N(protection.InfrastructureFailures)));
+            lines.Add(("Gas ignitions", N(protection.GasIgnitions)));
+        }
+        if (protection.CyberAttacks > 0 || protection.GnssInterference > 0)
+            lines.Add(("Ransomware attacks / GPS interference", $"{N(protection.CyberAttacks)} / {N(protection.GnssInterference)}"));
+        if (protection.RunoffLitres > 0 || protection.Wildlife > 0)
+        {
+            lines.Add(("Contaminated run-off", $"{N(protection.RunoffLitres)} L"));
+            lines.Add(("Reached water / contained", $"{N(protection.ToWaterLitres)} L / {N(protection.ContainedLitres)} L"));
+            lines.Add(("Wildlife killed", N(protection.Wildlife)));
+        }
+        return lines;
+    }
+
     /// <summary>The health measures (Phase 16), as label and value, for the window and the exports alike.</summary>
     public static IReadOnlyList<(string Label, string Value)> HealthLines(AarHealth health)
     {
@@ -399,6 +444,9 @@ public static class AarExport
         if (report.Health.Any)
             foreach (var (label, value) in HealthLines(report.Health))
                 Row("Health", null, label, "", value, "", "", "");
+        if (report.Protection.Any)
+            foreach (var (label, value) in ProtectionLines(report.Protection))
+                Row("Protection", null, label, "", value, "", "", "");
         foreach (var outage in report.Logistics.Outages)
             Row("Supply outage", outage.From, Supplies.Name(outage.Kind), outage.Incident,
                 outage.To is { } to ? AarAnalyzer.Duration(to - outage.From) : "to the end", outage.WarnedAt is { } w ? Clock(w) : "",

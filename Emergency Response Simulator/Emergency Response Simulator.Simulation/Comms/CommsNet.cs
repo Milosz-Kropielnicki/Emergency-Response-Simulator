@@ -79,6 +79,22 @@ public static class CommsNet
     public static void Data(SimulationContext context, WorldUnit unit, DomainEvent payload, string source)
     {
         if (unit.RadioFailed) return; // the whole comms fit has failed, as before Phase 7
+
+        // Phase 17: a fix is only as good as the GPS behind it. Jammed, there is none; spoofed, it is somewhere else.
+        var protection = context.World.Protection;
+        if (payload is UnitPositionReported fix && protection.GnssAt(fix.Location) is { } gnss)
+        {
+            if (gnss.Kind == GnssInterferenceKind.Jamming) return;
+            payload = fix with { Location = GeoMath.Destination(fix.Location, gnss.BearingDegrees, gnss.OffsetMeters) };
+        }
+        // And mobile data needs the control room's dispatch system: with it encrypted, status waits (or goes by voice, on paper working).
+        if (protection.DispatchDown)
+        {
+            if (payload is UnitPositionReported or RouteReported) return;
+            if (protection.DispatchFallback) Voice(context, unit, VoiceText(unit, payload), payload);
+            else unit.PendingData.Add((payload, source));
+            return;
+        }
         if (!context.World.Radio.Active || DataUp(context.World, unit.Location))
         {
             context.EmitPerceived(payload, source);
@@ -87,6 +103,14 @@ public static class CommsNet
         if (payload is not (UnitPositionReported or RouteReported))
             unit.PendingData.Add((payload, source));
     }
+
+    /// <summary>What a crew says on the radio for a data message when the terminals are down (Phase 17): "Control, Engine 4: status, on scene".</summary>
+    public static string VoiceText(WorldUnit unit, DomainEvent payload) => payload switch
+    {
+        UnitStatusChanged s => $"Control, {unit.Callsign}: status, {EventDescriber.Humanize(s.Status).ToLowerInvariant()}.",
+        UnitArrivedAtStaging => $"Control, {unit.Callsign}: at the staging area.",
+        _ => $"Control, {unit.Callsign}: message for you, reading it over.",
+    };
 
     /// <summary>A message from another organisation, arriving after the time it takes to phone or type it.</summary>
     public static void Chat(SimulationContext context, string from, string text, DomainEvent? payload, TimeSpan? delay = null, Guid? id = null)
@@ -119,7 +143,7 @@ public static class CommsNet
 
     /// <summary>Mobile coverage at a point: not in a black spot and not under a mast that is down.</summary>
     public static bool DataUp(WorldState world, GeoPoint point) =>
-        !world.Radio.DeadZones.Any(z => z.Covers(point)) && !MastDownOver(world, point);
+        !world.Radio.DeadZones.Any(z => z.Covers(point)) && !MastDownOver(world, point) && !world.Protection.DispatchDown;
 
     /// <summary>Whether the mobile mast serving this point is down.</summary>
     public static bool MastDownOver(WorldState world, GeoPoint point) =>

@@ -171,6 +171,22 @@ public static class PermissionMatrix
         C2(nameof(IC2Service.OpenDispensingPointAsync), "Mass prophylaxis", Logistics, Liaison);
         C2(nameof(IC2Service.DeployCrisisCounsellingAsync), "Behavioural health", Liaison, Logistics);
 
+        // Phase 17: moving people is Operations' (traffic with the Garda, through Liaison); buses and rest centres are mass care,
+        // supported by Logistics; sending people home is the IC's call. Utilities are Logistics' (generators) and Liaison's (the
+        // operators); the comms unit and the dispatchers handle GPS; Planning and Safety watch the environment.
+        C2(nameof(IC2Service.SetEvacuationRouteAsync), "Evacuation", Ops, IC);
+        C2(nameof(IC2Service.PlaceTrafficControlPointAsync), "Evacuation traffic", Ops, Liaison);
+        C2(nameof(IC2Service.RequestEvacuationBusesAsync), "Evacuation transport", Logistics, Liaison);
+        C2(nameof(IC2Service.AuthoriseReEntryAsync), "Re-entry", IC);
+        C2(nameof(IC2Service.OpenShelterAsync), "Mass care", Logistics, Liaison);
+        C2(nameof(IC2Service.ArrangeShelterSecurityAsync), "Mass care", Logistics, Liaison);
+        C2(nameof(IC2Service.DeployGeneratorAsync), "Critical infrastructure", Logistics, Liaison);
+        C2(nameof(IC2Service.IsolateGasAsync), "Critical infrastructure", Liaison, Ops);
+        C2(nameof(IC2Service.SetManualPositionReportingAsync), "Communications plan", Logistics, Dispatcher);
+        C2(nameof(IC2Service.ActivateCyberFallbackAsync), "Cyber incidents", IC, Logistics);
+        C2(nameof(IC2Service.DeployEnvironmentalMonitoringAsync), "Environmental monitoring", Planning, Safety);
+        C2(nameof(IC2Service.ContainRunoffAsync), "Environmental protection", Ops, Safety);
+
         // AI role players (Phase 11 M5): politicians ring the IC or the PIO; an agency chief answers for the agency they run.
         C2(nameof(IC2Service.AnswerPoliticalCallAsync), "Political calls", IC, Pio);
         C2(nameof(IC2Service.AnswerAgencyRequestAsync), "Answering for your agency", Chief);

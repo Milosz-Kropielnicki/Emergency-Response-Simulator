@@ -154,6 +154,43 @@ public sealed record AarHealth(
     public int RightFirstTimePercent => Arrived == 0 ? 100 : (int)Math.Round(100.0 * RightFirstTime / Arrived);
 }
 
+/// <summary>Evacuation, shelter, infrastructure, cyber and GPS, and the environment over the session (Phase 17).</summary>
+/// <param name="Population">Everyone really in the evacuation zones when they were ordered; <paramref name="Out"/> of them got out.</param>
+/// <param name="LongestClearanceMinutes">The slowest zone to get 90% of those able to leave out; null when none got there.</param>
+/// <param name="ShelterArrivals">Evacuees in rest centres at the most (each centre at its fullest); <paramref name="Registered"/> of them were registered.</param>
+/// <param name="ShelterPeak">The fullest rest centre at its fullest, as a percentage of its capacity.</param>
+/// <param name="InfrastructureFailures">Assets their operators reported failed or leaking.</param>
+/// <param name="ToWaterLitres">Contaminated run-off that reached a river or canal; <paramref name="ContainedLitres"/> was held back.</param>
+public sealed record AarProtection(
+    int Zones,
+    int Population,
+    int Out,
+    int StillInside,
+    int HurtInZones,
+    double? LongestClearanceMinutes,
+    int UnsafeReEntries,
+    int ShelterArrivals,
+    int Registered,
+    int ShelterPeak,
+    int ShelterIncidents,
+    int UnshelteredPeak,
+    int InfrastructureFailures,
+    int GasIgnitions,
+    int CyberAttacks,
+    int GnssInterference,
+    double RunoffLitres,
+    double ToWaterLitres,
+    double ContainedLitres,
+    int Wildlife)
+{
+    public static readonly AarProtection None = new(0, 0, 0, 0, 0, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+    public bool Any => Zones > 0 || ShelterArrivals > 0 || UnshelteredPeak > 0 || InfrastructureFailures > 0 || CyberAttacks > 0 || GnssInterference > 0
+                       || RunoffLitres > 0 || Wildlife > 0;
+
+    public int OutPercent => Population == 0 ? 100 : (int)Math.Round(100.0 * Out / Population);
+}
+
 /// <summary>A unit's status over the session, for the commitment chart.</summary>
 public sealed record AarStatusSpan(DateTimeOffset From, DateTimeOffset To, UnitStatus Status);
 
@@ -265,6 +302,9 @@ public sealed class AarReport
 
     /// <summary>Patients, the dead, public health and behavioural health (Phase 16).</summary>
     public AarHealth Health { get; init; } = AarHealth.None;
+
+    /// <summary>Evacuation, rest centres, infrastructure, cyber and GPS, and the environment (Phase 17).</summary>
+    public AarProtection Protection { get; init; } = AarProtection.None;
 
     /// <summary>The decisions one participant made (everyone's with null).</summary>
     public IEnumerable<AarDecision> DecisionsOf(Guid? participantId) =>

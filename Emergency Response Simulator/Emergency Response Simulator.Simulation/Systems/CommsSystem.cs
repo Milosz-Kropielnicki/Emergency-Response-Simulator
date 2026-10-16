@@ -527,7 +527,8 @@ public sealed class CommsSystem(CommsOptions? options = null, IRoutingService? r
             if (!world.Radio.Masts.TryGetValue(site.Id, out var mast))
                 world.Radio.Masts[site.Id] = mast = new MastState { SiteId = site.Id };
 
-            var dark = world.InOutage(site.Location);
+            // Phase 17: a mobile generator keeps it powered.
+            var dark = world.InOutage(site.Location) && !world.Protection.HasGenerator(site.Id, context.SimTime);
             if (mast.Down)
             {
                 if (!dark && mast.DownCause?.StartsWith("batteries") == true && mast.OnBatterySince is { } since

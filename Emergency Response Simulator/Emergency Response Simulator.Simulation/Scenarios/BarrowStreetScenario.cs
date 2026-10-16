@@ -47,6 +47,12 @@ public static class BarrowStreetScenario
     /// <summary>The mobile mast serving Grand Canal Dock; it is fed from the substation.</summary>
     public static readonly GeoPoint MobileMast = GeoMath.Destination(FireLocation, 30, 350);
 
+    /// <summary>Phase 17: the gas pressure regulator on the warehouse's street frontage, close enough for the fire to reach.</summary>
+    public static readonly GeoPoint GasRegulator = GeoMath.Destination(FireLocation, 200, 40);
+
+    /// <summary>Phase 17: the pumping station that keeps up the docklands' mains pressure, inside the substation's area.</summary>
+    public static readonly GeoPoint PumpingStation = GeoMath.Destination(Substation, 90, 300);
+
     /// <param name="demoAutoResponse">
     /// Presentation mode: at minute 2 the scenario itself opens the incident and dispatches a first response,
     /// so the AVL picture comes alive without a trainee. Off for training, where those decisions are the point.
@@ -91,6 +97,15 @@ public static class BarrowStreetScenario
                     Truth(new RadioDeadZonePlaced(Guid.NewGuid(), RailwayBridge, 45, "under the railway bridge at Barrow Street")),
                     Truth(new HazardSitePlaced(Guid.NewGuid(), HazardSiteKind.CellTower, "Grand Canal Dock mobile mast",
                         MobileMast, ServiceRadiusMeters: 900)),
+                ]),
+
+            new(TimeSpan.FromSeconds(5), "Gas regulator, docklands pumping station and the DART line over Barrow Street (truth)",
+                _ => [
+                    Truth(new HazardSitePlaced(Guid.NewGuid(), HazardSiteKind.GasMain, "Barrow Street gas regulator", GasRegulator, ServiceRadiusMeters: 500)),
+                    // One hour of fuel in the standby generator, then the pumps stop.
+                    Truth(new HazardSitePlaced(Guid.NewGuid(), HazardSiteKind.WaterPumping, "Grand Canal Dock pumping station", PumpingStation,
+                        Quantity: 1, ServiceRadiusMeters: 900)),
+                    Truth(new HazardSitePlaced(Guid.NewGuid(), HazardSiteKind.Rail, "DART line at Barrow Street", RailwayBridge, ServiceRadiusMeters: 300)),
                 ]),
 
             new(TimeSpan.FromMinutes(3.5), "Third call: a resident with very little English (an interpreter is needed)",

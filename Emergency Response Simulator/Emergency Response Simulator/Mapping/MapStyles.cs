@@ -400,6 +400,150 @@ public static class MapStyles
         Outline = new Pen(Color.White, 2),
     };
 
+    // ---- Phase 17: population protection and critical systems ----
+
+    private static readonly Color EvacuationColor = new(170, 80, 230);
+
+    private static LabelStyle SmallLabel(Color color, int dy = -18) => new()
+    {
+        LabelColumn = LabelField, ForeColor = Color.White, BackColor = new Brush(Color.FromArgb(210, color.R / 2, color.G / 2, color.B / 2)),
+        Font = new Font { Size = 9 }, Offset = new Offset(0, dy), CornerRounding = 3, MaxVisible = ResolutionAtZoom(13),
+    };
+
+    /// <summary>A rest centre: green when open and fine, amber while it sets up, red when it has run out of something, is over capacity or has had trouble.</summary>
+    public static IStyle Shelter(bool ready, bool alarm)
+    {
+        var color = alarm ? new Color(230, 30, 30) : ready ? new Color(40, 170, 90) : new Color(255, 170, 0);
+        return new StyleCollection
+        {
+            Styles =
+            {
+                new SymbolStyle { SymbolType = SymbolType.Rectangle, SymbolScale = 0.6, Fill = new Brush(color), Outline = new Pen(Color.White, 3) },
+                SmallLabel(color, -20),
+            },
+        };
+    }
+
+    /// <summary>An evacuation route: a broad dashed purple line, the colour of evacuation zones.</summary>
+    public static IStyle EvacuationRoute { get; } = new StyleCollection
+    {
+        Styles =
+        {
+            new VectorStyle { Line = new Pen(Color.FromArgb(230, EvacuationColor.R, EvacuationColor.G, EvacuationColor.B), 5) { PenStyle = PenStyle.Dash } },
+            new LabelStyle
+            {
+                LabelColumn = LabelField, ForeColor = Color.White, BackColor = new Brush(Color.FromArgb(200, 85, 40, 115)),
+                Font = new Font { Size = 9 }, CornerRounding = 3, MaxVisible = ResolutionAtZoom(13),
+            },
+        },
+    };
+
+    /// <summary>A traffic control point: a blue triangle when gardaí are there, grey while they are on their way.</summary>
+    public static IStyle ControlPoint(bool staffed)
+    {
+        var color = staffed ? new Color(30, 90, 220) : new Color(130, 130, 140);
+        return new StyleCollection
+        {
+            Styles =
+            {
+                new SymbolStyle { SymbolType = SymbolType.Triangle, SymbolScale = 0.5, Fill = new Brush(color), Outline = new Pen(Color.White, 2) },
+                SmallLabel(color),
+            },
+        };
+    }
+
+    public static Color InfrastructureColor(InfrastructureStatus status) => status switch
+    {
+        InfrastructureStatus.Failed or InfrastructureStatus.Leaking => new Color(230, 30, 30),
+        InfrastructureStatus.Normal => new Color(40, 170, 90),
+        _ => new Color(255, 170, 0),
+    };
+
+    /// <summary>An infrastructure asset, coloured by its operator's last report.</summary>
+    public static IStyle InfrastructureAsset(InfrastructureStatus status)
+    {
+        var color = InfrastructureColor(status);
+        return new StyleCollection
+        {
+            Styles =
+            {
+                new SymbolStyle { SymbolType = SymbolType.Ellipse, SymbolScale = 0.45, Fill = new Brush(Color.White), Outline = new Pen(color, 4) },
+                SmallLabel(color),
+            },
+        };
+    }
+
+    /// <summary>The area a degraded asset serves: who is without water, gas, mobile service or trains.</summary>
+    public static IStyle ServiceArea(InfrastructureStatus status)
+    {
+        var color = InfrastructureColor(status);
+        return new VectorStyle
+        {
+            Fill = new Brush(Color.FromArgb(25, color.R, color.G, color.B)),
+            Outline = new Pen(Color.FromArgb(170, color.R, color.G, color.B), 2) { PenStyle = PenStyle.Dash },
+        };
+    }
+
+    /// <summary>GPS interference: orange where it is jammed, magenta where it is spoofed (worse: nothing looks wrong).</summary>
+    public static IStyle GnssArea(GnssInterferenceKind kind)
+    {
+        var color = kind == GnssInterferenceKind.Jamming ? new Color(255, 140, 0) : new Color(220, 40, 200);
+        return new StyleCollection
+        {
+            Styles =
+            {
+                new VectorStyle
+                {
+                    Fill = new Brush(Color.FromArgb(30, color.R, color.G, color.B)),
+                    Outline = new Pen(Color.FromArgb(200, color.R, color.G, color.B), 2) { PenStyle = PenStyle.DashDot },
+                },
+                new LabelStyle
+                {
+                    LabelColumn = LabelField, ForeColor = Color.White, BackColor = new Brush(Color.FromArgb(200, color.R / 2, color.G / 2, color.B / 2)),
+                    Font = new Font { Size = 10 }, CornerRounding = 3,
+                },
+            },
+        };
+    }
+
+    /// <summary>A monitoring team, coloured by its last reading (grey before the first).</summary>
+    public static IStyle Monitor(PollutionLevel? level)
+    {
+        var color = level switch
+        {
+            PollutionLevel.High => new Color(230, 30, 30),
+            PollutionLevel.Moderate => new Color(255, 140, 0),
+            PollutionLevel.Low => new Color(220, 200, 0),
+            PollutionLevel.Clear => new Color(40, 170, 90),
+            _ => new Color(130, 130, 140),
+        };
+        return new StyleCollection
+        {
+            Styles =
+            {
+                new SymbolStyle
+                {
+                    SymbolType = SymbolType.Rectangle, SymbolScale = 0.4, SymbolRotation = 45, Fill = new Brush(color), Outline = new Pen(Color.White, 2),
+                },
+                SmallLabel(color),
+            },
+        };
+    }
+
+    /// <summary>Harm to the environment someone has reported: a fish kill, dead birds.</summary>
+    public static IStyle EnvironmentalImpact { get; } = new StyleCollection
+    {
+        Styles =
+        {
+            new SymbolStyle
+            {
+                SymbolType = SymbolType.Triangle, SymbolScale = 0.55, SymbolRotation = 180,
+                Fill = new Brush(new Color(120, 60, 20)), Outline = new Pen(new Color(255, 200, 0), 3),
+            },
+            SmallLabel(new Color(120, 60, 20)),
+        },
+    };
+
     /// <summary>In-progress zone being drawn.</summary>
     public static IStyle DrawingPreview { get; } = new StyleCollection
     {

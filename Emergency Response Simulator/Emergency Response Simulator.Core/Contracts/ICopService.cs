@@ -117,6 +117,13 @@ public interface ICopService
     /// </summary>
     HealthSituation Health { get; }
 
+    /// <summary>
+    /// Population protection and critical systems (Phase 17): evacuation zones, routes, traffic control points and buses;
+    /// rest centres; infrastructure as the operators report it; GPS interference and cyber attacks; environmental monitoring
+    /// and impacts. A copy.
+    /// </summary>
+    ProtectionSituation Protection { get; }
+
     // Networked sessions (Phase 11)
 
     /// <summary>Everyone who has joined the session, present or not, in the order they joined.</summary>

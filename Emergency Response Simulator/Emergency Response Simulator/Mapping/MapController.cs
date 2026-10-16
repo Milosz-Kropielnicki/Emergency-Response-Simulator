@@ -57,6 +57,7 @@ public sealed class MapController
     private readonly MemoryLayer _weather = new("Wind");
     private readonly MemoryLayer _drawing = new("Drawing");
     private readonly MemoryLayer _hospitals = new("Hospitals");
+    private readonly MemoryLayer _protection = new("Population & infrastructure");
     private readonly MemoryLayer _traffic = new("Traffic");
     private readonly MemoryLayer _truth = new("Ground truth: hazards");
     private readonly MemoryLayer _people = new("Ground truth: people");
@@ -102,7 +103,7 @@ public sealed class MapController
 
         foreach (var layer in new[]
                  {
-                     _traffic, _jurisdictions, _plumes, _zones, _truth, _reports, _routes, _trails, _people, _incidents, _hospitals, _units, _trueUnits, _weather, _drawing,
+                     _traffic, _jurisdictions, _plumes, _zones, _protection, _truth, _reports, _routes, _trails, _people, _incidents, _hospitals, _units, _trueUnits, _weather, _drawing,
                  })
         {
             layer.Features = [];
@@ -372,7 +373,9 @@ public sealed class MapController
             ? _cop.PlumeProjections.Where(p => p.IsCurrent).SelectMany(PlumeFeatures).ToList()
             : [];
 
-        foreach (var layer in new[] { _jurisdictions, _plumes, _zones, _reports, _routes, _trails, _incidents, _hospitals, _units, _weather })
+        _protection.Features = ProtectionFeatures(_cop.Protection).ToList();
+
+        foreach (var layer in new[] { _jurisdictions, _plumes, _zones, _protection, _reports, _routes, _trails, _incidents, _hospitals, _units, _weather })
             layer.DataHasChanged();
         _map.RefreshGraphics();
     }
@@ -521,6 +524,134 @@ public sealed class MapController
             label: $"{hospital.Name.Replace(" Hospital", "").Replace(" University", "")} {hospital.Occupied}/{hospital.Capacity}");
         AddStyles(feature, MapStyles.HospitalStatus(hospital.OnDiversion, !hospital.OnDiversion && hospital.Load >= 0.9));
         return feature;
+    }
+
+    // ---- Population protection and critical systems (Phase 17) ----
+
+    private static GeometryFeature PointAt(GeoPoint point) => new(WebMercator.FromWgs84(point.ToPoint()));
+
+    private static GeometryFeature CircleAt(GeoPoint centre, double radiusMeters) =>
+        new(WebMercator.FromWgs84(Wgs84.CreatePolygon(Wgs84.Circle(centre, radiusMeters, 48))));
+
+    /// <summary>
+    /// What command knows of the population and critical systems, areas first so points draw on top: GPS interference,
+    /// the areas degraded infrastructure serves, evacuation routes, then traffic control points, rest centres, assets,
+    /// monitoring teams and reported environmental harm. Each behind its own toggle.
+    /// </summary>
+    private IEnumerable<IFeature> ProtectionFeatures(ProtectionSituation protection)
+    {
+        if (IsOn(MapLayerKeys.Gnss))
+            foreach (var gnss in protection.Gnss.Where(g => g.EndedAt is null))
+            {
+                var jammed = gnss.Kind == GnssInterferenceKind.Jamming;
+                var feature = Tag(CircleAt(gnss.Centre, gnss.RadiusMeters), jammed ? "GPS jamming" : "GPS spoofing",
+                    [
+                        jammed ? "No GPS fixes: units here show where they last were" : "False GPS fixes: units and callers here show in the wrong place",
+                        $"About {gnss.RadiusMeters:N0} m across · reported {MainViewModel.Time(gnss.ReportedAt)}",
+                        protection.ManualPositionReporting ? "Crews here give positions by voice" : "Crews are not giving positions by voice",
+                    ],
+                    label: jammed ? "GPS JAMMED" : "GPS SPOOFED");
+                AddStyles(feature, MapStyles.GnssArea(gnss.Kind));
+                yield return feature;
+            }
+
+        var infrastructure = IsOn(MapLayerKeys.Infrastructure);
+        if (infrastructure)
+            foreach (var asset in protection.Infrastructure.Where(a => a.Status != InfrastructureStatus.Normal && a.RadiusMeters > 0))
+            {
+                var area = Tag(CircleAt(asset.Location, asset.RadiusMeters), asset.Name, AssetLines(asset));
+                AddStyles(area, MapStyles.ServiceArea(asset.Status));
+                yield return area;
+            }
+
+        if (IsOn(MapLayerKeys.EvacuationRoutes))
+        {
+            foreach (var zone in protection.Evacuations.Where(z => z.Route.Count >= 2 && z.ReEntryAt is null && _cop.Zones.Any(c => c.Id == z.ZoneId)))
+            {
+                var line = Wgs84.Factory.CreateLineString([.. zone.Route.Select(p => p.ToPoint().Coordinate)]);
+                var shelter = zone.ShelterId is { } id ? protection.Shelters.FirstOrDefault(s => s.Id == id)?.Name : null;
+                var feature = Tag(new GeometryFeature(WebMercator.FromWgs84(line)), $"Evacuation route: {zone.Name}",
+                    [
+                        shelter is null ? "Evacuees make for the end of the route" : $"Ends at {shelter} rest centre",
+                        zone.ReportedAt is null ? "No progress report yet" : $"~{zone.Left} out, ~{zone.Remaining} still in",
+                        zone.BusesRequested == 0 ? "No buses" : $"{zone.BusesWorking} of {zone.BusesRequested} buses working",
+                    ],
+                    label: $"→ {shelter ?? "evacuation route"}");
+                AddStyles(feature, MapStyles.EvacuationRoute);
+                yield return feature;
+            }
+            foreach (var point in protection.ControlPoints)
+            {
+                var feature = Tag(PointAt(point.Location), point.Name,
+                    [
+                        "Traffic control point",
+                        point.StaffedAt is { } at ? $"Gardaí in place since {MainViewModel.Time(at)}" : $"Asked for {MainViewModel.Time(point.PlacedAt)}; gardaí on the way",
+                    ],
+                    label: point.Name);
+                AddStyles(feature, MapStyles.ControlPoint(point.StaffedAt is not null));
+                yield return feature;
+            }
+        }
+
+        if (IsOn(MapLayerKeys.Shelters))
+            foreach (var shelter in protection.Shelters)
+            {
+                var alarm = shelter.Short.Count > 0 || shelter.Occupants > shelter.Capacity || shelter.Incidents > 0;
+                var lines = new List<string>
+                {
+                    shelter.Ready ? $"Rest centre: {shelter.Occupants}/{shelter.Capacity}, {shelter.Registered} registered" : $"Setting up since {MainViewModel.Time(shelter.OpenedAt)}",
+                    shelter.Secured ? "Security on site" : shelter.SecurityArrangedAt is not null ? "Security on the way" : "No security",
+                };
+                if (shelter.Short.Count > 0) lines.Add("Run out of " + string.Join(", ", shelter.Short.Select(k => Supplies.Name(k).ToLowerInvariant())));
+                if (shelter.Incidents > 0) lines.Add($"{shelter.Incidents} incident(s) of trouble");
+                if (shelter.ReportedAt is { } reported) lines.Add($"As reported at {MainViewModel.Time(reported)}");
+                var feature = Tag(PointAt(shelter.Location), shelter.Name, [.. lines],
+                    label: shelter.Ready ? $"{shelter.Name} {shelter.Occupants}/{shelter.Capacity}" : $"{shelter.Name} (opening)");
+                AddStyles(feature, MapStyles.Shelter(shelter.Ready, alarm));
+                yield return feature;
+            }
+
+        if (infrastructure)
+            foreach (var asset in protection.Infrastructure)
+            {
+                var feature = Tag(PointAt(asset.Location), asset.Name, AssetLines(asset),
+                    label: $"{Protection.Name(asset.Kind)}: {Protection.Name(asset.Status)}");
+                AddStyles(feature, MapStyles.InfrastructureAsset(asset.Status));
+                yield return feature;
+            }
+
+        if (IsOn(MapLayerKeys.Environment))
+        {
+            foreach (var monitor in protection.Monitors)
+            {
+                var feature = Tag(PointAt(monitor.Location), $"{Protection.Name(monitor.Medium)} monitoring",
+                    [
+                        monitor.ReadingAt is { } at ? $"{Protection.Name(monitor.Level!.Value)} at {MainViewModel.Time(at)}" : $"Team on the way since {MainViewModel.Time(monitor.DeployedAt)}",
+                        monitor.Reading,
+                    ],
+                    label: monitor.Level is { } level ? $"{Protection.Name(monitor.Medium)}: {Protection.Name(level)}" : Protection.Name(monitor.Medium));
+                AddStyles(feature, MapStyles.Monitor(monitor.Level));
+                yield return feature;
+            }
+            foreach (var impact in protection.Impacts)
+            {
+                var feature = Tag(PointAt(impact.Location), impact.Medium == EnvironmentMedium.Water ? "Pollution in the water" : "Wildlife harmed",
+                    [impact.What, $"Reported {MainViewModel.Time(impact.ReportedAt)}"],
+                    label: impact.Medium == EnvironmentMedium.Water ? "FISH KILL" : "DEAD BIRDS");
+                AddStyles(feature, MapStyles.EnvironmentalImpact);
+                yield return feature;
+            }
+        }
+    }
+
+    private static string[] AssetLines(InfrastructureAsset asset)
+    {
+        var lines = new List<string> { $"{Protection.Name(asset.Kind)} ({Protection.Operator(asset.Kind)}): {Protection.Name(asset.Status)}", asset.Detail };
+        if (asset.Customers > 0) lines.Add($"About {asset.Customers:N0} customers without");
+        if (asset.GeneratorRequestedAt is { } generator) lines.Add($"Generator asked for {MainViewModel.Time(generator)}");
+        if (asset.IsolationRequestedAt is { } isolation) lines.Add($"Isolation asked for {MainViewModel.Time(isolation)}");
+        lines.Add($"As reported at {MainViewModel.Time(asset.ReportedAt)}");
+        return [.. lines];
     }
 
     // ---- Traffic and ground truth ----

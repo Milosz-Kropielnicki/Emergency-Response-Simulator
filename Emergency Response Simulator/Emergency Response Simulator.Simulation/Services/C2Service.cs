@@ -1144,6 +1144,216 @@ public sealed class C2Service(ICopService cop, IEventPublisher publisher, IPlume
         return result with { EntityId = deploymentId };
     }
 
+    // ---- Evacuation, shelter & infrastructure (Phase 17) ----
+
+    private Zone? EvacuationZone(Guid zoneId) => cop.Zones.FirstOrDefault(z => z.Id == zoneId && z.Type == ZoneType.EvacuationZone);
+
+    /// <summary>The hazard areas on the COP a route or a zone touches, by name.</summary>
+    private IReadOnlyList<string> HazardAreasCrossing(NetTopologySuite.Geometries.Geometry geometry) =>
+        cop.Zones.Where(z => z.Type is ZoneType.HotZone or ZoneType.FireExclusion or ZoneType.PlumeHigh or ZoneType.PlumeModerate && z.Area.Intersects(geometry))
+            .Select(z => z.Name).Distinct().ToList();
+
+    public async Task<CommandResult> SetEvacuationRouteAsync(Guid zoneId, IReadOnlyList<GeoPoint> route, Guid? shelterId = null, CancellationToken cancellationToken = default)
+    {
+        if (EvacuationZone(zoneId) is not { } zone)
+            return CommandResult.Fail("Unknown evacuation zone.");
+        Shelter? shelter = null;
+        if (shelterId is { } sid && (shelter = cop.Protection.Shelters.FirstOrDefault(s => s.Id == sid)) is null)
+            return CommandResult.Fail("Unknown rest centre.");
+        var points = route.ToList();
+        if (shelter is not null && (points.Count == 0 || GeoMath.DistanceMeters(points[^1], shelter.Location) > 30)) points.Add(shelter.Location);
+        if (points.Count < 2)
+            return CommandResult.Fail("A route needs at least two points: where it starts and where people make for.");
+        if (zone.Area.Contains(points[^1].ToPoint()))
+            return CommandResult.Fail("The route ends inside the zone: it must lead people out of it.");
+
+        var result = await PublishAsync(new EvacuationRouteSet(zoneId, points, shelterId), cancellationToken);
+        var crossing = HazardAreasCrossing(Wgs84.Factory.CreateLineString([.. points.Select(p => p.ToPoint().Coordinate)]));
+        return result with
+        {
+            Detail = crossing.Count > 0
+                ? $"Route set, but it crosses {string.Join(", ", crossing)}: evacuees will drive through the hazard"
+                : $"Route set for {zone.Name}" + (shelter is not null ? $": evacuees who need shelter go to {shelter.Name}" : ""),
+        };
+    }
+
+    public async Task<CommandResult> PlaceTrafficControlPointAsync(string name, GeoPoint location, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return CommandResult.Fail("Name the traffic control point (the junction).");
+        var points = cop.Protection.ControlPoints;
+        if (points.Count >= Protection.MaxTrafficControlPoints)
+            return CommandResult.Fail($"The Garda can staff {Protection.MaxTrafficControlPoints} traffic control points; all are placed.");
+        if (points.FirstOrDefault(p => GeoMath.DistanceMeters(p.Location, location) < 60) is { } near)
+            return CommandResult.Fail($"{near.Name} is already there.");
+        var pointId = Guid.NewGuid();
+        var result = await PublishAsync(new TrafficControlPointPlaced(pointId, name.Trim(), location), cancellationToken);
+        return result with { EntityId = pointId, Detail = $"Gardaí at {name.Trim()} in about {State.WorldProtection.ControlPointLeadTime.TotalMinutes:F0} min" };
+    }
+
+    public async Task<CommandResult> RequestEvacuationBusesAsync(Guid zoneId, int buses, CancellationToken cancellationToken = default)
+    {
+        if (EvacuationZone(zoneId) is not { } zone)
+            return CommandResult.Fail("Unknown evacuation zone.");
+        if (buses is < 1 or > 20)
+            return CommandResult.Fail("Ask for between 1 and 20 buses.");
+        var already = cop.Protection.Evacuation(zoneId)?.BusesRequested ?? 0;
+        if (already + buses > 20)
+            return CommandResult.Fail($"{already} buses are already coming for {zone.Name}; the bus companies can spare 20 for one zone.");
+        var requestId = Guid.NewGuid();
+        var result = await PublishAsync(new EvacuationBusesRequested(requestId, zoneId, buses), cancellationToken);
+        var evacuation = cop.Protection.Evacuation(zoneId);
+        return result with
+        {
+            EntityId = requestId,
+            Detail = $"{buses} bus(es) for {zone.Name} in about {Systems.EvacuationSystem.BusLeadTime.TotalMinutes:F0} min" +
+                     (evacuation is { Route.Count: 0 } ? "; with no route set they take people just outside the zone" : ""),
+        };
+    }
+
+    public async Task<CommandResult> AuthoriseReEntryAsync(Guid zoneId, CancellationToken cancellationToken = default)
+    {
+        if (EvacuationZone(zoneId) is not { } zone)
+            return CommandResult.Fail("Unknown evacuation zone.");
+        var warnings = new List<string>();
+        if (HazardAreasCrossing(zone.Area) is { Count: > 0 } live)
+            warnings.Add($"{string.Join(", ", live)} still declared there");
+        var protection = cop.Protection;
+        var readings = protection.Monitors.Where(m => m.Level is not null && zone.Area.Contains(m.Location.ToPoint())).ToList();
+        if (readings.FirstOrDefault(m => m.Level >= PollutionLevel.Moderate) is { } dirty)
+            warnings.Add($"the last {Protection.Name(dirty.Medium).ToLowerInvariant()} reading there was {Protection.Name(dirty.Level!.Value)}");
+        else if (readings.Count == 0)
+            warnings.Add("nobody has sampled the air or the ground there");
+
+        await PublishAsync(new ReEntryAuthorised(zoneId), cancellationToken);
+        var result = await PublishAsync(new ZoneLifted(zoneId), cancellationToken);
+        return result with
+        {
+            Detail = warnings.Count == 0 ? $"Residents of {zone.Name} may go home" : $"Residents of {zone.Name} may go home, though {string.Join("; ", warnings)}",
+        };
+    }
+
+    public async Task<CommandResult> OpenShelterAsync(string name, GeoPoint location, int capacity, Guid? incidentId = null, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return CommandResult.Fail("Name the rest centre (where it is: a school, a sports hall).");
+        if (capacity is < 20 or > 2000)
+            return CommandResult.Fail("A rest centre takes between 20 and 2,000 people.");
+        if (incidentId is { } id && cop.FindIncident(id) is null)
+            return CommandResult.Fail("Unknown incident.");
+        if (cop.Protection.Shelters.Count >= 6)
+            return CommandResult.Fail("Six rest centres are open: the council can't staff more.");
+        if (cop.Protection.Shelters.Any(s => string.Equals(s.Name, name.Trim(), StringComparison.OrdinalIgnoreCase)))
+            return CommandResult.Fail($"{name.Trim()} is already open.");
+        incidentId ??= cop.Incidents.Where(i => i.Status != IncidentStatus.Closed).OrderByDescending(i => i.Priority).Select(i => (Guid?)i.Id).FirstOrDefault();
+        if (cop.Zones.FirstOrDefault(z => z.Type is ZoneType.EvacuationZone or ZoneType.HotZone or ZoneType.PlumeHigh or ZoneType.PlumeModerate
+                                          && z.Area.Contains(location.ToPoint())) is { } inside)
+            return CommandResult.Fail($"That is inside {inside.Name}: put the rest centre somewhere safe.");
+
+        var shelterId = Guid.NewGuid();
+        var result = await PublishAsync(new ShelterOpened(shelterId, name.Trim(), location, capacity, incidentId), cancellationToken);
+        return result with
+        {
+            EntityId = shelterId,
+            Detail = $"{name.Trim()} opens in about {Protection.ShelterSetup.TotalMinutes:F0} min; it needs meals, water and bedding from the incident's stock",
+        };
+    }
+
+    public async Task<CommandResult> ArrangeShelterSecurityAsync(Guid shelterId, CancellationToken cancellationToken = default)
+    {
+        if (cop.Protection.Shelters.FirstOrDefault(s => s.Id == shelterId) is not { } shelter)
+            return CommandResult.Fail("Unknown rest centre.");
+        if (shelter.SecurityArrangedAt is not null)
+            return CommandResult.Fail($"Security is already arranged at {shelter.Name}.");
+        return await PublishAsync(new ShelterSecurityArranged(shelterId), cancellationToken);
+    }
+
+    public async Task<CommandResult> DeployGeneratorAsync(Guid siteId, CancellationToken cancellationToken = default)
+    {
+        if (cop.Protection.Infrastructure.FirstOrDefault(a => a.Id == siteId) is not { } asset)
+            return CommandResult.Fail("No operator has reported that asset.");
+        if (asset.Kind is not (InfrastructureKind.Water or InfrastructureKind.Telecom))
+            return CommandResult.Fail($"A mobile generator can run a pumping station or a mast, not {asset.Name}.");
+        if (asset.GeneratorRequestedAt is not null)
+            return CommandResult.Fail($"A generator is already on its way to {asset.Name}.");
+        var result = await PublishAsync(new GeneratorRequested(siteId), cancellationToken);
+        return result with { Detail = $"Generator for {asset.Name} in about {State.WorldProtection.GeneratorLeadTime.TotalMinutes:F0} min" };
+    }
+
+    public async Task<CommandResult> IsolateGasAsync(Guid siteId, CancellationToken cancellationToken = default)
+    {
+        if (cop.Protection.Infrastructure.FirstOrDefault(a => a.Id == siteId) is not { } asset)
+            return CommandResult.Fail("No operator has reported that asset.");
+        if (asset.Kind != InfrastructureKind.Gas)
+            return CommandResult.Fail($"{asset.Name} is not a gas main.");
+        if (asset.IsolationRequestedAt is not null || asset.Status == InfrastructureStatus.Isolated)
+            return CommandResult.Fail($"{asset.Name} is already being isolated.");
+        var result = await PublishAsync(new GasIsolationRequested(siteId), cancellationToken);
+        return result with
+        {
+            Detail = asset.Status == InfrastructureStatus.Leaking
+                ? $"Gas Networks Ireland isolating {asset.Name}: supply will be off to everyone it feeds"
+                : $"{asset.Name} isn't reported leaking: Gas Networks Ireland will isolate it anyway, and supply will be off to everyone it feeds",
+        };
+    }
+
+    public async Task<CommandResult> SetManualPositionReportingAsync(bool enabled, CancellationToken cancellationToken = default)
+    {
+        if (cop.Protection.ManualPositionReporting == enabled)
+            return CommandResult.Fail(enabled ? "Crews are already giving positions by voice." : "Crews aren't giving positions by voice.");
+        var result = await PublishAsync(new ManualPositionReportingSet(enabled), cancellationToken);
+        return enabled && !cop.Protection.Gnss.Any(g => g.EndedAt is null)
+            ? result with { Detail = "Set: it applies to crews in an area of GPS interference, and none is reported yet" }
+            : result;
+    }
+
+    public async Task<CommandResult> ActivateCyberFallbackAsync(Guid attackId, CancellationToken cancellationToken = default)
+    {
+        if (cop.Protection.Cyber.FirstOrDefault(c => c.Id == attackId) is not { } attack)
+            return CommandResult.Fail("Unknown cyber incident.");
+        if (attack.RestoredAt is not null)
+            return CommandResult.Fail($"{attack.System} is already restored.");
+        if (attack.FallbackAt is not null)
+            return CommandResult.Fail($"{attack.System} is already working manually.");
+        var result = await PublishAsync(new CyberFallbackActivated(attackId), cancellationToken);
+        var ncsc = cop.Notifications.Any(n => Systems.CyberSystem.IsCyberCentre(n.Recipient));
+        return result with
+        {
+            Detail = $"Manual working: {Protection.Fallback(attack.Target)}" +
+                     (ncsc ? "" : ". The National Cyber Security Centre hasn't been told: notify them to speed recovery"),
+        };
+    }
+
+    public async Task<CommandResult> DeployEnvironmentalMonitoringAsync(EnvironmentMedium medium, GeoPoint location, CancellationToken cancellationToken = default)
+    {
+        var monitors = cop.Protection.Monitors;
+        if (monitors.Count >= 8)
+            return CommandResult.Fail("Eight monitoring teams are out: the EPA and the council have no more.");
+        if (monitors.FirstOrDefault(m => m.Medium == medium && GeoMath.DistanceMeters(m.Location, location) < 100) is not null)
+            return CommandResult.Fail($"{Protection.Name(medium)} is already being sampled there.");
+        var monitorId = Guid.NewGuid();
+        var result = await PublishAsync(new EnvironmentalMonitoringDeployed(monitorId, medium, location), cancellationToken);
+        return result with
+        {
+            EntityId = monitorId,
+            Detail = $"{Protection.Name(medium)} team sampling in about {Systems.EnvironmentSystem.MonitorLeadTime.TotalMinutes:F0} min, reporting every {Systems.EnvironmentSystem.ReadingInterval.TotalMinutes:F0}",
+        };
+    }
+
+    public async Task<CommandResult> ContainRunoffAsync(Guid incidentId, CancellationToken cancellationToken = default)
+    {
+        if (cop.FindIncident(incidentId) is not { } incident)
+            return CommandResult.Fail("Unknown incident.");
+        if (cop.Protection.RunoffContained.ContainsKey(incidentId))
+            return CommandResult.Fail($"Run-off at {incident.Number} is already being contained.");
+        var result = await PublishAsync(new RunoffContainmentOrdered(incidentId), cancellationToken);
+        return result with
+        {
+            Detail = $"Drain covers, booms and bunding in place in about {State.WorldProtection.ContainmentLeadTime.TotalMinutes:F0} min" +
+                     (cop.Notifications.Any(n => Systems.EnvironmentSystem.IsEpa(n.Recipient)) ? "" : ". Pollution of water must also be reported to the EPA"),
+        };
+    }
+
     /// <summary>The new value if it differs from the current one, otherwise null (no change).</summary>
     private static T? Changed<T>(T? requested, T current) where T : struct =>
         requested is { } value && !EqualityComparer<T>.Default.Equals(value, current) ? value : null;

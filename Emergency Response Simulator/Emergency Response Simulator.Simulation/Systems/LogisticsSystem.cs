@@ -286,7 +286,7 @@ public sealed class LogisticsSystem : ISimulationSystem
                 pending.Supplier = order.Kind switch
                 {
                     SupplyKind.Fuel => "National Oil Reserves Agency",
-                    SupplyKind.Food or SupplyKind.Water or SupplyKind.Sanitation => "Civil Defence",
+                    SupplyKind.Food or SupplyKind.Water or SupplyKind.Sanitation or SupplyKind.Bedding => "Civil Defence",
                     _ => "Defence Forces logistics",
                 };
                 break;
@@ -420,6 +420,7 @@ public sealed class LogisticsSystem : ISimulationSystem
         SupplyKind.Batteries => "Flat handheld radios can't be swapped: crews will go quiet.",
         SupplyKind.Ppe => "No suits for entry: crews can't work properly in the hot zone.",
         SupplyKind.Prophylaxis => "The points of dispensing have nothing to give: people queue, and the window for protecting them closes.",
+        SupplyKind.Bedding => "Evacuees in the rest centres are sleeping on the floor: tempers fray, and the vulnerable suffer.",
         _ => "No toilets or hand-washing at the scene: crews tire faster, and they're complaining.",
     };
 

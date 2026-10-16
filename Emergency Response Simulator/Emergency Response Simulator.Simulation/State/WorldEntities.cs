@@ -209,6 +209,22 @@ public sealed class Civilian
     /// <summary>A pet owner who will go back past the cordon for the animal at this time.</summary>
     public DateTimeOffset? ReturnForPetAt { get; set; }
 
+    // ---- Phase 17: evacuation and shelter ----
+
+    /// <summary>The evacuation zone they were in when it was ordered and have since left.</summary>
+    public Guid? EvacuatedFrom { get; set; }
+
+    /// <summary>Whether, once out, they need a rest centre (decided once: most go to family or friends).</summary>
+    public bool? NeedsShelter { get; set; }
+
+    /// <summary>The rest centre they are going to or staying in, and when they get there.</summary>
+    public Guid? ShelterId { get; set; }
+
+    public DateTimeOffset? ShelterArrivalAt { get; set; }
+
+    /// <summary>When they go home after the zone is lifted.</summary>
+    public DateTimeOffset? ReturnAt { get; set; }
+
     /// <summary>Who they are in one phrase, for a casualty and the review: "an elderly resident"…</summary>
     public string? Who => Is(Vulnerability.MobilityImpaired) ? "a resident who could not leave unaided"
         : Is(Vulnerability.Elderly) ? "an elderly resident"

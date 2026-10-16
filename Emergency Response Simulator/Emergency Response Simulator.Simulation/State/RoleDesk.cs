@@ -216,6 +216,75 @@ public static class RoleDesk
                 items.Add(new(Function<IC2Service>(nameof(IC2Service.DeployCrisisCounsellingAsync)),
                     $"About {distressed} people in distress{Incident(incidentId)}: send crisis counselling", now, DeskUrgency.Routine, incidentId));
 
+        // ---- Phase 17: evacuation, shelter, infrastructure, cyber and the environment ----
+        var protection = cop.Protection;
+        foreach (var zone in protection.Evacuations.Where(z => z.ReEntryAt is null && cop.Zones.Any(c => c.Id == z.ZoneId)))
+        {
+            if (zone.Route.Count == 0 && Can<IC2Service>(nameof(IC2Service.SetEvacuationRouteAsync)))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.SetEvacuationRouteAsync)),
+                    $"{zone.Name}: no evacuation route — people go straight out, whatever lies that way", zone.OrderedAt,
+                    After(zone.OrderedAt, TimeSpan.FromMinutes(5)), zone.IncidentId, zone.ZoneId));
+            if (zone is { BusesRequested: 0, Remaining: >= 30 } && zone.ClearanceMinutes is null or > 60 && Can<IC2Service>(nameof(IC2Service.RequestEvacuationBusesAsync)))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.RequestEvacuationBusesAsync)),
+                    $"{zone.Name}: ~{zone.Remaining} still in" + (zone.ClearanceMinutes is { } c ? $", clear in {Protection.Clearance(c)}" : ", hardly moving") +
+                    " — buses would carry those on foot", zone.ReportedAt ?? zone.OrderedAt, DeskUrgency.Routine, zone.IncidentId, zone.ZoneId));
+        }
+
+        if (Can<IC2Service>(nameof(IC2Service.OpenShelterAsync)))
+            foreach (var (incidentId, people) in protection.Unsheltered.Where(u => u.Value > 0))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.OpenShelterAsync)),
+                    $"About {people} evacuees with nowhere to go{Incident(incidentId)}: " + (protection.Shelters.Count == 0 ? "open a rest centre" : "the rest centres are full — open another"),
+                    now, protection.Shelters.Count == 0 ? DeskUrgency.Urgent : DeskUrgency.Overdue, incidentId));
+        foreach (var shelter in protection.Shelters)
+        {
+            if (shelter.Short.Count > 0 && shelter.IncidentId is { } supplied && Can<IC2Service>(nameof(IC2Service.OrderSuppliesAsync)))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.OrderSuppliesAsync)),
+                    $"{shelter.Name} has run out of {string.Join(" and ", shelter.Short.Select(k => Supplies.Name(k).ToLowerInvariant()))}: order more for the incident",
+                    shelter.ReportedAt ?? now, DeskUrgency.Urgent, supplied, shelter.Id));
+            if (shelter is { Occupants: >= 40, SecurityArrangedAt: null } && Can<IC2Service>(nameof(IC2Service.ArrangeShelterSecurityAsync)))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.ArrangeShelterSecurityAsync)),
+                    $"{shelter.Name}: {shelter.Occupants} people and no security" + (shelter.Incidents > 0 ? $" ({shelter.Incidents} incident(s) already)" : ""),
+                    shelter.ReportedAt ?? now, shelter.Incidents > 0 ? DeskUrgency.Overdue : DeskUrgency.Routine, shelter.IncidentId, shelter.Id));
+        }
+
+        foreach (var asset in protection.Infrastructure)
+        {
+            if (asset is { Kind: InfrastructureKind.Water or InfrastructureKind.Telecom, Status: InfrastructureStatus.OnBackup or InfrastructureStatus.Failed, GeneratorRequestedAt: null }
+                && !asset.Detail.Contains("damaged", StringComparison.OrdinalIgnoreCase) && !asset.Detail.Contains("out of action", StringComparison.OrdinalIgnoreCase)
+                && Can<IC2Service>(nameof(IC2Service.DeployGeneratorAsync)))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.DeployGeneratorAsync)),
+                    $"{asset.Name} {Protection.Name(asset.Status)}: {asset.Detail} — send a generator", asset.ReportedAt,
+                    asset.Status == InfrastructureStatus.Failed ? DeskUrgency.Urgent : DeskUrgency.Overdue, EntityId: asset.Id));
+            if (asset is { Kind: InfrastructureKind.Gas, Status: InfrastructureStatus.Leaking, IsolationRequestedAt: null } && Can<IC2Service>(nameof(IC2Service.IsolateGasAsync)))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.IsolateGasAsync)), $"Gas escaping at {asset.Name}: have it isolated before it finds a spark",
+                    asset.ReportedAt, DeskUrgency.Urgent, EntityId: asset.Id));
+        }
+
+        if (!protection.ManualPositionReporting && protection.Gnss.FirstOrDefault(g => g.EndedAt is null) is { } gnss
+            && Can<IC2Service>(nameof(IC2Service.SetManualPositionReportingAsync)))
+            items.Add(new(Function<IC2Service>(nameof(IC2Service.SetManualPositionReportingAsync)),
+                $"GPS {(gnss.Kind == GnssInterferenceKind.Jamming ? "jamming" : "spoofing")} reported: AVL can't be trusted there — have crews give positions by voice",
+                gnss.ReportedAt, DeskUrgency.Urgent, EntityId: gnss.Id));
+        foreach (var attack in protection.Cyber.Where(c => c is { RestoredAt: null, FallbackAt: null }))
+            if (Can<IC2Service>(nameof(IC2Service.ActivateCyberFallbackAsync)))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.ActivateCyberFallbackAsync)),
+                    $"Ransomware: {attack.System} — order manual working ({Protection.Fallback(attack.Target)})", attack.ReportedAt, DeskUrgency.Urgent, EntityId: attack.Id));
+        if (Can<IC2Service>(nameof(IC2Service.IssuePublicStatementAsync)))
+            foreach (var attack in protection.Cyber.Where(c => c.Impact.Contains("boil water", StringComparison.OrdinalIgnoreCase)
+                                                               && !cop.PublicStatements.Any(s => s.Text.Contains("boil", StringComparison.OrdinalIgnoreCase))))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.IssuePublicStatementAsync)),
+                    "Uisce Éireann advise a boil water notice: tell the public to boil their water", attack.ReportedAt, DeskUrgency.Urgent, EntityId: attack.Id));
+
+        foreach (var impact in protection.Impacts.Where(i => i.Medium == EnvironmentMedium.Water))
+        {
+            if (impact.IncidentId is { } polluted && !protection.RunoffContained.ContainsKey(polluted) && Can<IC2Service>(nameof(IC2Service.ContainRunoffAsync)))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.ContainRunoffAsync)), $"{impact.What}: contain the run-off{Incident(polluted)}",
+                    impact.ReportedAt, DeskUrgency.Urgent, polluted, impact.Id));
+            if (!cop.Notifications.Any(n => Systems.EnvironmentSystem.IsEpa(n.Recipient)) && Can<IC2Service>(nameof(IC2Service.NotifyAsync)))
+                items.Add(new(Function<IC2Service>(nameof(IC2Service.NotifyAsync)), "Pollution has reached water: notify the EPA (a legal duty)",
+                    impact.ReportedAt, After(impact.ReportedAt, TimeSpan.FromMinutes(10)), impact.IncidentId, impact.Id));
+        }
+
         if (Can<IC2Service>(nameof(IC2Service.AnswerPoliticalCallAsync)))
             foreach (var call in cop.PoliticalCalls.Where(c => c.Waiting))
                 items.Add(new(Function<IC2Service>(nameof(IC2Service.AnswerPoliticalCallAsync)), $"Call back {call.Caller} (for the {call.To})",

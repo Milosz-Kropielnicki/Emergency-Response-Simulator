@@ -113,6 +113,8 @@ public sealed class CopView : ICopService
     public LogisticsSituation Logistics => _current.Logistics;
 
     public HealthSituation Health => _current.Health;
+
+    public ProtectionSituation Protection => _current.Protection;
     public IReadOnlyList<Participant> Participants => _current.Participants;
     public Incident? FindIncident(Guid incidentId) => _current.FindIncident(incidentId);
     public Unit? FindUnit(Guid unitId) => _current.FindUnit(unitId);

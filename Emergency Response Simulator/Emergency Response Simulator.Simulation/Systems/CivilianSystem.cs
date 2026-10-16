@@ -376,6 +376,9 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
     private static GeoPoint EscapePoint(WorldState world, GeoPoint from, List<(WorldHazard Hazard, HazardExposure Exposure)> exposures,
         ProtectiveAction? order)
     {
+        // Phase 17: told which way to go, they go that way.
+        if (order is not null && world.Protection.Evacuations.TryGetValue(order.ZoneId, out var evacuation) && evacuation.Destination is { } destination)
+            return destination;
         if (order is not null)
         {
             var centre = GeoPoint.FromPoint(order.Area.Centroid);
@@ -720,6 +723,18 @@ public sealed class CivilianSystem(IHazardTerrain? terrain = null, CivilianOptio
         // A caller's location: a phone fix or a guess, 30–250 m out.
         var error = 30 + random.NextDouble() * 220;
         var reported = GeoMath.Destination(person.Location, random.NextDouble() * 360, error);
+        // Phase 17: the phone's own location comes from GPS. Jammed, the network's cell estimate is all there is; spoofed, it is
+        // confidently wrong.
+        switch (context.World.Protection.GnssAt(person.Location))
+        {
+            case { Kind: GnssInterferenceKind.Jamming }:
+                error += 400;
+                reported = GeoMath.Destination(person.Location, random.NextDouble() * 360, error);
+                break;
+            case { Kind: GnssInterferenceKind.Spoofing } spoofed:
+                reported = GeoMath.Destination(reported, spoofed.BearingDegrees, spoofed.OffsetMeters);
+                break;
+        }
         CommsNet.EmergencyCall(context, new PendingCall
         {
             Caller = "999 caller (mobile)", Summary = summary, Location = reported, AccuracyMeters = Math.Round(error * 1.3 / 10) * 10,

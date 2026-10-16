@@ -3,6 +3,7 @@ using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
 using Emergency_Response_Simulator.Simulation.Engine;
+using Emergency_Response_Simulator.Simulation.Hazards;
 using Emergency_Response_Simulator.Simulation.Routing;
 using Emergency_Response_Simulator.Simulation.State;
 using NetTopologySuite.Geometries;
@@ -34,6 +35,14 @@ public sealed class TrafficSystem(RoutingService routing, LiveTraffic live, Traf
     public const double DirectedFactor = 0.8;
 
     public const double TrafficControlRadiusMeters = 150;
+
+    /// <summary>Phase 17: junction flow while ransomware has the signal control system, and once on local fixed-time plans.</summary>
+    public const double CyberSignalFactor = 0.6;
+    public const double CyberFallbackFactor = 0.85;
+    public const double CyberSignalRadiusMeters = 1500;
+
+    /// <summary>Phase 17: a staffed traffic control point lets this much more traffic through the streets round it.</summary>
+    public const double ControlPointCapacity = 1.6;
 
     /// <summary>Speed of evacuees when there is no road network to drive on.</summary>
     private const double OffNetworkCarKph = 20;
@@ -69,7 +78,7 @@ public sealed class TrafficSystem(RoutingService routing, LiveTraffic live, Traf
 
         Spillback(context, network, Apply);
         var darkFactors = DarkSignals(context, network, Apply);
-        Density(world, network, Apply);
+        Density(world, network, Apply, StaffedControlPoints(context).ToList());
 
         foreach (var edge in factors.Keys.ToList())
             factors[edge] = Math.Max(0.05, factors[edge]);
@@ -152,34 +161,45 @@ public sealed class TrafficSystem(RoutingService routing, LiveTraffic live, Traf
             .Where(u => u.Type is UnitType.Patrol or UnitType.Traffic or UnitType.Motorcycle or UnitType.Supervisor
                         && u.Phase is ResponsePhase.OnScene or ResponsePhase.Operating && !u.BrokenDown)
             .Select(u => u.Location)
+            .Concat(StaffedControlPoints(context)) // Phase 17: gardaí at a traffic control point
             .ToList();
 
-        foreach (var outage in world.Outages.Values)
+        // Where signals are out: power cuts, and (Phase 17) the area round each incident while ransomware has the signal
+        // control system, frozen or cycling wrongly, less badly once switched to the local fixed-time plans.
+        var areas = world.Outages.Values.Select(o => (Key: o.Id, o.Centre, Radius: o.RadiusMeters, Factor: DarkSignalFactor,
+            Cause: "Traffic signals dark (power outage)", Announce: $"Power outage: {o.Cause}")).ToList();
+        if (world.Protection.ActiveAttack(CyberTarget.TrafficSignals) is { } attack)
+            areas.AddRange(world.Incidents.Values.Where(i => !i.Extinguished).Select(i => (Key: SimRandom.Derive(attack.Started.AttackId, i.Id.GetHashCode()), i.Location,
+                Radius: CyberSignalRadiusMeters, Factor: attack.FallbackAt is null ? CyberSignalFactor : CyberFallbackFactor,
+                Cause: "Traffic signals frozen (ransomware)", Announce: "Ransomware: traffic signal control lost")));
+
+        foreach (var area in areas)
         {
-            var junctions = network.EdgesNear(outage.Centre, outage.RadiusMeters)
+            var junctions = network.EdgesNear(area.Centre, area.Radius)
                 .Select(e => e.To)
                 .Distinct()
-                .Where(node => outage.Covers(network.NodeLocation(node))
+                .Where(node => GeoMath.DistanceMeters(area.Centre, network.NodeLocation(node)) <= area.Radius
                                && network.IncomingEdges(node).Count(e => IsMainRoad(network.Edge(e).Class)) >= 3)
                 .ToList();
 
             foreach (var node in junctions)
             {
                 var directed = police.Any(p => GeoMath.DistanceMeters(p, network.NodeLocation(node)) <= TrafficControlRadiusMeters);
-                var factor = directed ? DirectedFactor : DarkSignalFactor;
+                var factor = directed ? Math.Max(DirectedFactor, area.Factor) : area.Factor;
                 foreach (var edgeId in network.IncomingEdges(node))
                 {
-                    dark[edgeId] = factor;
-                    apply(edgeId, factor, "Traffic signals dark (power outage)");
+                    dark[edgeId] = Math.Min(factor, dark.GetValueOrDefault(edgeId, 1));
+                    apply(edgeId, factor, area.Cause);
                 }
             }
 
-            if (_announcedOutages.Add(outage.Id) && junctions.Count > 0)
+            if (_announcedOutages.Add(area.Key) && junctions.Count > 0)
             {
                 var roads = junctions.SelectMany(n => network.IncomingEdges(n)).Select(e => network.Edge(e).Name)
                     .OfType<string>().Distinct().Take(3).ToList();
-                context.EmitTruth(new CascadeOccurred($"Power outage: {outage.Cause}",
-                    $"Traffic signals dark at {junctions.Count} junction(s)" + (roads.Count > 0 ? $" ({string.Join(", ", roads)})" : "")));
+                context.EmitTruth(new CascadeOccurred(area.Announce,
+                    $"Traffic signals {(area.Factor == DarkSignalFactor ? "dark" : "out of control")} at {junctions.Count} junction(s)" +
+                    (roads.Count > 0 ? $" ({string.Join(", ", roads)})" : "")));
             }
         }
         return dark;
@@ -194,8 +214,14 @@ public sealed class TrafficSystem(RoutingService routing, LiveTraffic live, Traf
         _ => 1,
     };
 
-    /// <summary>Greenshields: speed falls in proportion to how full the road is (a car per 7 m of lane is jammed).</summary>
-    private static void Density(WorldState world, RoadNetwork network, Action<int, double, string> apply)
+    private static IEnumerable<GeoPoint> StaffedControlPoints(SimulationContext context) =>
+        context.World.Protection.ControlPoints.Values.Where(p => p.Staffed(context.SimTime)).Select(p => p.Location);
+
+    /// <summary>
+    /// Greenshields: speed falls in proportion to how full the road is (a car per 7 m of lane is jammed). Gardaí at a
+    /// traffic control point (Phase 17) keep the junction clear and the lanes used, so streets near one hold more.
+    /// </summary>
+    private static void Density(WorldState world, RoadNetwork network, Action<int, double, string> apply, IReadOnlyList<GeoPoint> controlPoints)
     {
         var counts = new Dictionary<int, int>();
         foreach (var car in world.Vehicles.Values)
@@ -209,6 +235,8 @@ public sealed class TrafficSystem(RoutingService routing, LiveTraffic live, Traf
         {
             var edge = network.Edge(edgeId);
             var capacity = Math.Max(1, edge.LengthMeters * Lanes(edge.Class) / 7);
+            if (controlPoints.Any(p => GeoMath.DistanceMeters(p, network.NodeLocation(edge.To)) <= TrafficControlRadiusMeters * 1.5))
+                capacity *= ControlPointCapacity;
             apply(edgeId, Math.Max(0.08, 1 - cars / capacity), "Evacuation traffic");
         }
     }

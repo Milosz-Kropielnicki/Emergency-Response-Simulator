@@ -119,6 +119,9 @@ public sealed class WorldState
     /// <summary>Patients, specialist beds, blood, the dead, public health and behavioural health (Phase 16).</summary>
     public WorldHealth Health { get; } = new();
 
+    /// <summary>Evacuation, rest centres, infrastructure, GPS and cyber, and pollution (Phase 17).</summary>
+    public WorldProtection Protection { get; } = new();
+
     /// <summary>
     /// Roles people play instead of the simulation, by role key (Phase 11 M4–M5): the instructor (null) or a participant
     /// (their id, for an agency they run). The systems that play those roles leave their decisions to them.
@@ -176,6 +179,7 @@ public sealed class WorldState
             callId => PoliticalCalls.TryGetValue(callId, out var call) && call.Call.Office == PoliticalOffice.CommunityLeader ? call.Call.ZoneId : null);
         Logistics.Apply(simEvent.Payload, simEvent.SimTime);
         Health.Apply(simEvent.Payload, simEvent.SimTime);
+        Protection.Apply(simEvent.Payload, simEvent.SimTime);
 
         switch (simEvent.Payload)
         {

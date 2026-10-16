@@ -33,6 +33,9 @@ public enum SupplyKind
 
     /// <summary>Antibiotics, iodine tablets or vaccine for mass prophylaxis (Phase 16), dispensed at points of dispensing. Doses.</summary>
     Prophylaxis,
+
+    /// <summary>Camp beds and blankets for evacuees in rest centres (Phase 17): one set per person staying. Sets.</summary>
+    Bedding,
 }
 
 /// <summary>
@@ -131,7 +134,7 @@ public static class Supplies
         SupplyKind.Prophylaxis => "doses",
         SupplyKind.MedicalSupplies => "kits",
         SupplyKind.Batteries => "packs",
-        SupplyKind.Ppe => "sets",
+        SupplyKind.Ppe or SupplyKind.Bedding => "sets",
         _ => "units",
     };
 
@@ -147,6 +150,7 @@ public static class Supplies
         SupplyKind.Fuel => 1.75m,
         SupplyKind.Food => 12m,
         SupplyKind.Prophylaxis => 4m,
+        SupplyKind.Bedding => 45m,
         SupplyKind.Water => 0.60m,
         SupplyKind.Foam => 6m,
         SupplyKind.MedicalSupplies => 85m,
@@ -161,6 +165,7 @@ public static class Supplies
         SupplyKind.Fuel => 2000,
         SupplyKind.Food => 60,
         SupplyKind.Prophylaxis => 2000,
+        SupplyKind.Bedding => 100,
         SupplyKind.Water => 200,
         SupplyKind.Foam => 1000,
         SupplyKind.MedicalSupplies => 20,

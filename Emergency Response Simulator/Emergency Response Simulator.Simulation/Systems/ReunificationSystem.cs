@@ -101,7 +101,10 @@ public sealed class ReunificationSystem(IRoutingService? routing = null) : ISimu
             {
                 var start = receivedAt > centre.OpenedAt ? receivedAt : centre.OpenedAt;
                 var jitter = SimRandom.For(enquiryId).NextDouble() * 0.6 + 0.7;
-                _traceAt[enquiryId] = due = start + TraceTime * jitter / speed;
+                // Registered at a rest centre (Phase 17): found on the list straight away.
+                var registered = world.Civilians.FirstOrDefault(p => p.Id == subject) is { } listed
+                                 && world.Protection.ShelterOf(listed) is { } shelter && shelter.Registered.Contains(listed.Id);
+                _traceAt[enquiryId] = due = start + TraceTime * jitter / speed / (registered ? 3 : 1);
             }
             if (context.SimTime < due) continue;
 
@@ -140,6 +143,8 @@ public sealed class ReunificationSystem(IRoutingService? routing = null) : ISimu
                 _ => (TraceOutcome.InHospital, "injured, being treated by ambulance crews at the scene"),
             };
         }
+        if (world.Protection.ShelterOf(person) is { } shelter && shelter.Registered.Contains(person.Id))
+            return (TraceOutcome.Safe, $"evacuated, registered at {shelter.Opened.Name} rest centre");
         if (person.State is CivilianState.Safe or CivilianState.Evacuating || person.VehicleId is not null)
             return (TraceOutcome.Safe, "evacuated and registered as safe");
 

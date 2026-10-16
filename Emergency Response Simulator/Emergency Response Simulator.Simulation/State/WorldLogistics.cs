@@ -301,13 +301,25 @@ public static class SupplyFactors
     /// <summary>How much fire a crew knocks down: water alone won't hold a fuel or chemical fire, and without suits nobody goes in.</summary>
     public static double Suppression(WorldState world, WorldUnit unit)
     {
+        var factor = WaterPressure(world, unit);
         var logistics = world.Logistics;
-        if (!logistics.Active || unit.OrderedIncidentId is not { } incident) return 1;
+        if (!logistics.Active || unit.OrderedIncidentId is not { } incident) return factor;
         var type = logistics.IncidentTypes.GetValueOrDefault(incident, IncidentType.Other);
-        var factor = 1.0;
         if (NeedsFoam(type) && logistics.Short(incident, SupplyKind.Foam)) factor *= 0.35;
         if (type == IncidentType.HazmatRelease && logistics.Short(incident, SupplyKind.Ppe)) factor *= 0.5;
         return factor;
+    }
+
+    /// <summary>
+    /// Hydrants with no mains pressure (Phase 17: a pumping station down) give an engine half its water, unless a tanker or
+    /// water tender of ours is relaying water at the same incident.
+    /// </summary>
+    public static double WaterPressure(WorldState world, WorldUnit unit)
+    {
+        if (unit.Type is not (UnitType.Engine or UnitType.Ladder) || !world.Protection.LowWaterPressure(unit.Location)) return 1;
+        var relay = world.Units.Values.Any(u => u.Type is UnitType.Tanker or UnitType.WaterTender && u.Phase == ResponsePhase.Operating
+                                                && u.OrderedIncidentId == unit.OrderedIncidentId);
+        return relay ? 0.9 : 0.5;
     }
 
     /// <summary>How much faster crews tire: thirsty, hungry, nowhere to wash.</summary>

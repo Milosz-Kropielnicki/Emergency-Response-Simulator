@@ -27,6 +27,13 @@ public static class MapLayerKeys
     // Plume & hazard models (Phase 13): command's projections, predictions rather than declared zones.
     public const string PlumeProjections = "zones:plume";
 
+    // Population protection and critical systems (Phase 17), as command knows them.
+    public const string Shelters = "protect:shelters";
+    public const string EvacuationRoutes = "protect:routes";
+    public const string Infrastructure = "protect:infrastructure";
+    public const string Gnss = "protect:gnss";
+    public const string Environment = "protect:environment";
+
     // Instructor only: ground truth the trainee never sees (Design Document §10.1, §21).
     public const string TruthHazards = "truth:hazards";
     public const string TruthPeople = "truth:people";

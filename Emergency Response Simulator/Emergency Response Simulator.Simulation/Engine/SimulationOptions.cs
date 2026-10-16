@@ -91,4 +91,11 @@ public sealed class SimulationOptions
     /// nearest hospital as before and nothing more.
     /// </summary>
     public bool Health { get; set; } = true;
+
+    /// <summary>
+    /// Population protection and critical systems (Phase 17): evacuation modelling (routes, traffic control points, buses,
+    /// re-entry), rest centres, infrastructure interdependencies, GPS and cyber degradation, and environmental impact. Off,
+    /// evacuees just walk or drive out and nothing more is modelled.
+    /// </summary>
+    public bool Protection { get; set; } = true;
 }

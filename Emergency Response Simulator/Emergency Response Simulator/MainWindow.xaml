@@ -1733,7 +1733,7 @@
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
-                    <!-- Health and medical surge (Phase 16). Last, so tab indices match WorkspacePanel. -->
+                    <!-- Health and medical surge (Phase 16). -->
                     <TabItem DataContext="{Binding Health}" Visibility="{Binding DataContext.ShowHealth, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
                         <TabItem.Header>
                             <TextBlock Text="{Binding TabHeader}" />
@@ -1907,6 +1907,194 @@
                                                 <Run Text="{Binding Where, Mode=OneWay}" FontWeight="SemiBold" />
                                                 <Run Text="{Binding Status, Mode=OneWay}" />
                                             </TextBlock>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+                    <!-- Evacuation, shelter & infrastructure (Phase 17). Last, so tab indices match WorkspacePanel. -->
+                    <TabItem DataContext="{Binding Protection}" Visibility="{Binding DataContext.ShowProtection, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
+                        <TabItem.Header>
+                            <TextBlock Text="{Binding TabHeader}" />
+                        </TabItem.Header>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="2">
+                                <!-- Evacuation -->
+                                <TextBlock Style="{StaticResource PanelHeader}">
+                                    <Run Text="EVACUATION ·" />
+                                    <Run Text="{Binding IncidentLabel, Mode=OneWay}" />
+                                </TextBlock>
+                                <TextBlock Text="{Binding EvacuationSummary}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,0,0,2" />
+                                <DockPanel Margin="0,0,0,2">
+                                    <TextBox DockPanel.Dock="Right" Text="{Binding BusCount, UpdateSourceTrigger=PropertyChanged}" Width="35" ToolTip="Buses per request" />
+                                    <TextBlock Text="Buses per request:" FontSize="11" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+                                </DockPanel>
+                                <ItemsControl ItemsSource="{Binding Evacuations}" Margin="0,0,0,10">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:EvacuationRow}">
+                                            <Border x:Name="Row" BorderBrush="{StaticResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,2" Margin="0,0,0,2">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding Progress}" FontSize="11" TextWrapping="Wrap" />
+                                                    <TextBlock FontSize="10" Foreground="{StaticResource MutedTextBrush}">
+                                                        <Run Text="{Binding Route, Mode=OneWay}" />
+                                                        <Run Text="·" />
+                                                        <Run Text="{Binding Buses, Mode=OneWay}" />
+                                                    </TextBlock>
+                                                    <WrapPanel Margin="0,2,0,0">
+                                                        <Button Content="Route" Padding="5,0" FontSize="11" CommandParameter="{Binding ZoneId}"
+                                                                Command="{Binding DataContext.SetRouteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                ToolTip="Route evacuees out the upwind side, to the newest rest centre if one is open" />
+                                                        <Button Content="Buses" Padding="5,0" FontSize="11" Margin="4,0,0,0" CommandParameter="{Binding ZoneId}"
+                                                                Command="{Binding DataContext.RequestBusesCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                ToolTip="Buses for people leaving on foot (about 25 minutes)" />
+                                                        <Button Content="Traffic point" Padding="5,0" FontSize="11" Margin="4,0,0,0" CommandParameter="{Binding ZoneId}"
+                                                                Command="{Binding DataContext.PlaceControlPointCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                ToolTip="Gardaí at the junction where the route leaves the zone, keeping evacuation traffic moving" />
+                                                        <Button Content="Re-entry" Padding="5,0" FontSize="11" Margin="4,0,0,0" CommandParameter="{Binding ZoneId}"
+                                                                Command="{Binding DataContext.ReEnterCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                ToolTip="Let the residents go home and lift the zone: check the hazard has gone and the ground is clean first" />
+                                                    </WrapPanel>
+                                                </StackPanel>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Alarm}" Value="True">
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Rest centres -->
+                                <TextBlock Text="REST CENTRES" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Text="{Binding ShelterSummary}" TextWrapping="Wrap" Margin="0,0,0,2" />
+                                <DockPanel Margin="0,0,0,2">
+                                    <Button DockPanel.Dock="Right" Content="Open" Command="{Binding OpenShelterCommand}" Padding="8,0" Margin="4,0,0,0"
+                                            ToolTip="A kilometre and a half upwind of the selected incident; ready in 30 minutes; meals, water and bedding come from the incident's stock" />
+                                    <TextBox DockPanel.Dock="Right" Text="{Binding ShelterCapacity, UpdateSourceTrigger=PropertyChanged}" Width="40" Margin="4,0,0,0" ToolTip="Capacity" />
+                                    <TextBox Text="{Binding ShelterName, UpdateSourceTrigger=PropertyChanged}" ToolTip="Name of the rest centre (a school, a sports hall)" />
+                                </DockPanel>
+                                <ItemsControl ItemsSource="{Binding Shelters}" Margin="0,0,0,10">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:ShelterRow}">
+                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,2">
+                                                <DockPanel>
+                                                    <Button DockPanel.Dock="Right" Content="Security" Padding="5,0" FontSize="11" VerticalAlignment="Center" CommandParameter="{Binding ShelterId}"
+                                                            Visibility="{Binding CanSecure, Converter={StaticResource BoolToVisibility}}"
+                                                            Command="{Binding DataContext.SecureCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            ToolTip="Gardaí or a contracted firm, there in 20 minutes" />
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                                        <TextBlock Text="{Binding Status}" FontSize="11" />
+                                                        <TextBlock x:Name="Detail" Text="{Binding Detail}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                </DockPanel>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Alarm}" Value="True">
+                                                    <Setter TargetName="Detail" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Infrastructure -->
+                                <TextBlock Text="CRITICAL INFRASTRUCTURE" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Style="{StaticResource EmptyHint}" FontSize="11" Margin="0,0,0,2"
+                                           Text="Operators report what has gone wrong: power, water, gas, masts, rail. Notify them early; generators keep pumps and masts going." />
+                                <ItemsControl ItemsSource="{Binding Assets}" Margin="0,0,0,10">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:AssetRow}">
+                                            <Border x:Name="Row" BorderBrush="{StaticResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,2" Margin="0,0,0,2">
+                                                <DockPanel>
+                                                    <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                                                        <Button Content="Generator" Padding="5,0" FontSize="11" CommandParameter="{Binding SiteId}"
+                                                                Visibility="{Binding CanGenerate, Converter={StaticResource BoolToVisibility}}"
+                                                                Command="{Binding DataContext.GeneratorCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                ToolTip="A mobile generator, connected in about 40 minutes" />
+                                                        <Button Content="Isolate" Padding="5,0" FontSize="11" CommandParameter="{Binding SiteId}"
+                                                                Visibility="{Binding CanIsolate, Converter={StaticResource BoolToVisibility}}"
+                                                                Command="{Binding DataContext.IsolateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                ToolTip="Gas Networks Ireland shut it off: the leak stops, and so does everyone's supply" />
+                                                    </StackPanel>
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                        <TextBlock Text="{Binding Status}" FontSize="11" />
+                                                        <TextBlock Text="{Binding Detail}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                </DockPanel>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Alarm}" Value="1">
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Alarm}" Value="2">
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource CriticalBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Cyber and GPS -->
+                                <TextBlock Text="CYBER &amp; GPS" Style="{StaticResource PanelHeader}" />
+                                <DockPanel Margin="0,0,0,2">
+                                    <Button DockPanel.Dock="Right" Content="{Binding VoicePositionsLabel}" Command="{Binding ToggleVoicePositionsCommand}" Padding="6,0" Margin="4,0,0,0"
+                                            VerticalAlignment="Top" ToolTip="Crews in an area of GPS interference give their position by radio every 5 minutes" />
+                                    <TextBlock Text="{Binding GnssSummary}" TextWrapping="Wrap" />
+                                </DockPanel>
+                                <ItemsControl ItemsSource="{Binding Cyber}" Margin="0,0,0,10">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:CyberRow}">
+                                            <Border x:Name="Row" BorderBrush="{StaticResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,2" Margin="0,0,0,2">
+                                                <DockPanel>
+                                                    <Button DockPanel.Dock="Right" Content="Manual working" Padding="5,0" FontSize="11" VerticalAlignment="Center" CommandParameter="{Binding AttackId}"
+                                                            Visibility="{Binding CanFallback, Converter={StaticResource BoolToVisibility}}"
+                                                            Command="{Binding DataContext.FallbackCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            ToolTip="Fall back to paper and voice until it is restored; notify the NCSC to speed recovery" />
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding System}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                        <TextBlock Text="{Binding Status}" FontSize="11" TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                </DockPanel>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Alarm}" Value="True">
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource CriticalBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Environment -->
+                                <TextBlock Text="ENVIRONMENT" Style="{StaticResource PanelHeader}" />
+                                <TextBlock Text="{Binding EnvironmentSummary}" TextWrapping="Wrap" Margin="0,0,0,2" />
+                                <DockPanel Margin="0,0,0,4">
+                                    <Button DockPanel.Dock="Right" Content="Contain run-off" Command="{Binding ContainCommand}" Padding="6,0" Margin="4,0,0,0"
+                                            ToolTip="Drain covers, booms and bunding at the selected incident, in place in 20 minutes" />
+                                    <Button DockPanel.Dock="Right" Content="Sample" Command="{Binding MonitorCommand}" Padding="6,0" Margin="4,0,0,0"
+                                            ToolTip="Air: downwind of the incident. Water: where its drains reach the river or canal. Soil: at the incident" />
+                                    <ComboBox ItemsSource="{Binding Media}" SelectedItem="{Binding SelectedMedium}" />
+                                </DockPanel>
+                                <ItemsControl ItemsSource="{Binding Monitors}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:MonitorRow}">
+                                            <TextBlock x:Name="Line" FontSize="11" TextWrapping="Wrap" Margin="0,1">
+                                                <Run Text="{Binding What, Mode=OneWay}" FontWeight="SemiBold" />
+                                                <Run Text="{Binding Reading, Mode=OneWay}" />
+                                            </TextBlock>
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Alarm}" Value="1">
+                                                    <Setter TargetName="Line" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Alarm}" Value="2">
+                                                    <Setter TargetName="Line" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>

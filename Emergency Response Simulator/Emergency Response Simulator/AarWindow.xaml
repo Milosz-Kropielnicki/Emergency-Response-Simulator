@@ -167,6 +167,17 @@
                             </DataGrid>
                         </StackPanel>
 
+                        <!-- Evacuation, shelter & infrastructure (Phase 17) -->
+                        <StackPanel Visibility="{Binding HasProtection, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="EVACUATION, SHELTER &amp; INFRASTRUCTURE" Style="{StaticResource PanelHeader}" />
+                            <DataGrid ItemsSource="{Binding ProtectionFigures}" Margin="0,0,0,12" HorizontalAlignment="Left" Width="460">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Measure" Binding="{Binding Category}" Width="*" />
+                                    <DataGridTextColumn Header="" Binding="{Binding Amount}" Width="140" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+
                         <!-- Health and medical surge (Phase 16) -->
                         <StackPanel Visibility="{Binding HasHealth, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="MEDICAL, FATALITIES &amp; PUBLIC HEALTH" Style="{StaticResource PanelHeader}" />

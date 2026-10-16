@@ -217,6 +217,75 @@ public static class InjectTemplates
                     GeoMath.Destination(incident.Location, i * 37 % 360, 15 + i % 5 * 8), Triage.Deceased, v["cause"])))]
                 : [],
             v => $"{Number(v, "count", 6):0} dead {v["cause"]}"),
+
+        // Phase 17: infrastructure, GPS and cyber.
+        new(new("infrastructure", "Infrastructure failure", "A pumping station, gas main or rail line near the incident fails (one is placed there if the area has none).",
+            [
+                new("what", "What fails", InjectParameterKind.Choice, "Gas main", ["Gas main", "Pumping station", "Rail line"]),
+                new("cause", "Cause", InjectParameterKind.Text, "struck by a contractor's digger"),
+            ]),
+            (context, v) =>
+            {
+                var kind = v["what"] switch { "Pumping station" => HazardSiteKind.WaterPumping, "Rail line" => HazardSiteKind.Rail, _ => HazardSiteKind.GasMain };
+                var near = Near(context);
+                var site = context.World.Sites.Values.Where(s => s.Kind == kind && !context.World.Protection.Damage.ContainsKey(s.Id))
+                    .MinBy(s => GeoMath.DistanceMeters(s.Location, near));
+                List<(EventVisibility, DomainEvent)> events = [];
+                if (site is null || GeoMath.DistanceMeters(site.Location, near) > 2000)
+                {
+                    var placed = new HazardSitePlaced(Guid.NewGuid(), kind, v["what"] switch
+                        {
+                            "Pumping station" => "local pumping station",
+                            "Rail line" => "the railway line",
+                            _ => "gas main under the road",
+                        }, GeoMath.Destination(near, 160, 250), Quantity: kind == HazardSiteKind.WaterPumping ? 1 : 0,
+                        ServiceRadiusMeters: kind == HazardSiteKind.Rail ? 300 : 700);
+                    events.Add(Truth(placed));
+                    events.Add(Truth(new InfrastructureDamaged(placed.SiteId, $"{placed.Name} {v["cause"]}")));
+                }
+                else events.Add(Truth(new InfrastructureDamaged(site.Id, $"{site.Name} {v["cause"]}")));
+                return events;
+            },
+            v => $"{v["what"]} fails: {v["cause"]}"),
+
+        new(new("gnss", "GPS jamming or spoofing", "Satellite navigation is jammed (no fixes) or spoofed (fixes in the wrong place) around the incident.",
+            [
+                new("kind", "Kind", InjectParameterKind.Choice, "Jamming", ["Jamming", "Spoofing"]),
+                new("radius", "Radius (m)", InjectParameterKind.Number, "1500"),
+                new("offset", "Spoofed offset (m)", InjectParameterKind.Number, "400"),
+                new("minutes", "Lasts (min)", InjectParameterKind.Number, "60"),
+            ]),
+            (context, v) =>
+            {
+                var kind = v["kind"] == "Spoofing" ? GnssInterferenceKind.Spoofing : GnssInterferenceKind.Jamming;
+                var id = Guid.NewGuid();
+                return [Truth(new GnssInterferenceStarted(id, kind, Near(context), Math.Clamp(Number(v, "radius", 1500), 100, 10_000),
+                    kind == GnssInterferenceKind.Spoofing ? Math.Clamp(Number(v, "offset", 400), 50, 5000) : 0, Hazards.SimRandom.For(id).NextDouble() * 360,
+                    Math.Clamp(Number(v, "minutes", 60), 5, 480)))];
+            },
+            v => $"GPS {v["kind"].ToLowerInvariant()} within {Number(v, "radius", 1500):0} m for {Number(v, "minutes", 60):0} min"),
+
+        new(new("ransomware", "Ransomware attack", "Ransomware encrypts a system the response relies on: the control room's dispatch, a hospital, water treatment or traffic signals.",
+            [
+                new("target", "Target", InjectParameterKind.Choice, "Control room dispatch",
+                    ["Control room dispatch", "Hospital", "Water treatment", "Traffic signals"]),
+            ]),
+            (context, v) =>
+            {
+                var target = v["target"] switch
+                {
+                    "Hospital" => CyberTarget.Hospital,
+                    "Water treatment" => CyberTarget.WaterTreatment,
+                    "Traffic signals" => CyberTarget.TrafficSignals,
+                    _ => CyberTarget.Dispatch,
+                };
+                // The hospital nearest the incident: the one the casualties would go to.
+                var hospital = target == CyberTarget.Hospital ? context.World.Hospitals.Values.MinBy(h => GeoMath.DistanceMeters(h.Location, Near(context))) : null;
+                if (target == CyberTarget.Hospital && hospital is null) return [];
+                return [Truth(new CyberAttackStarted(Guid.NewGuid(), target, hospital?.Id,
+                    $"{Protection.Name(target)}{(hospital is null ? "" : $" at {hospital.Name}")} encrypted"))];
+            },
+            v => $"Ransomware: {v["target"].ToLowerInvariant()}"),
     ];
 
     public static IReadOnlyList<InjectTemplate> All => [.. Library.Select(t => t.Info)];

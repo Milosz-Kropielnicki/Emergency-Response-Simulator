@@ -77,6 +77,7 @@ Open it with **🎛 Console** in the header. To run it on a second screen or mac
   - **social-media rumour:** you say whether it's true. A true one the PIO denies backfires on them.
   - **delivery delayed** and **local suppliers run out** (Phase 15)
   - **infectious disease outbreak** and **fatalities found** (Phase 16)
+  - **infrastructure failure**, **GPS jamming or spoofing** and **ransomware attack** (Phase 17)
 
 > **Tip:** Hold an inject when the team is already saturated, and fire one early when they are coasting. The review shows every inject that fired early, was held, or was fired ad hoc, so the debrief can account for the difficulty.
 
@@ -202,6 +203,16 @@ These are the parts the simulation plays:
 - **Behavioural health:** distress brings the worried well to emergency departments. A helpline and counselling teams help, and their psychological triage refers the high-risk to psychiatric beds.
 - **Injects:** **Infectious disease outbreak**, and **Fatalities found** (the dead at the largest incident).
 
+**Evacuation, shelter & infrastructure** (Phase 17). The EVAC & INFRA tab is where Operations, Logistics, Liaison, Planning and Safety work it.
+- **Evacuation:** the gardaí report each zone's population, how many are out and when it will be clear. Without a route people go straight out, downwind included. Buses carry those on foot; traffic control points keep the cars moving. Re-entry sends everyone home: if the hazard is still there, or the ground is contaminated, that is recorded.
+- **Rest centres:** a quarter of evacuees (more of the elderly) need one. Until one opens they have nowhere to go, and the desk says so. A centre needs meals, water and bedding from the incident's stock, staff to register people, and security once it fills.
+- **Infrastructure:** in Barrow Street the fire can reach a gas regulator (a leak that can ignite) and the substation's power cut takes the Grand Canal Dock pumping station off after an hour on standby, so hydrants weaken and hospitals lose capacity. The DART runs through smoke or the evacuation zone until someone tells Irish Rail.
+- **Cyber and GPS:** jamming freezes units on the map; spoofing moves them, which is worse. Ransomware on the control room's CAD silences status buttons until the IC orders paper working. On water treatment, a boil water notice is needed unless the works go manual within 45 minutes. Telling the NCSC halves recovery.
+- **Environment:** fire-water run-off goes to the canal unless contained; past 20,000 L the fish die and Inland Fisheries Ireland ring. Monitoring teams give the air, water and soil readings that should come before re-entry.
+- **Injects:** **Infrastructure failure**, **GPS jamming or spoofing**, and **Ransomware attack**.
+
+> **Steering tip:** For a short session, fire **Ransomware attack** on the control room dispatch while units are moving: the team has to notice the COP has gone stale. For evacuation, declare a zone from a plume projection and watch whether anyone sets a route before people walk into the cloud. `Simulation:Protection=false` leaves it all out.
+
 > **Steering tip:** The quickest way to exercise the medical side is **Fatalities found** and an **Incident escalates** with extra casualties on an explosion: tags, destinations, blood, the coroner and the mortuary all follow. For public health, fire an outbreak at a rest centre and watch whether the IC involves HSE Public Health before ordering isolation. `Simulation:Health=false` leaves it all out.
 
 > **Steering tip:** Logistics only bites on longer exercises. For a short one, fire **Local suppliers run out** on foam early in a chemical incident, or a breakdown on a key appliance. To leave it out of a first run, set `Simulation:Logistics=false`.
@@ -228,6 +239,7 @@ These are the parts the simulation plays:
    - **Participants:** roles over time, commands, decision ratings, observer ratings, and combined score and level.
    - **Observer notes and Competencies:** each player's ratings by competency area.
    - **Legal & liability:** how many significant decisions were logged with their reasons, and each exposure an inquiry would ask about. Some will be marked mitigated: an evacuation without the Garda, vulnerable people left behind, an unguarded zone, a volunteer hurt, an untrue denial, families waiting over an hour.
+   - **Evacuation, shelter & infrastructure:** for each zone how many really got out and when it was clear; rest centres, registration and shortages; infrastructure failures and gas ignitions; ransomware and GPS; run-off and wildlife. Residents sent home to danger, trains run through it, no boil water notice, and pollution not reported to the EPA show under legal & liability.
    - **Medical, fatalities & public health:** patients right first time, transfers and deaths; the coroner, the dead at the scene and identification; the exposed protected in time; distress, counselling and the worried well. The dead left at a scene over 3 hours, and isolation or quarantine without HSE Public Health, show under legal & liability.
    - **Logistics & finance:** each supply outage and breakdown, with when it was warned of and when anyone acted; appliances that ran dry; the cost breakdown and the claim. A contract over €25,000 with no justification shows under legal & liability.
    - **Instructor:** what you injected, held, skipped and role-played. This shows how hard you made it.

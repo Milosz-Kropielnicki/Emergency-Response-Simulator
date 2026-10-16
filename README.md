@@ -1282,6 +1282,96 @@ Timescales are compressed for an exercise: the real ones are days.
 
 **Tests:** `HealthTests`.
 
+## Evacuation, shelter & infrastructure (Phase 17)
+
+Population protection and critical systems. Work it from the new **EVAC & INFRA** tab. The IC, Operations, Planning, Logistics, Safety, Liaison, the dispatchers and observers have it.
+
+`Simulation:Protection = false` turns it all off: evacuees walk or drive straight out of a zone as before, and nothing more is modelled.
+
+### Evacuation modelling (`EvacuationSystem`)
+
+- **The population:** everyone in an evacuation zone when it is ordered. Every 5 minutes the gardaí report an estimate of the population (from the census, out by up to an eighth), how many have left and how many are still in (to the nearest five), and when the zone will be clear at the rate of the last ten minutes. A zone is **clear** once 90% of the people willing to leave are out.
+- **Routes** (`SetEvacuationRouteAsync`, Operations or the IC): evacuees make for the route's end. Without a route they go straight out from the middle of the zone, whatever lies that way, downwind included. A route must end outside the zone; one that crosses a hot zone, fire exclusion or plume zone is accepted but flagged. A route can end at a rest centre.
+- **Traffic control points** (`PlaceTrafficControlPointAsync`, Operations or Liaison): the Garda staff them 10 minutes after they are asked, up to 8. Streets near one carry 60% more traffic before they jam, and dark (or hacked) signals there are worked by hand.
+- **Buses** (`RequestEvacuationBusesAsync`, Logistics or Liaison): Dublin Bus brings up to 20 for a zone, 25 minutes after the request. Each takes 60 people leaving on foot, from inside the zone or with a long walk still ahead, to the route's end or its rest centre. A run takes 8 minutes' loading plus the drive there and back at 25 km/h. The buses are on the roads with everyone else.
+- **Re-entry** (`AuthoriseReEntryAsync`, the IC): lifts the zone, and its evacuees go home over the next 15–90 minutes, leaving the rest centres. Command is warned if hazard zones are still declared there, a monitoring reading there is above guideline, or nobody has sampled it. Anyone who gets home to a hazard still there, or to contaminated ground, is recorded.
+
+### Rest centres (`ShelterSystem`)
+
+- **Opening one** (`OpenShelterAsync`, Logistics or Liaison): the council sets it up in **30 minutes**. It takes 20–2,000 people, never inside an evacuation, hot or plume zone; six at most.
+- **Who comes:** of the people out of a zone, a quarter need a rest centre (60% of the elderly, 80% of those who can't get about, every rough-sleeper); the rest go to family and friends. Those brought by bus to one go in. They make their own way to the nearest with room, their own incident's first. With none open, or all full, the gardaí and the council report how many have **nowhere to go** every 15 minutes, and they go once one opens.
+- **Capacity:** a centre takes up to 30% over capacity before it turns people away.
+- **Registration:** council staff register 60 people an hour, plus 3 an hour for every registered volunteer (Phase 14), up to 200. The family assistance centre traces someone registered at a rest centre three times as fast.
+- **Supplies:** each person eats three meals a day, drinks three litres, and needs a bed (a new supply, **bedding**). All come from the incident's stock (Phase 15), so Logistics must order more. The centre reports what has run out.
+- **Security** (`ArrangeShelterSecurityAsync`): in a centre of forty or more, every half hour there is a chance of trouble (a theft, a fight): the occupants over 300, doubled when overcrowded, half as much again when food runs out. Security arrives 20 minutes after it is arranged and stops 85% of it.
+- Each centre reports every 15 minutes, and at once when it opens or something runs out.
+
+### Critical infrastructure (`InfrastructureNetworkSystem`)
+
+Power is the root (`InfrastructureSystem`, Phase 6). This follows what hangs off it, and off the hazards. Each operator (ESB Networks, Uisce Éireann, Gas Networks Ireland, the mobile operators, Irish Rail / Luas) reports its assets to command 5 minutes after a change.
+
+| Asset | Fails when | What follows |
+|---|---|---|
+| Water pumping station | the power is out longer than its standby generator's fuel (a site's `Quantity`, in hours), or fire or flood reaches it | no mains pressure across its area: engines get half their water from hydrants unless a tanker or water tender of ours is relaying at the incident; hospitals there lose a tenth of their emergency capacity |
+| Gas main | fire, flood or an explosion reaches it | it leaks; someone rings 999 about the smell after 4 minutes. Near a fire it ignites (3% a minute; 0.3% elsewhere), burning whoever is within 40 m and starting a fire |
+| Mobile mast | the power is out longer than its batteries (Phase 7) | no mobile 999 calls or mobile data |
+| Rail or tram line | the power is out (trains stop), or fire or flood blocks it | while running, trains go through smoke, a toxic cloud or an evacuation zone until the operator is told; the operator asks command whether to stop |
+
+- **Generators** (`DeployGeneratorAsync`, Logistics or Liaison): a mobile generator for a pumping station or a mast, connected 40 minutes later.
+- **Gas isolation** (`IsolateGasAsync`, Liaison or Operations): Gas Networks Ireland shuts the main off 25 minutes after the request, or 15 if it had already been told. The leak stops, and so does supply to everyone the main feeds.
+- **Rail:** a notification to Irish Rail, the DART or the Luas stops services through the area 5 minutes later.
+
+### Cyber and GPS degradation (`CyberSystem`)
+
+- **GPS jamming:** vehicles inside lose their fix and their AVL stops, so the map shows them where they last were. A 999 caller's phone location is the network's rough estimate (400 m worse). A crew notices after 6 minutes.
+- **GPS spoofing:** AVL and callers' locations are confidently wrong by the spoofed offset. A crew notices after 12 minutes, when the map and the street disagree.
+- **Voice position reports** (`SetManualPositionReportingAsync`, Logistics or a dispatcher): committed crews inside the interference give their position by radio every 5 minutes. Right, but it takes airtime.
+- **Ransomware**, found by the system's owners after 10 minutes:
+
+| Target | Effect | Manual working (`ActivateCyberFallbackAsync`, the IC or Logistics) |
+|---|---|---|
+| Control room CAD | mobile data stops: crews' status messages are held, AVL lost | paper dispatch: crews read their status over the radio |
+| A hospital's IT | emergency capacity down 30% | down 15% |
+| Water treatment controls | unless operators go manual within 45 minutes, the water can't be vouched for and Uisce Éireann advises a **boil water notice** | operators run the works by hand |
+| Traffic signal control | junctions within 1.5 km of each incident run at 60% | fixed-time local plans: 85% |
+
+- Systems come back from backups after **4 hours**, or **2 hours** after the **National Cyber Security Centre** is notified (a recipient with "NCSC" or "cyber" in it).
+
+### The environment (`EnvironmentSystem`)
+
+- **Water:** 40% of the water fire crews put on runs off contaminated (an engine about 400 L a minute). Uncontained, 70% goes down the drains to the nearest river or canal (the Grand Canal Dock, the Liffey, the Dodder…) and the rest soaks into the ground. **Run-off containment** (`ContainRunoffAsync`, Operations or Safety: drain covers, booms, bunding) is in place 20 minutes after the order and holds back 85%.
+- **Wildlife:** past 20,000 L in a watercourse the fish die, and Inland Fisheries Ireland reports the fish kill 20 minutes later. A toxic cloud (not smoke) over more than 5 hectares kills birds, which the council's parks staff find.
+- **Soil:** soaked run-off contaminates the ground round the fire (60 m, up to 150 m); a chemical, biological or radioactive cloud leaves contamination over half its footprint.
+- **Monitoring** (`DeployEnvironmentalMonitoringAsync`, Planning or Safety): an EPA team samples the air, water or soil at a place, starting 30 minutes later and reporting every 10, graded clear, low, above guideline or high. It is the evidence for lifting a shelter-in-place or letting people home. Eight teams at most.
+- Pollution reaching water must be reported to the **EPA** (a notification with "EPA" in it).
+
+### The desk and the review
+
+- **The desk:**
+  - a zone with no route goes to Operations; a slow zone with no buses to Logistics and Liaison;
+  - evacuees with nowhere to go, a rest centre out of supplies or with no security go to Logistics and Liaison;
+  - a pumping station or mast on backup or failed goes to Logistics (a generator); a gas leak to Liaison and Operations;
+  - GPS interference with no voice positions goes to Logistics and the dispatchers; ransomware with no manual working to the IC and Logistics; a boil water notice to the PIO;
+  - a fish kill goes to Operations (containment) and, with the EPA not told, to Liaison.
+- **In the review**, under **Evacuation, shelter & infrastructure**:
+  - for each zone, how many of the people really in it got out, how long until it was clear, who was still in and who was hurt there (ground truth), and residents sent home to danger;
+  - evacuees in rest centres and registered, the fullest centre, trouble inside, and the most with nowhere to go;
+  - infrastructure that failed, and gas ignitions;
+  - ransomware attacks and GPS interference;
+  - run-off, how much reached water and was contained, and wildlife killed.
+  - **Findings** on each zone, routes never set, shortages at rest centres, pumping stations left without a generator, each gas leak, each attack (manual working, the NCSC, the boil water notice), voice positions, run-off and wildlife.
+  - **Decisions:** routes, buses, rest centres, generators, gas isolation, voice positions, manual working and containment are timed from what called for them.
+  - **Decision log:** re-entry and gas isolation are significant decisions to log. **Liabilities:** residents sent home to danger, trains run through danger, no boil water notice in time, and pollution not reported to the EPA.
+  - **Exports:** the HTML and CSV exports include it all.
+
+**On the map**, a new **Population & infrastructure** layer group draws what command knows: rest centres (green, amber while opening, red when short, overcrowded or troubled), evacuation routes and traffic control points, infrastructure as reported (with the area a degraded asset serves), GPS interference areas (orange jammed, magenta spoofed), monitoring teams coloured by their last reading, and reported fish kills and dead birds.
+
+**The Barrow Street scenario** now has a gas regulator beside the warehouse, the Grand Canal Dock pumping station (an hour of standby fuel, inside the substation's area) and the DART line over Barrow Street.
+
+**Injects:** **Infrastructure failure** (a gas main, pumping station or rail line near the incident), **GPS jamming or spoofing**, and **Ransomware attack** (the control room's dispatch, a hospital, water treatment or traffic signals).
+
+**Tests:** `ProtectionTests`.
+
 ## Local setup
 
 ### Prerequisites: PostgreSQL and PostGIS

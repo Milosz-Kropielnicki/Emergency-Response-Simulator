@@ -82,16 +82,17 @@ public sealed partial class AarAnalyzer
             Findings =
             [
                 .. Findings(metrics, branches), .. HandoverFindings(), .. PoliticalFindings(), .. MediaFindings(), .. PlumeFindings(), .. PublicFindings(),
-                .. LogisticsFindings(), .. HealthFindings(),
+                .. LogisticsFindings(), .. HealthFindings(), .. ProtectionFindings(),
             ],
             Participants = Participants(),
             Instructor = _instructor,
             Notes = Notes(),
             Competencies = Competencies(),
-            Liabilities = [.. Liabilities(End).Concat(HealthLiabilities()).OrderBy(l => l.At)],
+            Liabilities = [.. Liabilities(End).Concat(HealthLiabilities()).Concat(ProtectionLiabilities()).OrderBy(l => l.At)],
             Documentation = Documentation(),
             Logistics = LogisticsSummary(),
             Health = HealthSummary(),
+            Protection = ProtectionSummary(),
         };
     }
 
@@ -112,6 +113,7 @@ public sealed partial class AarAnalyzer
         TrackPublic(simEvent); // Phase 14: the public, the media and the law
         TrackLogistics(simEvent); // Phase 15: supplies, the fleet and the money
         TrackHealth(simEvent); // Phase 16: patients, the dead, public health, behavioural health
+        TrackProtection(simEvent); // Phase 17: evacuation, shelter, infrastructure, cyber and GPS, the environment
 
         // Bookkeeping the analysis needs whichever way the event went.
         switch (payload)
@@ -361,6 +363,12 @@ public sealed partial class AarAnalyzer
                 From(cue.At, cue.What, cue.Good, cue.Fair);
                 break;
 
+            // ---- Protection (Phase 17): timed from what called for it ----
+            case EvacuationRouteSet or EvacuationBusesRequested or ShelterOpened or GeneratorRequested or GasIsolationRequested or ManualPositionReportingSet
+                or CyberFallbackActivated or RunoffContainmentOrdered when ProtectionTrigger(simEvent.Payload) is { } cause:
+                From(cause.At, cause.What, cause.Good, cause.Fair);
+                break;
+
             // ---- Logistics (Phase 15): timed from the warning that called for it ----
             case SuppliesOrdered or RepairRequested or UnitServiceOrdered when LogisticsTrigger(simEvent.Payload) is { } prompt:
                 From(prompt.At, prompt.What, prompt.Good, prompt.Fair);
@@ -393,6 +401,10 @@ public sealed partial class AarAnalyzer
             SuppliesOrdered or UnitStaged or UnitServiceOrdered or RepairRequested or ContractAwarded or ReimbursementClaimSubmitted => "Logistics",
             TransportDestinationSet or BloodRequested or TemporaryMortuaryOpened => "Medical",
             IsolationOrdered or QuarantineOrdered or DispensingPointOpened or CrisisCounsellingDeployed => "Public health",
+            EvacuationRouteSet or TrafficControlPointPlaced or EvacuationBusesRequested or ReEntryAuthorised => "Evacuation",
+            ShelterOpened or ShelterSecurityArranged => "Shelter",
+            GeneratorRequested or GasIsolationRequested or ManualPositionReportingSet or CyberFallbackActivated => "Infrastructure",
+            EnvironmentalMonitoringDeployed or RunoffContainmentOrdered => "Environment",
             OrderIssued or OrderClosed or ReadBackConfirmed => "Order",
             ApprovalDecided or NotificationSent => "Liaison",
             ReportAssessed or ReportLinked => "Assessment",

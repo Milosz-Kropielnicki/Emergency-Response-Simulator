@@ -110,6 +110,16 @@ public static class ServiceCollectionExtensions
                 services.AddSingleton<ISimulationSystem>(_ => new BehaviouralHealthSystem());
             }
 
+            // Phase 17: evacuation, rest centres, infrastructure, GPS and cyber, the environment.
+            if (configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.Protection)}", true))
+            {
+                services.AddSingleton<ISimulationSystem>(_ => new EvacuationSystem());
+                services.AddSingleton<ISimulationSystem>(_ => new ShelterSystem());
+                services.AddSingleton<ISimulationSystem>(sp => new InfrastructureNetworkSystem(sp.GetRequiredService<IRoutingService>()));
+                services.AddSingleton<ISimulationSystem>(sp => new CyberSystem(sp.GetRequiredService<IRoutingService>()));
+                services.AddSingleton<ISimulationSystem>(_ => new EnvironmentSystem());
+            }
+
             // Phase 13: the Python dispersion model drives real releases, and keeps command's projections current.
             // Without the service (or with this off) the in-engine Gaussian plume carries the session.
             if (configuration.GetValue($"{SimulationOptions.SectionName}:{nameof(SimulationOptions.DispersionService)}", true))
