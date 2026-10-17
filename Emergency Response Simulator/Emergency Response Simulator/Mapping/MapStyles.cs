@@ -13,6 +13,14 @@ public static class MapStyles
 {
     public const string LabelField = "label";
 
+    /// <summary>
+    /// The meaningful colours (Phase 21): agencies, zones, triage, plume, congestion and unit rings, for the user's colour
+    /// vision. Styles read it as they are built, so the map follows a change at its next refresh.
+    /// </summary>
+    public static Accessibility.MapPalette Palette { get; set; } = Accessibility.Palettes.Map(Accessibility.ColourVision.Standard);
+
+    private static Color M(Accessibility.Rgb c, int alpha = 255) => Color.FromArgb(alpha, c.R, c.G, c.B);
+
     /// <summary>Map resolution (metres per pixel) at a web zoom level, for MinVisible/MaxVisible.</summary>
     public static double ResolutionAtZoom(int zoom) => 156543.03392804097 / Math.Pow(2, zoom);
 
@@ -152,10 +160,10 @@ public static class MapStyles
 
     public static Color AgencyColor(AgencyType? agency) => agency switch
     {
-        AgencyType.Fire => new Color(230, 50, 40),
-        AgencyType.Ems => new Color(30, 170, 90),
-        AgencyType.Police => new Color(40, 100, 220),
-        _ => new Color(120, 120, 130),
+        AgencyType.Fire => M(Palette.Fire),
+        AgencyType.Ems => M(Palette.Ems),
+        AgencyType.Police => M(Palette.Police),
+        _ => M(Palette.OtherAgency),
     };
 
     /// <param name="heading">Degrees clockwise from north when moving; draws a direction arrow.</param>
@@ -167,7 +175,7 @@ public static class MapStyles
 
         // Committed units get an amber ring so availability can be read at a glance; lost comms show red.
         var committed = status is not (UnitStatus.Available or UnitStatus.OutOfService);
-        var ring = !commsOk ? new Color(255, 40, 40) : committed ? new Color(255, 190, 0) : Color.White;
+        var ring = !commsOk ? M(Palette.CommsLost) : committed ? M(Palette.Committed) : Color.White;
         var styles = new StyleCollection();
         if (selected)
         {
@@ -282,11 +290,11 @@ public static class MapStyles
     {
         var (color, dashed) = type switch
         {
-            ZoneType.HotZone => (new Color(255, 40, 40), false),
-            ZoneType.WarmZone => (new Color(255, 150, 0), false),
-            ZoneType.ColdZone => (new Color(60, 200, 90), false),
-            ZoneType.PlumeHigh => (new Color(200, 0, 120), false),
-            ZoneType.PlumeModerate => (new Color(230, 90, 160), false),
+            ZoneType.HotZone => (M(Palette.Hot), false),
+            ZoneType.WarmZone => (M(Palette.Warm), false),
+            ZoneType.ColdZone => (M(Palette.Cold), false),
+            ZoneType.PlumeHigh => (M(Palette.PlumeHigh), false),
+            ZoneType.PlumeModerate => (M(Palette.PlumeModerate), false),
             ZoneType.PlumeLow => (new Color(240, 160, 200), false),
             ZoneType.EvacuationZone => (new Color(170, 80, 230), true),
             ZoneType.ShelterInPlace => (new Color(60, 140, 240), true),
@@ -298,7 +306,7 @@ public static class MapStyles
             ZoneType.BaseCamp => (new Color(0, 150, 110), false),
             ZoneType.CommandPost => (new Color(30, 60, 160), false),
             ZoneType.LandingZone => (new Color(0, 220, 255), false),
-            ZoneType.IncidentPerimeter => (new Color(255, 40, 40), true),
+            ZoneType.IncidentPerimeter => (M(Palette.Hot), true),
             _ => (new Color(200, 200, 200), false),
         };
 
@@ -373,8 +381,8 @@ public static class MapStyles
     {
         var (color, alpha) = level switch
         {
-            Core.Contracts.PlumeLevels.High => (new Color(220, 20, 40), 110),
-            Core.Contracts.PlumeLevels.Moderate => (new Color(255, 120, 0), 80),
+            Core.Contracts.PlumeLevels.High => (M(Palette.PlumeHigh), 110),
+            Core.Contracts.PlumeLevels.Moderate => (M(Palette.Warm), 80),
             _ => (new Color(255, 205, 0), 50),
         };
         return new StyleCollection
@@ -602,9 +610,9 @@ public static class MapStyles
         _ => Slow,
     };
 
-    private static readonly IStyle Gridlock = CongestionPen(new Color(150, 0, 20), 7);
-    private static readonly IStyle Heavy = CongestionPen(new Color(235, 40, 40), 6);
-    private static readonly IStyle Slow = CongestionPen(new Color(255, 170, 0), 5);
+    private static IStyle Gridlock => CongestionPen(M(Palette.Gridlock), 7);
+    private static IStyle Heavy => CongestionPen(M(Palette.Heavy), 6);
+    private static IStyle Slow => CongestionPen(M(Palette.Slow), 5);
 
     private static VectorStyle CongestionPen(Color color, double width) => new()
     {
@@ -725,9 +733,9 @@ public static class MapStyles
         SymbolType = SymbolType.Triangle, SymbolScale = 0.28, Outline = new Pen(Color.White, 1),
         Fill = new Brush(triage switch
         {
-            Triage.Immediate => new Color(230, 20, 20),
-            Triage.Urgent => new Color(255, 190, 0),
-            Triage.Delayed => new Color(40, 180, 70),
+            Triage.Immediate => M(Palette.Immediate),
+            Triage.Urgent => M(Palette.Urgent),
+            Triage.Delayed => M(Palette.Delayed),
             _ => new Color(20, 20, 20),
         }),
     };

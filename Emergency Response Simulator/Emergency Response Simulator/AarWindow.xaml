@@ -3,22 +3,22 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:Emergency_Response_Simulator.ViewModels"
         Title="After-Action Review" Width="1280" Height="860" MinWidth="960" MinHeight="600"
-        Background="{StaticResource BackgroundBrush}" Foreground="{StaticResource TextBrush}" FontSize="12"
+        Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextBrush}" FontSize="12"
         WindowStartupLocation="CenterOwner">
     <Window.Resources>
         <!-- Rating text coloured by how it compares with the standard. -->
         <Style x:Key="RatingText" TargetType="TextBlock">
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding Rating}" Value="Good">
-                    <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource OkBrush}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Rating}" Value="Fair">
-                    <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Rating}" Value="Poor">
-                    <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -26,25 +26,25 @@
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
         <Style x:Key="Muted" TargetType="TextBlock" BasedOn="{StaticResource Wrap}">
-            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
         </Style>
         <Style TargetType="DataGrid">
             <Setter Property="AutoGenerateColumns" Value="False" />
             <Setter Property="IsReadOnly" Value="True" />
             <Setter Property="HeadersVisibility" Value="Column" />
             <Setter Property="GridLinesVisibility" Value="Horizontal" />
-            <Setter Property="Background" Value="{StaticResource PanelBrush}" />
-            <Setter Property="RowBackground" Value="{StaticResource PanelBrush}" />
-            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
-            <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource BorderBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PanelBrush}" />
+            <Setter Property="RowBackground" Value="{DynamicResource PanelBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+            <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
             <Setter Property="CanUserAddRows" Value="False" />
         </Style>
         <Style TargetType="DataGridColumnHeader">
-            <Setter Property="Background" Value="{StaticResource PanelRaisedBrush}" />
-            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PanelRaisedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
             <Setter Property="Padding" Value="6,4" />
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
             <Setter Property="BorderThickness" Value="0,0,1,1" />
         </Style>
         <Style TargetType="DataGridCell">
@@ -66,7 +66,7 @@
         <!-- Header -->
         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
-                <Button Content="↻ Build / refresh review" Command="{Binding BuildCommand}" Padding="10,4" FontWeight="SemiBold"
+                <Button AutomationProperties.Name="Build / refresh review" Content="↻ Build / refresh review" Command="{Binding BuildCommand}" Padding="10,4" FontWeight="SemiBold"
                         ToolTip="Analyse the whole session so far: decisions, metrics, analytics and branch points" />
             </StackPanel>
             <StackPanel>
@@ -111,13 +111,13 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <DockPanel Margin="0,2">
-                                        <TextBlock x:Name="Mark" DockPanel.Dock="Left" Text="▲" Width="18" Foreground="{StaticResource CriticalBrush}" />
+                                        <TextBlock x:Name="Mark" DockPanel.Dock="Left" Text="▲" Width="18" Foreground="{DynamicResource CriticalBrush}" />
                                         <TextBlock Text="{Binding Text}" Style="{StaticResource Wrap}" />
                                     </DockPanel>
                                     <DataTemplate.Triggers>
                                         <DataTrigger Binding="{Binding Strength}" Value="True">
                                             <Setter TargetName="Mark" Property="Text" Value="✔" />
-                                            <Setter TargetName="Mark" Property="Foreground" Value="{StaticResource OkBrush}" />
+                                            <Setter TargetName="Mark" Property="Foreground" Value="{DynamicResource OkBrush}" />
                                         </DataTrigger>
                                     </DataTemplate.Triggers>
                                 </DataTemplate>
@@ -322,7 +322,7 @@
                                         <StackPanel>
                                             <TextBlock Style="{StaticResource Wrap}"><Run Text="{Binding Category, Mode=OneWay}" FontWeight="SemiBold" /> <Run Text="{Binding Decision, Mode=OneWay}" /></TextBlock>
                                             <TextBlock Text="{Binding Note}" Style="{StaticResource Muted}" FontStyle="Italic" />
-                                            <TextBlock Text="{Binding Actor}" Style="{StaticResource Muted}" Foreground="{StaticResource AccentBrush}" />
+                                            <TextBlock Text="{Binding Actor}" Style="{StaticResource Muted}" Foreground="{DynamicResource AccentBrush}" />
                                         </StackPanel>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
@@ -345,7 +345,7 @@
                             </DataGridTemplateColumn>
                             <DataGridTemplateColumn Header="What was really happening" Width="1.5*">
                                 <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate><TextBlock Text="{Binding Truth}" Style="{StaticResource Wrap}" Foreground="#C792EA" /></DataTemplate>
+                                    <DataTemplate><TextBlock Text="{Binding Truth}" Style="{StaticResource Wrap}" Foreground="{DynamicResource TruthBrush}" /></DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
                             <DataGridTemplateColumn Width="76">
@@ -375,10 +375,10 @@
                                     <DockPanel Margin="0,1" Height="16">
                                         <TextBlock DockPanel.Dock="Left" Text="{Binding Callsign}" Width="110" VerticalAlignment="Center" />
                                         <TextBlock DockPanel.Dock="Right" Text="{Binding Committed}" Width="44" TextAlignment="Right" VerticalAlignment="Center"
-                                                   Foreground="{StaticResource MutedTextBrush}" />
+                                                   Foreground="{DynamicResource MutedTextBrush}" />
                                         <ItemsControl ItemsSource="{Binding Bars}" Width="720" HorizontalAlignment="Left">
                                             <ItemsControl.ItemsPanel>
-                                                <ItemsPanelTemplate><Canvas Background="{StaticResource PanelRaisedBrush}" /></ItemsPanelTemplate>
+                                                <ItemsPanelTemplate><Canvas Background="{DynamicResource PanelRaisedBrush}" /></ItemsPanelTemplate>
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemContainerStyle>
                                                 <Style TargetType="ContentPresenter">
@@ -400,7 +400,7 @@
                                 <ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
-                                <DataTemplate><TextBlock Text="{Binding}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" /></DataTemplate>
+                                <DataTemplate><TextBlock Text="{Binding}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" /></DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
@@ -418,15 +418,15 @@
                                             <Grid Width="336" Height="336" HorizontalAlignment="Left">
                                                 <ItemsControl ItemsSource="{Binding Cells}">
                                                     <ItemsControl.ItemsPanel>
-                                                        <ItemsPanelTemplate><UniformGrid Columns="24" Background="{StaticResource PanelRaisedBrush}" /></ItemsPanelTemplate>
+                                                        <ItemsPanelTemplate><UniformGrid Columns="24" Background="{DynamicResource PanelRaisedBrush}" /></ItemsPanelTemplate>
                                                     </ItemsControl.ItemsPanel>
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate DataType="{x:Type vm:HeatCell}">
-                                                            <Rectangle Fill="{StaticResource CriticalBrush}" Opacity="{Binding Opacity}" ToolTip="{Binding Tip}" />
+                                                            <Rectangle Fill="{DynamicResource CriticalBrush}" Opacity="{Binding Opacity}" ToolTip="{Binding Tip}" />
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
-                                                <Ellipse Width="12" Height="12" Stroke="{StaticResource TextBrush}" StrokeThickness="2"
+                                                <Ellipse Width="12" Height="12" Stroke="{DynamicResource TextBrush}" StrokeThickness="2"
                                                          HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" ToolTip="The incident" />
                                                 <TextBlock Text="N ↑" FontSize="10" Margin="4,2" IsHitTestVisible="False" />
                                             </Grid>
@@ -567,25 +567,25 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <!-- A recorded transmission plays back (Phase 11 M7) -->
-                                    <Button Grid.Column="2" Content="▶" Padding="4,0" FontSize="10" HorizontalAlignment="Right" Margin="0,0,6,0" ToolTip="Play the recording"
+                                    <Button Grid.Column="2" Content="▶" AutomationProperties.Name="Play the recording" Padding="4,0" FontSize="10" HorizontalAlignment="Right" Margin="0,0,6,0" ToolTip="Play the recording"
                                             Visibility="{Binding HasClip, Converter={StaticResource BoolToVisibility}}"
                                             Command="{Binding DataContext.PlayClipCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                             CommandParameter="{Binding ClipId}" />
                                     <Button Content="COP" Padding="4,0" FontSize="10" Margin="0,0,6,0"
                                             Command="{Binding DataContext.ShowCopCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                             CommandParameter="{Binding At}" />
-                                    <TextBlock Grid.Column="1" Text="{Binding Time}" Foreground="{StaticResource MutedTextBrush}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Time}" Foreground="{DynamicResource MutedTextBrush}" />
                                     <TextBlock x:Name="Category" Grid.Column="2" Text="{Binding Category}" />
-                                    <TextBlock x:Name="Text" Grid.Column="3" TextWrapping="Wrap"><Run Text="{Binding Text, Mode=OneWay}" /> <Run Text="{Binding Actor, Mode=OneWay}" Foreground="{StaticResource AccentBrush}" /></TextBlock>
+                                    <TextBlock x:Name="Text" Grid.Column="3" TextWrapping="Wrap"><Run Text="{Binding Text, Mode=OneWay}" /> <Run Text="{Binding Actor, Mode=OneWay}" Foreground="{DynamicResource AccentBrush}" /></TextBlock>
                                 </Grid>
                                 <DataTemplate.Triggers>
                                     <DataTrigger Binding="{Binding IsDecision}" Value="True">
-                                        <Setter TargetName="Category" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                        <Setter TargetName="Category" Property="Foreground" Value="{DynamicResource AccentBrush}" />
                                         <Setter TargetName="Category" Property="FontWeight" Value="Bold" />
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding IsTruth}" Value="True">
-                                        <Setter TargetName="Category" Property="Foreground" Value="#C792EA" />
-                                        <Setter TargetName="Text" Property="Foreground" Value="#C792EA" />
+                                        <Setter TargetName="Category" Property="Foreground" Value="{DynamicResource TruthBrush}" />
+                                        <Setter TargetName="Text" Property="Foreground" Value="{DynamicResource TruthBrush}" />
                                     </DataTrigger>
                                 </DataTemplate.Triggers>
                             </DataTemplate>

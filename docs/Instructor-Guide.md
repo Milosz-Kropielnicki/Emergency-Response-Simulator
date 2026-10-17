@@ -214,6 +214,13 @@ These are the parts the simulation plays:
 
 > **Steering tip:** Adaptive difficulty is the instructor's assistant, not a replacement: watch the score in the editor, and if a team is drowning at level 1 hold the script too. For a debrief on scene safety, fire **secondary device** ten minutes after crews arrive, and see whether anyone pulls them back before the fuse runs out.
 
+**Display, accessibility and the field companion** (Phase 21). Everyone has **⚙ Display** in the header; the [Participant Guide](Participant-Guide.md) covers it all.
+- **Before the session:** ask whether anyone needs a colour-vision palette, the dyslexia-friendly font, a larger size or a screen reader, and set it on their machine. It stays there. For a night or vehicle-based exercise, put command on **Night operations** (Ctrl+Shift+N).
+- **Live exercises with crews outside:** give the crews the server address with **/field/** and the session code. Their phones join as their unit, and their reports, check-ins, status, PAR answers and order acknowledgements arrive as that unit's, signed with their names. Pick units your own trainees command: AI agencies' units can't be joined.
+- **Workspaces:** a player can customise theirs, but never beyond what their role's default could show, and nobody but you gets the instructor's board.
+
+> **Steering tip:** With crews on the field app, call a PAR and time how long the IC takes to notice a phone that answers with someone missing.
+
 **Data standards and NIMS** (Phase 20). Open **🔗 Standards** in the header.
 - **Bring outside information in:** a met service warning (CAP), a hospital's bed status (EDXL-HAVE), a neighbouring CAD's incident (NIEM) or a hospital's patient message (HL7). It arrives as information received, as a real one would. Only you can import in a networked session; `standards/samples/` has one of each to try.
 - **Export:** the team's warnings as CAP, hospital availability as HAVE, resource requests as EDXL-RM, a situation report as EDXL-SitRep, the incidents as NIEM, patient notifications as HL7. All are marked as exercise or training traffic.

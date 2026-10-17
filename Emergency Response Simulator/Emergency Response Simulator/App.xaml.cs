@@ -1,4 +1,5 @@
 using System.Windows;
+using Emergency_Response_Simulator.Accessibility;
 using Emergency_Response_Simulator.Client;
 using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Events;
@@ -35,7 +36,12 @@ namespace Emergency_Response_Simulator
         {
             base.OnStartup(e);
 
+            // Phase 21: this user's display settings, before any window opens (the join window included).
+            var display = new DisplayService(DisplaySettings.Load());
+            display.Apply(display.Current, save: false);
+
             var builder = Host.CreateApplicationBuilder(e.Args);
+            builder.Services.AddSingleton(display);
             builder.Configuration.SetBasePath(AppContext.BaseDirectory);
             builder.Configuration.AddJsonFile("appsettings.json", optional: false);
             builder.Configuration.AddJsonFile(ErsConfiguration.LocalSettingsFileName, optional: true);

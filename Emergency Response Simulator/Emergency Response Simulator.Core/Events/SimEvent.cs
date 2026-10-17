@@ -85,4 +85,7 @@ public static class EventSources
 
     /// <summary>Data from outside systems in a standard format: CAP, EDXL, NIEM, HL7, AVL feeds (Phase 20).</summary>
     public const string Integration = "integration";
+
+    /// <summary>A crew's phone speaking for its unit through the mobile field companion (Phase 21).</summary>
+    public const string Field = "field";
 }

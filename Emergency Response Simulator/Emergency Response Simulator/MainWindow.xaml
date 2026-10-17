@@ -5,11 +5,12 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:Emergency_Response_Simulator.ViewModels"
         xmlns:mapsui="clr-namespace:Mapsui.UI.Wpf;assembly=Mapsui.UI.Wpf"
+        xmlns:acc="clr-namespace:Emergency_Response_Simulator.Accessibility"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         Title="Emergency Response Simulator" Height="900" Width="1500" MinHeight="600" MinWidth="1000"
         WindowState="Maximized"
-        Background="{StaticResource BackgroundBrush}" Foreground="{StaticResource TextBrush}"
+        Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextBrush}"
         FontFamily="Segoe UI" FontSize="13" PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.Resources>
@@ -23,13 +24,13 @@
                           DisplayMemberPath="Name" Width="140" FontSize="11" />
                 <TextBlock VerticalAlignment="Center">
                     <Run Text="{Binding Callsign, Mode=OneWay}" />
-                    <Run Text="{Binding Status, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" FontSize="11" />
+                    <Run Text="{Binding Status, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" FontSize="11" />
                 </TextBlock>
             </DockPanel>
         </DataTemplate>
 
         <Style x:Key="EmptyHint" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
             <Setter Property="FontStyle" Value="Italic" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
@@ -45,52 +46,59 @@
         </Grid.RowDefinitions>
 
         <!-- ===== Header: incident, clock, simulation controls ===== -->
-        <Border Grid.Row="0" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource BorderBrush}"
+        <Border Grid.Row="0" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="0,0,0,1" Padding="12,8">
             <DockPanel LastChildFill="True">
-                <ToggleButton DockPanel.Dock="Left" Content="☰ Layers" ToolTip="Show or hide map layers"
+                <ToggleButton DockPanel.Dock="Left" Content="{acc:Loc Header.Layers}" ToolTip="{acc:Loc Action.ToggleLayers}"
+                              AutomationProperties.Name="{acc:Loc Action.ToggleLayers}"
                               IsChecked="{Binding IsLeftPanelOpen}" Margin="0,0,12,0" />
 
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding CommandMessage}" VerticalAlignment="Center" Margin="0,0,16,0"
-                               MaxWidth="420" TextTrimming="CharacterEllipsis">
+                    <!-- Screen readers announce each command's outcome as it arrives (Phase 21). -->
+                    <TextBlock x:Name="CommandMessageText" Text="{Binding CommandMessage}" VerticalAlignment="Center" Margin="0,0,16,0"
+                               MaxWidth="420" TextTrimming="CharacterEllipsis" ToolTip="{Binding CommandMessage}"
+                               AutomationProperties.LiveSetting="Assertive" AutomationProperties.Name="{Binding CommandMessage}">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
-                                <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource OkBrush}" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding CommandFailed}" Value="True">
-                                        <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                        <Setter Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
-                    <TextBlock Text="{Binding EventStoreLabel}" Foreground="{StaticResource MutedTextBrush}"
+                    <TextBlock Text="{Binding EventStoreLabel}" Foreground="{DynamicResource MutedTextBrush}"
                                VerticalAlignment="Center" Margin="0,0,16,0" />
                     <!-- Role workspaces (Phase 11 M3): a default layout per role over the same COP. -->
                     <ComboBox ItemsSource="{Binding Workspaces}" SelectedItem="{Binding SelectedWorkspace}" Width="170" Margin="0,0,8,0"
-                              VerticalAlignment="Center" ToolTip="{Binding SelectedWorkspace.Purpose}" />
-                    <Button Content="🎛 Console" Command="{Binding OpenConsoleCommand}" Margin="0,0,8,0"
+                              VerticalAlignment="Center" ToolTip="{Binding SelectedWorkspace.Purpose}"
+                              AutomationProperties.Name="{acc:Loc Settings.Workspace}" AutomationProperties.HelpText="{Binding SelectedWorkspace.Purpose}" />
+                    <Button Content="{acc:Loc Header.Display}" Click="DisplaySettings_Click" Margin="0,0,8,0"
+                            AutomationProperties.Name="{acc:Loc Action.OpenSettings}"
+                            ToolTip="Display and accessibility: theme and night operations, colour vision, reading font and size, language, voice commands, shortcuts, workspace and pop-out panels (Ctrl+,)" />
+                    <Button Content="{acc:Loc Header.Console}" Command="{Binding OpenConsoleCommand}" Margin="0,0,8,0" AutomationProperties.Name="{acc:Loc Name.Console}"
                             Visibility="{Binding IsConsoleAvailable, Converter={StaticResource BoolToVisibility}}"
                             ToolTip="Instructor console: fire, hold and skip injects, watch the players, role-play, take over AI roles" />
-                    <Button Content="🧩 Scenarios" Command="{Binding OpenScenariosCommand}" Margin="0,0,8,0"
+                    <Button Content="{acc:Loc Header.Scenarios}" Command="{Binding OpenScenariosCommand}" Margin="0,0,8,0" AutomationProperties.Name="{acc:Loc Name.Scenarios}"
                             Visibility="{Binding IsConsoleAvailable, Converter={StaticResource BoolToVisibility}}"
                             ToolTip="Scenario editor: design scenarios with triggers, branches and injects, save them to the library, run them now; difficulty and random events" />
-                    <Button Content="🔗 Standards" Command="{Binding OpenDataExchangeCommand}" Margin="0,0,8,0"
+                    <Button Content="{acc:Loc Header.Standards}" Command="{Binding OpenDataExchangeCommand}" Margin="0,0,8,0" AutomationProperties.Name="{acc:Loc Action.OpenStandards}"
                             ToolTip="Data standards and NIMS: export or import CAP, EDXL, NIEM and HL7; check the response against NIMS/ICS" />
-                    <Button Content="📄 Forms" Command="{Binding OpenFormsCommand}" Margin="0,0,8,0"
+                    <Button Content="{acc:Loc Header.Forms}" Command="{Binding OpenFormsCommand}" Margin="0,0,8,0" AutomationProperties.Name="{acc:Loc Action.OpenForms}"
                             ToolTip="ICS forms 201–220, the IAP package, situation reports and the decision log" />
-                    <Button Content="📊 AAR" Command="{Binding OpenAarCommand}" Margin="0,0,8,0"
+                    <Button Content="{acc:Loc Header.Aar}" Command="{Binding OpenAarCommand}" Margin="0,0,8,0" AutomationProperties.Name="{acc:Loc Action.OpenAar}"
                             ToolTip="After-action review: decision timeline, metrics, heatmaps, branch comparison and exportable reports" />
-                    <Button Content="📋 IAP Builder" Command="{Binding OpenIapCommand}" Margin="0,0,12,0"
+                    <Button Content="{acc:Loc Header.Iap}" Command="{Binding OpenIapCommand}" Margin="0,0,12,0" AutomationProperties.Name="{acc:Loc Action.OpenIap}"
                             ToolTip="Incident Action Plan for the selected incident: objectives, organisation, assignments, comms, medical and safety plans" />
-                    <Button Command="{Binding TogglePlayCommand}" MinWidth="80" ToolTip="Start or pause the simulation">
+                    <Button Command="{Binding TogglePlayCommand}" MinWidth="80" ToolTip="{acc:Loc Action.TogglePlay}" AutomationProperties.Name="{acc:Loc Action.TogglePlay}">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
-                                <Setter Property="Content" Value="▶ Start" />
+                                <Setter Property="Content" Value="{acc:Loc Header.Start}" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsRunning}" Value="True">
-                                        <Setter Property="Content" Value="⏸ Pause" />
+                                        <Setter Property="Content" Value="{acc:Loc Header.Pause}" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -106,34 +114,34 @@
                             <DataTemplate>
                                 <Button Content="{Binding}" ContentStringFormat="{}{0}×" Margin="2,0" Padding="8,4"
                                         Command="{Binding DataContext.SetTimeScaleCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        CommandParameter="{Binding}" ToolTip="Simulation speed" />
+                                        CommandParameter="{Binding}" ToolTip="{acc:Loc Header.Speed}" AutomationProperties.Name="{Binding StringFormat={}Speed {0} times}" />
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                     <StackPanel Margin="16,0,16,0" VerticalAlignment="Center">
                         <TextBlock Text="{Binding SimClock}" FontFamily="Consolas" FontSize="22" FontWeight="SemiBold"
                                    HorizontalAlignment="Right" />
-                        <TextBlock HorizontalAlignment="Right" Foreground="{StaticResource MutedTextBrush}" FontSize="11">
+                        <TextBlock HorizontalAlignment="Right" Foreground="{DynamicResource MutedTextBrush}" FontSize="11">
                             <Run Text="{Binding SimDate, Mode=OneWay}" />
                             <Run Text="·" />
                             <Run Text="{Binding TimeScale, Mode=OneWay, StringFormat={}{0}×}" />
                         </TextBlock>
                     </StackPanel>
-                    <ToggleButton Content="Comms / Incident ☰" ToolTip="Show or hide the communications hub and incident detail"
+                    <ToggleButton Content="{acc:Loc Header.Panels}" ToolTip="{acc:Loc Action.TogglePanels}" AutomationProperties.Name="{acc:Loc Action.TogglePanels}"
                                   IsChecked="{Binding IsRightPanelOpen}" />
                 </StackPanel>
 
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="{Binding IncidentTitle}" FontSize="17" FontWeight="Bold" />
                     <!-- An observer's client is read-only (Phase 11 M6). -->
-                    <TextBlock Text="{Binding ObserverBanner}" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"
+                    <TextBlock Text="{Binding ObserverBanner}" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"
                                Visibility="{Binding IsObserving, Converter={StaticResource BoolToVisibility}}" />
-                    <TextBlock Text="{Binding IncidentSubtitle}" Foreground="{StaticResource MutedTextBrush}" />
+                    <TextBlock Text="{Binding IncidentSubtitle}" Foreground="{DynamicResource MutedTextBrush}" />
                     <!-- Exercise control (Phase 12): the instructor speaking outside the world, until dismissed. -->
-                    <Border DataContext="{Binding ExerciseControl}" Background="{StaticResource WarningBrush}" CornerRadius="3" Padding="6,2" Margin="0,3,0,0"
+                    <Border DataContext="{Binding ExerciseControl}" Background="{DynamicResource WarningBrush}" CornerRadius="3" Padding="6,2" Margin="0,3,0,0"
                             HorizontalAlignment="Left" Visibility="{Binding HasMessage, Converter={StaticResource BoolToVisibility}}">
                         <DockPanel>
-                            <Button DockPanel.Dock="Right" Content="✕" Command="{Binding DismissCommand}" Padding="4,0" Margin="8,0,0,0" ToolTip="Dismiss" />
+                            <Button DockPanel.Dock="Right" Content="✕" AutomationProperties.Name="Dismiss" Command="{Binding DismissCommand}" Padding="4,0" Margin="8,0,0,0" ToolTip="Dismiss" />
                             <TextBlock Text="{Binding Message}" FontWeight="SemiBold" Foreground="Black" TextWrapping="Wrap" MaxWidth="700" VerticalAlignment="Center" />
                         </DockPanel>
                     </Border>
@@ -142,7 +150,7 @@
         </Border>
 
         <!-- ===== Replay banner (the COP is showing the past) ===== -->
-        <Border Grid.Row="1" Background="#7A1F1F" Padding="12,5"
+        <Border Grid.Row="1" Background="{DynamicResource BannerBrush}" Padding="12,5"
                 Visibility="{Binding Timeline.IsReplay, Converter={StaticResource BoolToVisibility}}">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="Return to live" Command="{Binding Timeline.ReturnToLiveCommand}" />
@@ -173,7 +181,7 @@
                                                 <DataTemplate DataType="{x:Type vm:ToggleItem}">
                                                     <DockPanel>
                                                         <TextBlock DockPanel.Dock="Right" Text="{Binding Detail}" FontSize="11"
-                                                                   Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+                                                                   Foreground="{DynamicResource MutedTextBrush}" VerticalAlignment="Center" />
                                                         <CheckBox Content="{Binding Label}" IsChecked="{Binding IsOn}"
                                                                   IsEnabled="{Binding IsAvailable}" />
                                                     </DockPanel>
@@ -201,7 +209,7 @@
                                                 CommandParameter="{Binding Id}" />
                                         <StackPanel>
                                             <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Text="{Binding Type}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock Text="{Binding Type}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" />
                                         </StackPanel>
                                     </DockPanel>
                                 </DataTemplate>
@@ -217,43 +225,43 @@
 
                 <!-- Reported wind (what command has been told, not ground truth). -->
                 <Border VerticalAlignment="Top" HorizontalAlignment="Left" Margin="10" Padding="10,5"
-                        Background="#DD161D26" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4">
+                        Background="{DynamicResource OverlayBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4">
                     <TextBlock Text="{Binding WeatherSummary}" FontSize="12" />
                 </Border>
 
                 <!-- Zone drawing tool (dynamic GIS objects). -->
                 <Border VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="10,10,10,28" Padding="10,8" MaxWidth="560"
-                        Background="#EE161D26" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4"
+                        Background="{DynamicResource OverlayBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4"
                         DataContext="{Binding ZoneDrawing}">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal">
                             <ComboBox ItemsSource="{Binding ZoneTypes}" SelectedItem="{Binding SelectedType}"
                                       DisplayMemberPath="Label" Width="190" Margin="0,0,6,0" />
-                            <Button Content="&#x270E; Draw zone" Command="{Binding StartCommand}" />
+                            <Button Content="&#x270E; Draw zone" AutomationProperties.Name="Draw zone" Command="{Binding StartCommand}" />
                             <Button Content="Finish" Command="{Binding FinishCommand}"
                                     Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}" />
                             <Button Content="Cancel" Command="{Binding CancelCommand}"
                                     Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibility}}" />
                         </StackPanel>
-                        <TextBlock Text="{Binding Hint}" Foreground="{StaticResource MutedTextBrush}" FontSize="11"
+                        <TextBlock Text="{Binding Hint}" Foreground="{DynamicResource MutedTextBrush}" FontSize="11"
                                    TextWrapping="Wrap" Margin="0,6,0,0" />
-                        <TextBlock Text="{Binding Error}" Foreground="{StaticResource CriticalBrush}" FontSize="11" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Error}" Foreground="{DynamicResource CriticalBrush}" FontSize="11" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
 
                 <!-- Details of the clicked feature or location. -->
                 <Border VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="10,10,10,28" Padding="12,8" Width="330"
-                        Background="#EE161D26" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="4"
+                        Background="{DynamicResource OverlayBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" CornerRadius="4"
                         Visibility="{Binding IsInfoOpen, Converter={StaticResource BoolToVisibility}}">
                     <DockPanel>
                         <DockPanel DockPanel.Dock="Top">
-                            <Button DockPanel.Dock="Right" Content="&#x2715;" Padding="6,0" Margin="0" Command="{Binding CloseInfoCommand}" />
+                            <Button DockPanel.Dock="Right" Content="&#x2715;" AutomationProperties.Name="Close" ToolTip="Close" Padding="6,0" Margin="0" Command="{Binding CloseInfoCommand}" />
                             <TextBlock Text="{Binding InfoTitle}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,8,6" />
                         </DockPanel>
                         <ItemsControl ItemsSource="{Binding InfoLines}" MaxHeight="220">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding}" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding}" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -262,14 +270,14 @@
 
                 <!-- Hovering the top edge reveals the map-view panel. -->
                 <Border x:Name="TopHoverStrip" VerticalAlignment="Top" HorizontalAlignment="Center"
-                        Background="#CC161D26" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1,0,1,1"
+                        Background="{DynamicResource OverlayBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,1,1"
                         CornerRadius="0,0,4,4" Padding="14,2" MouseEnter="TopHoverStrip_MouseEnter">
-                    <TextBlock Text="▾ Map views" Foreground="{StaticResource MutedTextBrush}" FontSize="11" />
+                    <TextBlock Text="▾ Map views" Foreground="{DynamicResource MutedTextBrush}" FontSize="11" />
                 </Border>
 
                 <Border x:Name="TopPanel" VerticalAlignment="Top" HorizontalAlignment="Center"
                         Style="{StaticResource Panel}" BorderThickness="1,0,1,1" CornerRadius="0,0,6,6"
-                        Background="#EE161D26" MouseLeave="TopPanel_MouseLeave"
+                        Background="{DynamicResource OverlayBrush}" MouseLeave="TopPanel_MouseLeave"
                         Visibility="{Binding IsTopPanelOpen, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel>
                         <TextBlock Text="MAP VIEW" Style="{StaticResource PanelHeader}" />
@@ -286,7 +294,7 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                            <Rectangle Width="1" Fill="{StaticResource BorderBrush}" Margin="4,0,14,0" />
+                            <Rectangle Width="1" Fill="{DynamicResource BorderBrush}" Margin="4,0,14,0" />
                             <CheckBox Content="{Binding AreaCodes.Label}" IsChecked="{Binding AreaCodes.IsOn}" Margin="0" />
                         </StackPanel>
                     </StackPanel>
@@ -296,8 +304,8 @@
             <!-- Right: communications hub and incident detail -->
             <Border Grid.Column="2" Width="360" Style="{StaticResource Panel}" BorderThickness="1,0,0,0" Padding="8"
                     Visibility="{Binding IsRightPanelOpen, Converter={StaticResource BoolToVisibility}}">
-                <TabControl SelectedIndex="{Binding RightPanelTab}">
-                    <TabItem Header="COMMS HUB" Visibility="{Binding ShowComms, Converter={StaticResource BoolToVisibility}}">
+                <TabControl x:Name="RightTabs" SelectedIndex="{Binding RightPanelTab}">
+                    <TabItem Header="{acc:Loc Tab.Comms}" Visibility="{Binding ShowComms, Converter={StaticResource BoolToVisibility}}">
                         <DockPanel DataContext="{Binding CommsHub}">
                             <!-- Voice on the radio (Phase 11 M7): push-to-talk on the role's channels; networked only. -->
                             <Border DockPanel.Dock="Top" Style="{StaticResource Panel}" Padding="6" Margin="0,0,0,6"
@@ -324,7 +332,7 @@
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
-                                    <TextBlock x:Name="VoiceStatus" AutomationProperties.AutomationId="VoiceStatus" Text="{Binding Status}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                    <TextBlock x:Name="VoiceStatus" AutomationProperties.AutomationId="VoiceStatus" Text="{Binding Status}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" />
                                 </StackPanel>
                             </Border>
                             <!-- Which traffic to show -->
@@ -354,9 +362,9 @@
                                                 <ColumnDefinition Width="60" />
                                                 <ColumnDefinition Width="34" />
                                             </Grid.ColumnDefinitions>
-                                            <Ellipse x:Name="Led" Width="8" Height="8" Fill="{StaticResource OkBrush}" VerticalAlignment="Center" />
+                                            <Ellipse x:Name="Led" Width="8" Height="8" Fill="{DynamicResource OkBrush}" VerticalAlignment="Center" />
                                             <TextBlock Grid.Column="1" Text="{Binding Id}" FontFamily="Consolas" FontSize="11" />
-                                            <TextBlock Grid.Column="2" FontSize="11" TextTrimming="CharacterEllipsis" Foreground="{StaticResource MutedTextBrush}">
+                                            <TextBlock Grid.Column="2" FontSize="11" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource MutedTextBrush}">
                                                 <Run Text="{Binding OnAir, Mode=OneWay}" /> <Run Text="{Binding Patched, Mode=OneWay}" />
                                             </TextBlock>
                                             <ProgressBar Grid.Column="3" Value="{Binding Utilisation, Mode=OneWay}" Maximum="1" Height="6" Margin="4,0" />
@@ -364,10 +372,10 @@
                                         </Grid>
                                         <DataTemplate.Triggers>
                                             <DataTrigger Binding="{Binding Busy}" Value="True">
-                                                <Setter TargetName="Led" Property="Fill" Value="{StaticResource CriticalBrush}" />
+                                                <Setter TargetName="Led" Property="Fill" Value="{DynamicResource CriticalBrush}" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding Congested}" Value="True">
-                                                <Setter TargetName="Load" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                <Setter TargetName="Load" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                             </DataTrigger>
                                         </DataTemplate.Triggers>
                                     </DataTemplate>
@@ -375,7 +383,7 @@
                             </ItemsControl>
 
                             <!-- Push to talk -->
-                            <Border DockPanel.Dock="Top" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="6" Margin="0,0,0,6">
+                            <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="6" Margin="0,0,0,6">
                                 <StackPanel>
                                     <DockPanel>
                                         <ComboBox DockPanel.Dock="Left" ItemsSource="{Binding TalkChannels}" SelectedItem="{Binding TalkChannel}" Width="120"
@@ -399,7 +407,7 @@
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding Talking}" Value="True">
                                                             <Setter Property="Content" Value="● TRANSMITTING…" />
-                                                            <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                            <Setter Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -407,7 +415,7 @@
                                         </Button>
                                     </DockPanel>
                                     <TextBlock x:Name="ChannelHint" Text="{Binding TalkChannelState}" FontSize="11" Margin="0,3,0,0"
-                                               Foreground="{StaticResource MutedTextBrush}" />
+                                               Foreground="{DynamicResource MutedTextBrush}" />
                                 </StackPanel>
                             </Border>
 
@@ -419,7 +427,7 @@
                                             <Button DockPanel.Dock="Right" Content="Call back" Padding="6,0" FontSize="11"
                                                     Command="{Binding DataContext.CommsHub.CallBackCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                     CommandParameter="{Binding Id}" />
-                                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource WarningBrush}">
+                                            <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource WarningBrush}">
                                                 <Run Text="{Binding Time, Mode=OneWay}" /> <Run Text="Missed 999 call:" FontWeight="SemiBold" />
                                                 <Run Text="{Binding Detail, Mode=OneWay}" />
                                             </TextBlock>
@@ -446,7 +454,7 @@
                                                             CommandParameter="{Binding Id}" />
                                                     <TextBlock>
                                                         <Run Text="{Binding Channels, Mode=OneWay}" />
-                                                        <Run Text="{Binding State, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                        <Run Text="{Binding State, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" />
                                                     </TextBlock>
                                                 </DockPanel>
                                             </DataTemplate>
@@ -462,7 +470,7 @@
                                 </StackPanel>
                             </Expander>
 
-                            <Rectangle DockPanel.Dock="Top" Height="1" Fill="{StaticResource BorderBrush}" Margin="0,2,0,6" />
+                            <Rectangle DockPanel.Dock="Top" Height="1" Fill="{DynamicResource BorderBrush}" Margin="0,2,0,6" />
 
                             <!-- What was heard -->
                             <Grid>
@@ -475,15 +483,15 @@
                                                     <ColumnDefinition Width="*" />
                                                 </Grid.ColumnDefinitions>
                                                 <StackPanel>
-                                                    <TextBlock Text="{Binding Time}" FontFamily="Consolas" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
-                                                    <TextBlock Text="{Binding Channel}" FontFamily="Consolas" FontSize="9" Foreground="{StaticResource AccentBrush}"
+                                                    <TextBlock Text="{Binding Time}" FontFamily="Consolas" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" />
+                                                    <TextBlock Text="{Binding Channel}" FontFamily="Consolas" FontSize="9" Foreground="{DynamicResource AccentBrush}"
                                                                TextWrapping="Wrap" />
                                                 </StackPanel>
                                                 <StackPanel Grid.Column="1">
                                                     <TextBlock x:Name="Speakers" Text="{Binding Speakers}" FontWeight="SemiBold" TextWrapping="Wrap" />
                                                     <TextBlock x:Name="Body" Text="{Binding Text}" TextWrapping="Wrap" />
                                                     <TextBlock Text="{Binding Notes}" TextWrapping="Wrap" FontSize="11" FontStyle="Italic"
-                                                               Foreground="{StaticResource WarningBrush}" />
+                                                               Foreground="{DynamicResource WarningBrush}" />
                                                     <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
                                                         <Border x:Name="QualityBadge" Style="{StaticResource Badge}" Visibility="Collapsed">
                                                             <TextBlock Text="{Binding Quality}" FontSize="10" />
@@ -497,15 +505,15 @@
                                             </Grid>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding FromControl}" Value="True">
-                                                    <Setter TargetName="Speakers" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                                    <Setter TargetName="Speakers" Property="Foreground" Value="{DynamicResource AccentBrush}" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Quality}" Value="Broken">
                                                     <Setter TargetName="QualityBadge" Property="Visibility" Value="Visible" />
-                                                    <Setter TargetName="Body" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Body" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Quality}" Value="Garbled">
                                                     <Setter TargetName="QualityBadge" Property="Visibility" Value="Visible" />
-                                                    <Setter TargetName="Body" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Body" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -520,7 +528,7 @@
                             </Grid>
                         </DockPanel>
                     </TabItem>
-                    <TabItem Header="INCIDENT" Visibility="{Binding ShowIncident, Converter={StaticResource BoolToVisibility}}">
+                    <TabItem Header="{acc:Loc Tab.Incident}" Visibility="{Binding ShowIncident, Converter={StaticResource BoolToVisibility}}">
                         <Grid DataContext="{Binding IncidentDetail}">
                             <TextBlock Style="{StaticResource EmptyHint}" Margin="4,8"
                                        Text="Select an incident on the board or the map, or open one from a report in the intelligence feed."
@@ -529,7 +537,7 @@
                                           Visibility="{Binding HasIncident, Converter={StaticResource BoolToVisibility}}">
                                 <StackPanel Margin="4">
                                     <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="Bold" TextWrapping="Wrap" />
-                                    <TextBlock Text="{Binding Summary}" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,2,0,10" />
+                                    <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,2,0,10" />
 
                                     <!-- Planning state: the plan in force and the builder (Phase 5). -->
                                     <Border Style="{StaticResource Badge}" Padding="8,5" Margin="0,0,0,10">
@@ -537,7 +545,7 @@
                                             <Button DockPanel.Dock="Right" Content="Open IAP" Padding="8,1" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
                                                     Command="{Binding DataContext.OpenIapCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
                                             <StackPanel>
-                                                <TextBlock Text="INCIDENT ACTION PLAN" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                <TextBlock Text="INCIDENT ACTION PLAN" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" />
                                                 <TextBlock Text="{Binding DataContext.PlanSummary, RelativeSource={RelativeSource AncestorType=Window}}" TextWrapping="Wrap" />
                                             </StackPanel>
                                         </DockPanel>
@@ -604,11 +612,11 @@
                                                 <TextBlock Text="min" Style="{StaticResource FieldLabel}" Margin="3,0,0,0" />
                                             </StackPanel>
                                         </Grid>
-                                        <Button Content="☁ Project plume" Command="{Binding ProjectCommand}" HorizontalAlignment="Left" Margin="0,0,0,4"
+                                        <Button AutomationProperties.Name="Project plume" Content="☁ Project plume" Command="{Binding ProjectCommand}" HorizontalAlignment="Left" Margin="0,0,0,4"
                                                 ToolTip="Runs the dispersion model with the reported wind; the result goes on the map for everyone, and anything sensitive inside raises an alert" />
                                         <StackPanel Visibility="{Binding HasProjection, Converter={StaticResource BoolToVisibility}}">
                                             <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                            <TextBlock Text="{Binding Inputs}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,0,0,4" />
+                                            <TextBlock Text="{Binding Inputs}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,0,0,4" />
                                             <ItemsControl ItemsSource="{Binding Zones}" Margin="0,0,0,4">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate DataType="{x:Type vm:PlumeZoneRow}">
@@ -621,15 +629,15 @@
                                                             </Grid.ColumnDefinitions>
                                                             <TextBlock x:Name="Level" Text="{Binding Name}" FontWeight="SemiBold" />
                                                             <TextBlock Grid.Column="1" Text="{Binding Reach}" TextAlignment="Right" Margin="0,0,6,0" />
-                                                            <TextBlock Grid.Column="2" Text="{Binding Threshold}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                            <TextBlock Grid.Column="2" Text="{Binding Threshold}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" />
                                                             <TextBlock Grid.Column="3" Text="{Binding Inside}" FontSize="11" TextWrapping="Wrap" />
                                                         </Grid>
                                                         <DataTemplate.Triggers>
                                                             <DataTrigger Binding="{Binding Level}" Value="high">
-                                                                <Setter TargetName="Level" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                                <Setter TargetName="Level" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding Level}" Value="moderate">
-                                                                <Setter TargetName="Level" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                                <Setter TargetName="Level" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                                             </DataTrigger>
                                                         </DataTemplate.Triggers>
                                                     </DataTemplate>
@@ -640,7 +648,7 @@
                                                     <Style TargetType="TextBlock">
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding HasPressing}" Value="True">
-                                                                <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                                <Setter Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                                 <Setter Property="FontWeight" Value="SemiBold" />
                                                             </DataTrigger>
                                                         </Style.Triggers>
@@ -660,7 +668,7 @@
                                     </StackPanel>
 
                                     <DockPanel Margin="0,0,0,4">
-                                        <Button DockPanel.Dock="Right" Content="↻" Padding="6,0" Margin="0" Command="{Binding RankCommand}"
+                                        <Button DockPanel.Dock="Right" Content="↻" AutomationProperties.Name="Recalculate road ETAs" Padding="6,0" Margin="0" Command="{Binding RankCommand}"
                                                 ToolTip="Recalculate road ETAs" />
                                         <TextBlock Text="CLOSEST AVAILABLE UNITS (BY ROAD)" Style="{StaticResource PanelHeader}" Margin="0" />
                                     </DockPanel>
@@ -672,18 +680,18 @@
                                                             Command="{Binding DataContext.DispatchUnitCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                             CommandParameter="{Binding UnitId}" />
                                                     <TextBlock DockPanel.Dock="Right" Text="{Binding Distance}" Width="56" TextAlignment="Right"
-                                                               Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+                                                               Foreground="{DynamicResource MutedTextBrush}" VerticalAlignment="Center" />
                                                     <TextBlock DockPanel.Dock="Right" Text="{Binding Eta}" Width="44" TextAlignment="Right"
                                                                FontFamily="Consolas" FontWeight="SemiBold" VerticalAlignment="Center" />
                                                     <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
                                                         <Run Text="{Binding Callsign, Mode=OneWay}" FontWeight="SemiBold" />
-                                                        <Run Text="{Binding Type, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                        <Run Text="{Binding Type, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" />
                                                     </TextBlock>
                                                 </DockPanel>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
-                                    <TextBlock Text="{Binding RankingNote}" FontSize="11" Foreground="{StaticResource MutedTextBrush}"
+                                    <TextBlock Text="{Binding RankingNote}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}"
                                                TextWrapping="Wrap" Margin="0,0,0,12" />
 
                                     <TextBlock Text="ASSIGNED RESOURCES" Style="{StaticResource PanelHeader}" />
@@ -692,7 +700,7 @@
                                     <ItemsControl ItemsSource="{Binding Reports}" Margin="0,0,0,12">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,0,0,4" Foreground="{StaticResource MutedTextBrush}" />
+                                                <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,0,0,4" Foreground="{DynamicResource MutedTextBrush}" />
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
@@ -702,14 +710,14 @@
                             </ScrollViewer>
                         </Grid>
                     </TabItem>
-                    <TabItem Header="UNIT" Visibility="{Binding ShowUnit, Converter={StaticResource BoolToVisibility}}">
+                    <TabItem Header="{acc:Loc Tab.Unit}" Visibility="{Binding ShowUnit, Converter={StaticResource BoolToVisibility}}">
                         <Grid DataContext="{Binding UnitDetail}">
                             <TextBlock Style="{StaticResource EmptyHint}" Margin="4,8"
                                        Text="Click a unit on the map or in the resource board to see its live AVL data."
                                        Visibility="{Binding HasUnit, Converter={x:Static vm:Converters.FalseToVisible}}" />
                             <StackPanel Margin="4" Visibility="{Binding HasUnit, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="{Binding Callsign}" FontSize="17" FontWeight="Bold" />
-                                <TextBlock Text="{Binding Subtitle}" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding StatusText}" Style="{StaticResource UnitStatusText}" FontSize="15" Margin="0,6,0,10" />
                                 <ItemsControl ItemsSource="{Binding Rows}">
                                     <ItemsControl.ItemTemplate>
@@ -728,7 +736,7 @@
                             </StackPanel>
                         </Grid>
                     </TabItem>
-                    <TabItem Header="ICS" Visibility="{Binding ShowIcs, Converter={StaticResource BoolToVisibility}}">
+                    <TabItem Header="{acc:Loc Tab.Ics}" Visibility="{Binding ShowIcs, Converter={StaticResource BoolToVisibility}}">
                         <Grid DataContext="{Binding Ics}">
                             <TextBlock Style="{StaticResource EmptyHint}" Margin="4,8"
                                        Text="Select an incident to build its command structure."
@@ -745,7 +753,7 @@
                                                             Command="{Binding AssignCommand}" />
                                                     <StackPanel DockPanel.Dock="Left" Width="128">
                                                         <TextBlock Text="{Binding Label}" />
-                                                        <TextBlock Text="{Binding Staff}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                        <TextBlock Text="{Binding Staff}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" />
                                                     </StackPanel>
                                                     <!-- Networked: pick a participant to fill it (they take the role in the session). -->
                                                     <ComboBox DockPanel.Dock="Right" Width="96" Margin="4,0,0,0" FontSize="11"
@@ -765,20 +773,20 @@
                                             <DataTemplate DataType="{x:Type vm:SpanRow}">
                                                 <DockPanel Margin="0,1">
                                                     <TextBlock x:Name="Rating" DockPanel.Dock="Right" Text="{Binding Rating}" Width="44" TextAlignment="Right"
-                                                               FontWeight="SemiBold" Foreground="{StaticResource OkBrush}" />
+                                                               FontWeight="SemiBold" Foreground="{DynamicResource OkBrush}" />
                                                     <TextBlock DockPanel.Dock="Right" Text="{Binding DirectReports}" Width="30" TextAlignment="Right"
                                                                FontFamily="Consolas" />
                                                     <TextBlock Text="{Binding Supervisor}" TextTrimming="CharacterEllipsis" />
                                                 </DockPanel>
                                                 <DataTemplate.Triggers>
                                                     <DataTrigger Binding="{Binding Rating}" Value="Over">
-                                                        <Setter TargetName="Rating" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                        <Setter TargetName="Rating" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding Rating}" Value="Under">
-                                                        <Setter TargetName="Rating" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                        <Setter TargetName="Rating" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding Rating}" Value="Idle">
-                                                        <Setter TargetName="Rating" Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                                                        <Setter TargetName="Rating" Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
                                                     </DataTrigger>
                                                 </DataTemplate.Triggers>
                                             </DataTemplate>
@@ -789,7 +797,7 @@
                                     <ItemsControl ItemsSource="{Binding Groups}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="{x:Type vm:GroupRow}">
-                                                <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="3" Padding="8,6" Margin="0,0,0,6">
+                                                <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="3" Padding="8,6" Margin="0,0,0,6">
                                                     <StackPanel>
                                                         <DockPanel>
                                                             <Button DockPanel.Dock="Right" Content="Disband" Padding="6,0" FontSize="11" Margin="0"
@@ -797,10 +805,10 @@
                                                                     CommandParameter="{Binding Id}" />
                                                             <TextBlock>
                                                                 <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
-                                                                <Run Text="{Binding Kind, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" FontSize="11" />
+                                                                <Run Text="{Binding Kind, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" FontSize="11" />
                                                             </TextBlock>
                                                         </DockPanel>
-                                                        <TextBlock Text="{Binding Supervisor}" Foreground="{StaticResource MutedTextBrush}" FontSize="11" />
+                                                        <TextBlock Text="{Binding Supervisor}" Foreground="{DynamicResource MutedTextBrush}" FontSize="11" />
                                                         <ItemsControl ItemsSource="{Binding Members}" ItemTemplate="{StaticResource UnitPlacementTemplate}" Margin="0,4,0,0" />
                                                     </StackPanel>
                                                 </Border>
@@ -833,8 +841,8 @@
                                 <UniformGrid Columns="2" Margin="0,0,0,6">
                                     <Button Content="Call PAR" Command="{Binding RequestParCommand}" Margin="0,0,2,0" Padding="6,3"
                                             ToolTip="Personnel Accountability Report: every crew at the scene counts its people over the radio" />
-                                    <Button Content="⚠ Evacuation signal" Command="{Binding EvacuateCommand}" Margin="2,0,0,0" Padding="6,3"
-                                            Foreground="{StaticResource CriticalBrush}" FontWeight="SemiBold"
+                                    <Button AutomationProperties.Name="Evacuation signal" Content="⚠ Evacuation signal" Command="{Binding EvacuateCommand}" Margin="2,0,0,0" Padding="6,3"
+                                            Foreground="{DynamicResource CriticalBrush}" FontWeight="SemiBold"
                                             ToolTip="Air horns and 'evacuate' on the radio: every crew withdraws from the building and reports a PAR. Operations go defensive." />
                                 </UniformGrid>
                                 <DockPanel Margin="0,0,0,2">
@@ -843,16 +851,16 @@
                                     <TextBlock DockPanel.Dock="Left" Text="Emergency traffic" VerticalAlignment="Center" Margin="0,0,6,0" />
                                     <ComboBox ItemsSource="{Binding RadioChannels}" SelectedItem="{Binding TrafficChannel}" />
                                 </DockPanel>
-                                <TextBlock x:Name="TrafficState" Text="{Binding EmergencyTraffic}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,8" />
+                                <TextBlock x:Name="TrafficState" Text="{Binding EmergencyTraffic}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" Margin="0,0,0,8" />
 
                                 <!-- Maydays -->
                                 <ItemsControl ItemsSource="{Binding Maydays}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:MaydayRow}">
-                                            <Border x:Name="Card" BorderBrush="{StaticResource CriticalBrush}" BorderThickness="2" CornerRadius="3" Padding="8,6" Margin="0,0,0,8">
+                                            <Border x:Name="Card" BorderBrush="{DynamicResource CriticalBrush}" BorderThickness="2" CornerRadius="3" Padding="8,6" Margin="0,0,0,8">
                                                 <StackPanel>
-                                                    <TextBlock x:Name="Title" Text="{Binding Title}" FontWeight="Bold" Foreground="{StaticResource CriticalBrush}" TextWrapping="Wrap" />
-                                                    <TextBlock Text="{Binding Time}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock x:Name="Title" Text="{Binding Title}" FontWeight="Bold" Foreground="{DynamicResource CriticalBrush}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding Time}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" />
                                                     <TextBlock Text="{Binding Details}" TextWrapping="Wrap" Margin="0,2,0,4" />
                                                     <TextBlock Text="{Binding Rescue}" FontSize="11" />
                                                     <DockPanel Margin="0,4,0,0" Visibility="{Binding NeedsRescue, Converter={StaticResource BoolToVisibility}}">
@@ -867,9 +875,9 @@
                                             </Border>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Active}" Value="False">
-                                                    <Setter TargetName="Card" Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+                                                    <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
                                                     <Setter TargetName="Card" Property="BorderThickness" Value="1" />
-                                                    <Setter TargetName="Title" Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                                                    <Setter TargetName="Title" Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -893,11 +901,11 @@
                                             </DockPanel>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Missing}" Value="True">
-                                                    <Setter TargetName="Line" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Line" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                     <Setter TargetName="Declare" Property="Visibility" Value="Visible" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Outstanding}" Value="True">
-                                                    <Setter TargetName="Line" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Line" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                                     <Setter TargetName="Declare" Property="Visibility" Value="Visible" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
@@ -918,18 +926,18 @@
                                 <ItemsControl ItemsSource="{Binding Crews}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:CrewRow}">
-                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="3" Padding="8,6" Margin="0,0,0,6">
+                                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="3" Padding="8,6" Margin="0,0,0,6">
                                                 <StackPanel>
                                                     <DockPanel>
-                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding Status}" FontSize="11" Foreground="{StaticResource MutedTextBrush}"
+                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding Status}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}"
                                                                    VerticalAlignment="Center" />
                                                         <TextBlock Text="{Binding Callsign}" FontWeight="SemiBold" />
                                                     </DockPanel>
                                                     <TextBlock x:Name="Shift" Text="{Binding Shift}" FontSize="11" TextWrapping="Wrap" />
                                                     <TextBlock x:Name="Work" Text="{Binding Work}" FontSize="11" TextWrapping="Wrap" />
-                                                    <TextBlock x:Name="Condition" Text="{Binding Condition}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
-                                                    <TextBlock Text="{Binding Qualifications}" FontSize="11" FontFamily="Consolas" Foreground="{StaticResource AccentBrush}" TextWrapping="Wrap" />
-                                                    <TextBlock Text="{Binding Notes}" FontSize="11" FontStyle="Italic" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}"
+                                                    <TextBlock x:Name="Condition" Text="{Binding Condition}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" />
+                                                    <TextBlock Text="{Binding Qualifications}" FontSize="11" FontFamily="Consolas" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding Notes}" FontSize="11" FontStyle="Italic" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}"
                                                                Visibility="{Binding Notes, Converter={x:Static vm:Converters.TextToVisible}}" />
                                                     <Expander Header="Crew" FontSize="11" Margin="0,2,0,0">
                                                         <TextBlock Text="{Binding Roster}" FontSize="11" TextWrapping="Wrap" Margin="12,2,0,0" />
@@ -955,13 +963,13 @@
                                             </Border>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding ShiftOver}" Value="True">
-                                                    <Setter TargetName="Shift" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Shift" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding RehabDue}" Value="True">
-                                                    <Setter TargetName="Work" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Work" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding ConditionWarning}" Value="True">
-                                                    <Setter TargetName="Condition" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Condition" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -1015,7 +1023,7 @@
                                                     <StackPanel>
                                                         <TextBlock x:Name="Header" Text="{Binding Header}" FontWeight="SemiBold" TextWrapping="Wrap" />
                                                         <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="11" Margin="0,2" />
-                                                        <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                        <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" />
                                                         <DockPanel Margin="0,4,0,0" Visibility="{Binding Waiting, Converter={StaticResource BoolToVisibility}}">
                                                             <Button DockPanel.Dock="Right" Content="Call back" Padding="6,1" Margin="4,0,0,0"
                                                                     Command="{Binding DataContext.AnswerPoliticalCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" />
@@ -1025,7 +1033,7 @@
                                                 </Border>
                                                 <DataTemplate.Triggers>
                                                     <DataTrigger Binding="{Binding Pressing}" Value="True">
-                                                        <Setter TargetName="Header" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                        <Setter TargetName="Header" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                                     </DataTrigger>
                                                 </DataTemplate.Triggers>
                                             </DataTemplate>
@@ -1037,14 +1045,14 @@
                                 <ItemsControl ItemsSource="{Binding Disputes}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:DisputeRow}">
-                                            <Border x:Name="Card" BorderBrush="{StaticResource WarningBrush}" BorderThickness="2" CornerRadius="3" Padding="8,6" Margin="0,0,0,8">
+                                            <Border x:Name="Card" BorderBrush="{DynamicResource WarningBrush}" BorderThickness="2" CornerRadius="3" Padding="8,6" Margin="0,0,0,8">
                                                 <StackPanel>
-                                                    <TextBlock x:Name="Title" Text="{Binding Title}" FontWeight="Bold" Foreground="{StaticResource WarningBrush}" TextWrapping="Wrap" />
-                                                    <TextBlock FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap">
+                                                    <TextBlock x:Name="Title" Text="{Binding Title}" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" />
+                                                    <TextBlock FontSize="11" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap">
                                                         <Run Text="{Binding Agency, Mode=OneWay}" /> · <Run Text="{Binding Time, Mode=OneWay}" />
                                                     </TextBlock>
                                                     <TextBlock Text="{Binding Position}" TextWrapping="Wrap" Margin="0,2,0,2" />
-                                                    <TextBlock Text="{Binding Basis}" FontSize="11" FontStyle="Italic" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock Text="{Binding Basis}" FontSize="11" FontStyle="Italic" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" />
                                                     <TextBlock Text="{Binding Status}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0" />
                                                     <UniformGrid Columns="4" Margin="0,4,0,0" Visibility="{Binding CanAnswer, Converter={StaticResource BoolToVisibility}}">
                                                         <Button Content="Concede" Padding="4,2" Margin="0,0,2,0" ToolTip="{Binding ConcedeTip}"
@@ -1060,9 +1068,9 @@
                                             </Border>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Settled}" Value="True">
-                                                    <Setter TargetName="Card" Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+                                                    <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
                                                     <Setter TargetName="Card" Property="BorderThickness" Value="1" />
-                                                    <Setter TargetName="Title" Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                                                    <Setter TargetName="Title" Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -1073,13 +1081,13 @@
                                 <TextBlock Text="COMMAND (selected incident)" Style="{StaticResource PanelHeader}" />
                                 <TextBlock Text="{Binding IncidentLabel}" FontWeight="SemiBold" TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding CommandSummary}" FontSize="11" TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding JurisdictionSummary}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}"
+                                <TextBlock Text="{Binding JurisdictionSummary}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}"
                                            Visibility="{Binding JurisdictionSummary, Converter={x:Static vm:Converters.TextToVisible}}" />
                                 <ItemsControl ItemsSource="{Binding Members}" Margin="0,4,0,0">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:MemberRow}">
                                             <TextBlock TextWrapping="Wrap" FontSize="11" Margin="0,1">
-                                                <Run Text="{Binding Commander, Mode=OneWay}" FontWeight="SemiBold" /> (<Run Text="{Binding Agency, Mode=OneWay}" />) · <Run Text="{Binding Detail, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                <Run Text="{Binding Commander, Mode=OneWay}" FontWeight="SemiBold" /> (<Run Text="{Binding Agency, Mode=OneWay}" />) · <Run Text="{Binding Detail, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" />
                                             </TextBlock>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -1098,15 +1106,15 @@
                                             ToolTip="Staffing up takes time (5 min to monitoring, 15 to partial, 30 to full); standing down is immediate" />
                                     <ComboBox ItemsSource="{Binding EocLevelChoices}" SelectedItem="{Binding SelectedEocLevel}" />
                                 </DockPanel>
-                                <TextBlock Text="{Binding EocImplications}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,4" />
+                                <TextBlock Text="{Binding EocImplications}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" Margin="0,0,0,4" />
                                 <Expander Header="Seats" FontSize="11" Margin="0,0,0,4">
                                     <ItemsControl ItemsSource="{Binding EocSeats}" Margin="12,2,0,0">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="{x:Type vm:SeatRow}">
-                                                <TextBlock x:Name="Seat" Text="{Binding Function}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                <TextBlock x:Name="Seat" Text="{Binding Function}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" />
                                                 <DataTemplate.Triggers>
                                                     <DataTrigger Binding="{Binding Staffed}" Value="True">
-                                                        <Setter TargetName="Seat" Property="Foreground" Value="{StaticResource OkBrush}" />
+                                                        <Setter TargetName="Seat" Property="Foreground" Value="{DynamicResource OkBrush}" />
                                                     </DataTrigger>
                                                 </DataTemplate.Triggers>
                                             </DataTemplate>
@@ -1123,7 +1131,7 @@
 
                                 <!-- Public information -->
                                 <TextBlock Text="PUBLIC INFORMATION" Style="{StaticResource PanelHeader}" />
-                                <TextBlock Text="{Binding PioSummary}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                <TextBlock Text="{Binding PioSummary}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" />
                                 <TextBox Text="{Binding StatementText, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="40" Margin="0,4,0,2"
                                          ToolTip="Tell the public what to do (evacuate, stay indoors, avoid the area): warned people act sooner, and more of them do" />
                                 <Button Content="Issue statement" Command="{Binding IssueStatementCommand}" Padding="6,2" Margin="0,0,0,4" HorizontalAlignment="Right" />
@@ -1131,12 +1139,12 @@
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:EnquiryRow}">
                                             <StackPanel Margin="0,2">
-                                                <TextBlock x:Name="Header" Text="{Binding Header}" FontSize="11" Foreground="{StaticResource WarningBrush}" TextWrapping="Wrap" />
+                                                <TextBlock x:Name="Header" Text="{Binding Header}" FontSize="11" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" />
                                                 <TextBlock Text="{Binding Question}" FontSize="11" TextWrapping="Wrap" />
                                             </StackPanel>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Answered}" Value="True">
-                                                    <Setter TargetName="Header" Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                                                    <Setter TargetName="Header" Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -1147,11 +1155,11 @@
                                         <DataTemplate DataType="{x:Type vm:StatementRow}">
                                             <StackPanel Margin="0,2">
                                                 <TextBlock x:Name="Header" Text="{Binding Header}" FontSize="11" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                                <TextBlock Text="{Binding Text}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                                <TextBlock Text="{Binding Text}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" />
                                             </StackPanel>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Conflicting}" Value="True">
-                                                    <Setter TargetName="Header" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Header" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -1169,17 +1177,17 @@
                                 <ItemsControl ItemsSource="{Binding Agencies}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:AgencyRow}">
-                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="3" Padding="8,6" Margin="0,0,0,6">
+                                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="3" Padding="8,6" Margin="0,0,0,6">
                                                 <StackPanel>
                                                     <DockPanel>
-                                                        <TextBlock x:Name="Standing" DockPanel.Dock="Right" Text="{Binding Standing}" FontSize="11" Foreground="{StaticResource OkBrush}"
+                                                        <TextBlock x:Name="Standing" DockPanel.Dock="Right" Text="{Binding Standing}" FontSize="11" Foreground="{DynamicResource OkBrush}"
                                                                    VerticalAlignment="Center" ToolTip="How the agency feels about you: overruling it makes it slower to share and quicker to object" />
                                                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
                                                     </DockPanel>
-                                                    <TextBlock Text="{Binding Detail}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock Text="{Binding Detail}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" />
                                                     <TextBlock Text="{Binding Priority}" FontSize="11" TextWrapping="Wrap" FontStyle="Italic"
                                                                Visibility="{Binding Priority, Converter={x:Static vm:Converters.TextToVisible}}" />
-                                                    <TextBlock Text="{Binding Role}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource AccentBrush}"
+                                                    <TextBlock Text="{Binding Role}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource AccentBrush}"
                                                                Visibility="{Binding Role, Converter={x:Static vm:Converters.TextToVisible}}" />
                                                     <WrapPanel Margin="0,4,0,0">
                                                         <Button Content="Ask for units" Padding="6,0" FontSize="11" Margin="0,0,4,2" IsEnabled="{Binding HasUnits}"
@@ -1193,7 +1201,7 @@
                                             </Border>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding StandingWarning}" Value="True">
-                                                    <Setter TargetName="Standing" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Standing" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -1208,7 +1216,7 @@
                                                 <StackPanel Margin="0,0,0,6">
                                                     <TextBlock Text="{Binding Provider}" FontWeight="SemiBold" />
                                                     <TextBlock Text="{Binding Covers}" FontSize="11" TextWrapping="Wrap" />
-                                                    <TextBlock Text="{Binding Terms}" FontSize="11" TextWrapping="Wrap" FontStyle="Italic" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock Text="{Binding Terms}" FontSize="11" TextWrapping="Wrap" FontStyle="Italic" Foreground="{DynamicResource MutedTextBrush}" />
                                                 </StackPanel>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
@@ -1225,24 +1233,24 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel Margin="2">
                                 <TextBlock Text="{Binding Summary}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding You}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,2,0,2" />
+                                <TextBlock Text="{Binding You}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" Margin="0,2,0,2" />
                                 <!-- What this role may do now (Phase 11 M3), including functions that fall to the IC. -->
                                 <TextBlock Text="{Binding Functions}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,2" />
-                                <TextBlock Text="{Binding Inherited}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource WarningBrush}" Margin="0,0,0,2"
+                                <TextBlock Text="{Binding Inherited}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource WarningBrush}" Margin="0,0,0,2"
                                            Visibility="{Binding HasInherited, Converter={StaticResource BoolToVisibility}}" />
-                                <TextBlock Text="{Binding Handover}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource AccentBrush}" Margin="0,0,0,2"
+                                <TextBlock Text="{Binding Handover}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,2"
                                            Visibility="{Binding HasHandover, Converter={StaticResource BoolToVisibility}}" />
                                 <Border Height="6" />
 
                                 <!-- The instructor's controls -->
                                 <StackPanel Visibility="{Binding IsInstructor, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,8">
                                     <TextBlock Text="INSTRUCTOR" Style="{StaticResource PanelHeader}" />
-                                    <Button Content="▶ Start the exercise" Command="{Binding StartCommand}" Padding="6,3" Margin="0,0,0,4" FontWeight="SemiBold"
+                                    <Button AutomationProperties.Name="Start the exercise" Content="▶ Start the exercise" Command="{Binding StartCommand}" Padding="6,3" Margin="0,0,0,4" FontWeight="SemiBold"
                                             Visibility="{Binding InLobby, Converter={StaticResource BoolToVisibility}}"
                                             ToolTip="Starts the clock for everyone; until then trainees can look but not give commands" />
                                     <DockPanel Margin="0,0,0,4">
                                         <Button DockPanel.Dock="Right" Content="End session" Command="{Binding EndCommand}" Margin="4,0,0,0" Padding="6,0"
-                                                Foreground="{StaticResource CriticalBrush}" />
+                                                Foreground="{DynamicResource CriticalBrush}" />
                                         <TextBox Text="{Binding EndReason, UpdateSourceTrigger=PropertyChanged}" ToolTip="Why the session ends (recorded)" />
                                     </DockPanel>
                                     <DockPanel>
@@ -1265,9 +1273,9 @@
                                             <StackPanel>
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock x:Name="Name" Text="{Binding Name}" FontWeight="SemiBold" />
-                                                    <TextBlock x:Name="Me" Text=" (you)" Foreground="{StaticResource AccentBrush}" Visibility="Collapsed" />
+                                                    <TextBlock x:Name="Me" Text=" (you)" Foreground="{DynamicResource AccentBrush}" Visibility="Collapsed" />
                                                 </StackPanel>
-                                                <TextBlock FontSize="11" Foreground="{StaticResource MutedTextBrush}">
+                                                <TextBlock FontSize="11" Foreground="{DynamicResource MutedTextBrush}">
                                                     <Run Text="{Binding Role, Mode=OneWay}" /> · <Run Text="{Binding Status, Mode=OneWay}" />
                                                 </TextBlock>
                                             </StackPanel>
@@ -1276,7 +1284,7 @@
                                                     <Setter TargetName="Me" Property="Visibility" Value="Visible" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Present}" Value="False">
-                                                    <Setter TargetName="Name" Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                                                    <Setter TargetName="Name" Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -1285,7 +1293,7 @@
 
                                 <TextBlock Text="HAND OVER YOUR ROLE" Style="{StaticResource PanelHeader}" />
                                 <TextBlock Text="Select who takes your role above, then the role you take on instead. You keep the role until the handover is done: a full briefing takes longer, a quick changeover passes nothing on."
-                                           FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,2" />
+                                           FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" Margin="0,0,0,2" />
                                 <CheckBox Content="Full briefing" IsChecked="{Binding FullBriefing}" Margin="0,0,0,4"
                                           ToolTip="Brief the incoming holder on the role's open business (takes longer than a quick changeover)" />
                                 <DockPanel>
@@ -1305,7 +1313,7 @@
                                 <TextBlock Text="FOLLOW" Style="{StaticResource PanelHeader}" />
                                 <ComboBox ItemsSource="{Binding FollowChoices}" SelectedItem="{Binding Following}" DisplayMemberPath="Label" Margin="0,0,0,2"
                                           ToolTip="Show their role's workspace and go wherever they act" />
-                                <TextBlock Text="{Binding FollowStatus}" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,8" />
+                                <TextBlock Text="{Binding FollowStatus}" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" Margin="0,0,0,8" />
 
                                 <TextBlock Text="NOTE AND RATE" Style="{StaticResource PanelHeader}" />
                                 <ComboBox ItemsSource="{Binding Players}" SelectedItem="{Binding NoteFor}" DisplayMemberPath="Label" Margin="0,0,0,4" ToolTip="Who the note is about" />
@@ -1316,36 +1324,36 @@
                                 <CheckBox IsChecked="{Binding TagLatest}" Margin="0,0,0,2">
                                     <TextBlock Text="{Binding LatestAction}" TextWrapping="Wrap" FontSize="11" />
                                 </CheckBox>
-                                <Button Content="📝 Record note" Command="{Binding RecordCommand}" HorizontalAlignment="Left" Padding="8,2" Margin="0,4,0,8" />
+                                <Button AutomationProperties.Name="Record note" Content="📝 Record note" Command="{Binding RecordCommand}" HorizontalAlignment="Left" Padding="8,2" Margin="0,4,0,8" />
                                 <TextBlock Text="Notes are never shown to the players during the exercise; every observer and the instructor sees them."
-                                           TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,8" />
+                                           TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" Margin="0,0,0,8" />
 
                                 <TextBlock Text="NOTES (latest first)" Style="{StaticResource PanelHeader}" />
                                 <ItemsControl ItemsSource="{Binding Notes}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:NoteRow}">
-                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,3">
+                                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,3">
                                                 <StackPanel>
                                                     <TextBlock FontSize="11">
-                                                        <Run Text="{Binding Time, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                        <Run Text="{Binding Time, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" />
                                                         <Run Text="{Binding Participant, Mode=OneWay}" FontWeight="SemiBold" />
                                                         <Run x:Name="Rating" Text="{Binding Rating, Mode=OneWay}" />
-                                                        <Run Text="{Binding Area, Mode=OneWay}" Foreground="{StaticResource AccentBrush}" />
-                                                        <Run Text="{Binding About, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                        <Run Text="{Binding Area, Mode=OneWay}" Foreground="{DynamicResource AccentBrush}" />
+                                                        <Run Text="{Binding About, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" />
                                                     </TextBlock>
                                                     <TextBlock Text="{Binding Note}" TextWrapping="Wrap" />
-                                                    <TextBlock Text="{Binding By, StringFormat='by {0}'}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock Text="{Binding By, StringFormat='by {0}'}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" />
                                                 </StackPanel>
                                             </Border>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Value}" Value="Competent">
-                                                    <Setter TargetName="Rating" Property="Foreground" Value="{StaticResource OkBrush}" />
+                                                    <Setter TargetName="Rating" Property="Foreground" Value="{DynamicResource OkBrush}" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Value}" Value="Developing">
-                                                    <Setter TargetName="Rating" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Rating" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Value}" Value="NotYetCompetent">
-                                                    <Setter TargetName="Rating" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Rating" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -1361,30 +1369,30 @@
                         </TabItem.Header>
                         <DockPanel Margin="2">
                             <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,2" />
-                            <TextBlock DockPanel.Dock="Top" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,6"
+                            <TextBlock DockPanel.Dock="Top" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" Margin="0,0,0,6"
                                        Text="Everything here needs your role's decision. Choose an item to go to its incident." />
-                            <ListBox ItemsSource="{Binding Items}" BorderThickness="0" Background="Transparent" Foreground="{StaticResource TextBrush}"
+                            <ListBox ItemsSource="{Binding Items}" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource TextBrush}"
                                      HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate DataType="{x:Type vm:DeskRow}">
-                                        <Border x:Name="Row" BorderBrush="{StaticResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,3" Cursor="Hand">
+                                        <Border x:Name="Row" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,3" Cursor="Hand">
                                             <Border.InputBindings>
                                                 <MouseBinding MouseAction="LeftClick" CommandParameter="{Binding}"
                                                               Command="{Binding DataContext.OpenCommand, RelativeSource={RelativeSource AncestorType=ListBox}}" />
                                             </Border.InputBindings>
                                             <StackPanel>
                                                 <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
-                                                <TextBlock FontSize="10" Foreground="{StaticResource MutedTextBrush}">
+                                                <TextBlock FontSize="10" Foreground="{DynamicResource MutedTextBrush}">
                                                     <Run Text="{Binding Function, Mode=OneWay}" /> · <Run Text="{Binding Age, Mode=OneWay}" />
                                                 </TextBlock>
                                             </StackPanel>
                                         </Border>
                                         <DataTemplate.Triggers>
                                             <DataTrigger Binding="{Binding Urgency}" Value="Overdue">
-                                                <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource WarningBrush}" />
+                                                <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource WarningBrush}" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding Urgency}" Value="Urgent">
-                                                <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource CriticalBrush}" />
+                                                <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource CriticalBrush}" />
                                             </DataTrigger>
                                         </DataTemplate.Triggers>
                                     </DataTemplate>
@@ -1401,17 +1409,17 @@
                             <StackPanel Margin="2">
                                 <!-- Press and rumours -->
                                 <TextBlock Text="PRESS &amp; RUMOURS" Style="{StaticResource PanelHeader}" />
-                                <TextBlock Text="{Binding PressSummary}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,2" />
+                                <TextBlock Text="{Binding PressSummary}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" Margin="0,0,0,2" />
                                 <TextBox Text="{Binding PressStatement, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="44"
                                          ToolTip="What you will say. It answers every journalist waiting, and deals with each rumour it speaks to (name the subject)." />
-                                <Button Content="🎤 Hold press conference" Command="{Binding HoldPressConferenceCommand}" HorizontalAlignment="Left" Margin="0,4,0,6" Padding="8,2" />
+                                <Button AutomationProperties.Name="Hold press conference" Content="🎤 Hold press conference" Command="{Binding HoldPressConferenceCommand}" HorizontalAlignment="Left" Margin="0,4,0,6" Padding="8,2" />
                                 <ItemsControl ItemsSource="{Binding Rumours}" Margin="0,0,0,10">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:RumourRow}">
-                                            <Border x:Name="Row" BorderBrush="{StaticResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,3" Margin="0,0,0,2">
+                                            <Border x:Name="Row" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,3" Margin="0,0,0,2">
                                                 <StackPanel>
                                                     <TextBlock Text="{Binding Claim, StringFormat='“{0}”'}" TextWrapping="Wrap" />
-                                                    <TextBlock x:Name="Status" Text="{Binding Status}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock x:Name="Status" Text="{Binding Status}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" />
                                                     <DockPanel Margin="0,2,0,0" Visibility="{Binding Spreading, Converter={StaticResource BoolToVisibility}}">
                                                         <Button DockPanel.Dock="Right" Content="Rebut" Padding="6,0" Margin="4,0,0,0" CommandParameter="{Binding}"
                                                                 Command="{Binding DataContext.RebutCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -1422,11 +1430,11 @@
                                             </Border>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Spreading}" Value="True">
-                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource WarningBrush}" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Contradicted}" Value="True">
-                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource CriticalBrush}" />
-                                                    <Setter TargetName="Status" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource CriticalBrush}" />
+                                                    <Setter TargetName="Status" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -1440,7 +1448,7 @@
                                 <ItemsControl ItemsSource="{Binding Vulnerable}" Margin="0,0,0,10">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:VulnerableRow}">
-                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,3">
+                                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,3">
                                                 <DockPanel>
                                                     <Button DockPanel.Dock="Right" Content="Assisted evacuation" Padding="6,0" FontSize="11" VerticalAlignment="Center"
                                                             Visibility="{Binding CanRequest, Converter={StaticResource BoolToVisibility}}" CommandParameter="{Binding ZoneId}"
@@ -1449,8 +1457,8 @@
                                                     <StackPanel>
                                                         <TextBlock Text="{Binding Zone}" FontWeight="SemiBold" />
                                                         <TextBlock Text="{Binding Counts}" TextWrapping="Wrap" />
-                                                        <TextBlock Text="{Binding Assistance}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
-                                                        <TextBlock Text="{Binding Source}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                                        <TextBlock Text="{Binding Assistance}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
+                                                        <TextBlock Text="{Binding Source}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
                                                     </StackPanel>
                                                 </DockPanel>
                                             </Border>
@@ -1474,7 +1482,7 @@
                                                 <TextBlock TextWrapping="Wrap">
                                                     <Run Text="{Binding Incident, Mode=OneWay}" FontWeight="SemiBold" />
                                                     <Run Text="{Binding Count, Mode=OneWay, StringFormat='· {0} people ·'}" />
-                                                    <Run Text="{Binding Status, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <Run Text="{Binding Status, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" />
                                                 </TextBlock>
                                             </DockPanel>
                                         </DataTemplate>
@@ -1495,16 +1503,16 @@
                                             <StackPanel Margin="0,1">
                                                 <TextBlock TextWrapping="Wrap">
                                                     <Run Text="{Binding Missing, Mode=OneWay}" FontWeight="SemiBold" />
-                                                    <Run Text="{Binding LastKnown, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <Run Text="{Binding LastKnown, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" />
                                                 </TextBlock>
                                                 <TextBlock x:Name="Status" FontSize="11" TextWrapping="Wrap">
-                                                    <Run Text="{Binding Caller, Mode=OneWay, StringFormat='{}{0} asked ·'}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <Run Text="{Binding Caller, Mode=OneWay, StringFormat='{}{0} asked ·'}" Foreground="{DynamicResource MutedTextBrush}" />
                                                     <Run Text="{Binding Status, Mode=OneWay}" />
                                                 </TextBlock>
                                             </StackPanel>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Alarm}" Value="True">
-                                                    <Setter TargetName="Status" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Status" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -1518,17 +1526,17 @@
                                 <TextBox Text="{Binding Decision, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,2" ToolTip="What was decided" />
                                 <TextBox Text="{Binding Rationale, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="36"
                                          ToolTip="Why: what you knew, what you weighed, who you consulted" />
-                                <Button Content="📒 Log decision" Command="{Binding RecordDecisionCommand}" HorizontalAlignment="Left" Margin="0,4,0,4" Padding="8,2" />
+                                <Button AutomationProperties.Name="Log decision" Content="📒 Log decision" Command="{Binding RecordDecisionCommand}" HorizontalAlignment="Left" Margin="0,4,0,4" Padding="8,2" />
                                 <ItemsControl ItemsSource="{Binding Log}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:LogRow}">
                                             <StackPanel Margin="0,1">
                                                 <TextBlock TextWrapping="Wrap">
-                                                    <Run Text="{Binding Time, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <Run Text="{Binding Time, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" />
                                                     <Run Text="{Binding Decision, Mode=OneWay}" FontWeight="SemiBold" />
                                                 </TextBlock>
                                                 <TextBlock Text="{Binding Rationale}" FontSize="11" TextWrapping="Wrap" />
-                                                <TextBlock Text="{Binding By}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                <TextBlock Text="{Binding By}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" />
                                             </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -1548,11 +1556,11 @@
                                     <Run Text="SUPPLIES ·" />
                                     <Run Text="{Binding IncidentLabel, Mode=OneWay}" />
                                 </TextBlock>
-                                <TextBlock Text="{Binding SuppliesSummary}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,0,0,2" />
+                                <TextBlock Text="{Binding SuppliesSummary}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,0,0,2" />
                                 <ItemsControl ItemsSource="{Binding Stocks}" Margin="0,0,0,4">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:SupplyRow}">
-                                            <Border x:Name="Row" BorderBrush="{StaticResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,1">
+                                            <Border x:Name="Row" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,1">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="110" />
@@ -1562,7 +1570,7 @@
                                                     </Grid.ColumnDefinitions>
                                                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                                                     <TextBlock Grid.Column="1" Text="{Binding OnHand}" />
-                                                    <TextBlock Grid.Column="2" Text="{Binding Rate}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock Grid.Column="2" Text="{Binding Rate}" Foreground="{DynamicResource MutedTextBrush}" />
                                                     <TextBlock x:Name="Left" Grid.Column="3" TextWrapping="Wrap">
                                                         <Run Text="{Binding Left, Mode=OneWay}" />
                                                         <Run Text="{Binding Status, Mode=OneWay}" FontSize="10" />
@@ -1571,11 +1579,11 @@
                                             </Border>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Alarm}" Value="1">
-                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource WarningBrush}" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Alarm}" Value="2">
-                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource CriticalBrush}" />
-                                                    <Setter TargetName="Left" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource CriticalBrush}" />
+                                                    <Setter TargetName="Left" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -1592,9 +1600,9 @@
                                     <ComboBox Grid.Column="2" ItemsSource="{Binding Tiers}" SelectedItem="{Binding SelectedTier}"
                                               ToolTip="Who supplies it: local is quickest but runs out; regional and national need a justification" />
                                 </Grid>
-                                <TextBlock Text="{Binding TierHint}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding TierHint}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
                                 <DockPanel Margin="0,2,0,6">
-                                    <Button DockPanel.Dock="Right" Content="📦 Order" Command="{Binding OrderCommand}" Padding="8,2" Margin="4,0,0,0" />
+                                    <Button AutomationProperties.Name="Order" DockPanel.Dock="Right" Content="📦 Order" Command="{Binding OrderCommand}" Padding="8,2" Margin="4,0,0,0" />
                                     <TextBox Text="{Binding Justification, UpdateSourceTrigger=PropertyChanged}" ToolTip="Justification: what it is for, and why local supplies won't do" />
                                 </DockPanel>
                                 <ItemsControl ItemsSource="{Binding Orders}" Margin="0,0,0,10">
@@ -1602,11 +1610,11 @@
                                         <DataTemplate DataType="{x:Type vm:SupplyOrderRow}">
                                             <TextBlock x:Name="Line" FontSize="11" TextWrapping="Wrap" Margin="0,1">
                                                 <Run Text="{Binding What, Mode=OneWay}" FontWeight="SemiBold" />
-                                                <Run Text="{Binding Status, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                <Run Text="{Binding Status, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" />
                                             </TextBlock>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Alarm}" Value="True">
-                                                    <Setter TargetName="Line" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Line" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -1621,7 +1629,7 @@
                                         <DataTemplate DataType="{x:Type vm:FacilityRow}">
                                             <TextBlock TextWrapping="Wrap" Margin="0,1">
                                                 <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
-                                                <Run Text="{Binding Kind, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" FontSize="11" />
+                                                <Run Text="{Binding Kind, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" FontSize="11" />
                                                 <LineBreak />
                                                 <Run Text="{Binding Units, Mode=OneWay}" FontSize="11" />
                                             </TextBlock>
@@ -1641,7 +1649,7 @@
                                 <ItemsControl ItemsSource="{Binding Fleet}" Margin="0,0,0,10">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:FleetRow}">
-                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,2">
+                                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,2">
                                                 <DockPanel>
                                                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                                                         <Button Content="Service" Padding="5,0" FontSize="11" CommandParameter="{Binding UnitId}"
@@ -1666,7 +1674,7 @@
                                             </Border>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Alarm}" Value="True">
-                                                    <Setter TargetName="Line" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Line" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -1681,13 +1689,13 @@
                                         <DataTemplate DataType="{x:Type vm:CostRow}">
                                             <DockPanel>
                                                 <TextBlock DockPanel.Dock="Right" Text="{Binding Amount}" />
-                                                <TextBlock Text="{Binding Category}" Foreground="{StaticResource MutedTextBrush}" />
+                                                <TextBlock Text="{Binding Category}" Foreground="{DynamicResource MutedTextBrush}" />
                                             </DockPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                                 <TextBlock Text="{Binding ClaimSummary}" TextWrapping="Wrap" FontSize="11" />
-                                <Button Content="💶 Claim from central government" Command="{Binding ClaimCommand}" HorizontalAlignment="Left" Margin="0,4,0,4" Padding="8,2"
+                                <Button AutomationProperties.Name="Claim from central government" Content="💶 Claim from central government" Command="{Binding ClaimCommand}" HorizontalAlignment="Left" Margin="0,4,0,4" Padding="8,2"
                                         ToolTip="Overtime, apparatus, mutual aid, supplies, repairs and properly let contracts since the declaration" />
                                 <ItemsControl ItemsSource="{Binding Claims}" Margin="0,0,0,6">
                                     <ItemsControl.ItemTemplate>
@@ -1697,7 +1705,7 @@
                                                     <Run Text="{Binding Submitted, Mode=OneWay}" FontWeight="SemiBold" />
                                                     <Run Text="{Binding Status, Mode=OneWay}" />
                                                 </TextBlock>
-                                                <TextBlock Text="{Binding Disallowed}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding Disallowed}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
                                             </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -1717,7 +1725,7 @@
                                 <TextBox Text="{Binding Scope, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,2" ToolTip="What it is for" />
                                 <TextBox Text="{Binding ContractJustification, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="32"
                                          ToolTip="Why a direct award, without competition: needed above the threshold" />
-                                <Button Content="📝 Award contract" Command="{Binding AwardContractCommand}" HorizontalAlignment="Left" Margin="0,4,0,4" Padding="8,2" />
+                                <Button AutomationProperties.Name="Award contract" Content="📝 Award contract" Command="{Binding AwardContractCommand}" HorizontalAlignment="Left" Margin="0,4,0,4" Padding="8,2" />
                                 <ItemsControl ItemsSource="{Binding Contracts}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:ContractRow}">
@@ -1727,11 +1735,11 @@
                                                     <TextBlock Text="{Binding Vendor}" FontWeight="SemiBold" />
                                                 </DockPanel>
                                                 <TextBlock Text="{Binding What}" FontSize="11" TextWrapping="Wrap" />
-                                                <TextBlock x:Name="Note" Text="{Binding Note}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                <TextBlock x:Name="Note" Text="{Binding Note}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" />
                                             </StackPanel>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Alarm}" Value="True">
-                                                    <Setter TargetName="Note" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Note" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -1752,11 +1760,11 @@
                                     <Run Text="PATIENTS ·" />
                                     <Run Text="{Binding IncidentLabel, Mode=OneWay}" />
                                 </TextBlock>
-                                <TextBlock Text="{Binding PatientSummary}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,0,0,2" />
+                                <TextBlock Text="{Binding PatientSummary}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,0,0,2" />
                                 <ItemsControl ItemsSource="{Binding Patients}" Margin="0,0,0,6">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:PatientRow}">
-                                            <Border x:Name="Row" BorderBrush="{StaticResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,1">
+                                            <Border x:Name="Row" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,1">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="55" />
@@ -1766,23 +1774,23 @@
                                                     </Grid.ColumnDefinitions>
                                                     <TextBlock Text="{Binding Tag}" FontWeight="SemiBold" />
                                                     <TextBlock Grid.Column="1" Text="{Binding Triage}" />
-                                                    <TextBlock Grid.Column="2" Text="{Binding Need}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock Grid.Column="2" Text="{Binding Need}" Foreground="{DynamicResource MutedTextBrush}" />
                                                     <TextBlock x:Name="Where" Grid.Column="3" Text="{Binding Where}" TextWrapping="Wrap" FontSize="11" />
                                                 </Grid>
                                             </Border>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Alarm}" Value="1">
-                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource WarningBrush}" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Alarm}" Value="2">
-                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource CriticalBrush}" />
-                                                    <Setter TargetName="Where" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource CriticalBrush}" />
+                                                    <Setter TargetName="Where" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <TextBlock Text="Where patients go (crews take them to the nearest open hospital otherwise):" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                <TextBlock Text="Where patients go (crews take them to the nearest open hospital otherwise):" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
                                 <Grid Margin="0,2,0,2">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="110" />
@@ -1810,12 +1818,12 @@
                                 <TextBlock Text="HOSPITALS: SPECIALIST BEDS, BLOOD, MORTUARY" Style="{StaticResource PanelHeader}" />
                                 <DockPanel Margin="0,0,0,2">
                                     <TextBox DockPanel.Dock="Right" Text="{Binding BloodUnits, UpdateSourceTrigger=PropertyChanged}" Width="45" ToolTip="Units of blood to ask the IBTS for" />
-                                    <TextBlock Text="Units of blood per request:" FontSize="11" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Units of blood per request:" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" VerticalAlignment="Center" />
                                 </DockPanel>
                                 <ItemsControl ItemsSource="{Binding Hospitals}" Margin="0,0,0,10">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:HospitalCareRow}">
-                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,2">
+                                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,2">
                                                 <DockPanel>
                                                     <Button DockPanel.Dock="Right" Content="Blood" Padding="5,0" FontSize="11" VerticalAlignment="Center" CommandParameter="{Binding HospitalId}"
                                                             Command="{Binding DataContext.RequestBloodCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -1824,7 +1832,7 @@
                                                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                                                         <TextBlock Text="{Binding Ed}" FontSize="11" />
                                                         <TextBlock Text="{Binding Specialties}" FontSize="11" TextWrapping="Wrap" />
-                                                        <TextBlock x:Name="Supplies" FontSize="10" Foreground="{StaticResource MutedTextBrush}">
+                                                        <TextBlock x:Name="Supplies" FontSize="10" Foreground="{DynamicResource MutedTextBrush}">
                                                             <Run Text="{Binding Blood, Mode=OneWay}" />
                                                             <Run Text="·" />
                                                             <Run Text="{Binding Morgue, Mode=OneWay}" />
@@ -1834,7 +1842,7 @@
                                             </Border>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding BloodLow}" Value="True">
-                                                    <Setter TargetName="Supplies" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Supplies" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -1860,11 +1868,11 @@
                                 <ItemsControl ItemsSource="{Binding Threats}" Margin="0,0,0,4">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:ThreatRow}">
-                                            <Border BorderBrush="{StaticResource CriticalBrush}" BorderThickness="3,0,0,1" Padding="5,2" Margin="0,0,0,2">
+                                            <Border BorderBrush="{DynamicResource CriticalBrush}" BorderThickness="3,0,0,1" Padding="5,2" Margin="0,0,0,2">
                                                 <StackPanel>
                                                     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
                                                     <TextBlock Text="{Binding Figures}" FontSize="11" TextWrapping="Wrap" />
-                                                    <TextBlock Text="{Binding Advice}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding Advice}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
                                                     <TextBlock Text="{Binding Orders}" FontSize="10" />
                                                     <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
                                                         <Button Content="Open point of dispensing" Padding="5,0" FontSize="11" CommandParameter="{Binding ThreatId}"
@@ -1892,7 +1900,7 @@
                                             </TextBlock>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Alarm}" Value="True">
-                                                    <Setter TargetName="Line" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Line" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -1932,19 +1940,19 @@
                                     <Run Text="EVACUATION ·" />
                                     <Run Text="{Binding IncidentLabel, Mode=OneWay}" />
                                 </TextBlock>
-                                <TextBlock Text="{Binding EvacuationSummary}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,0,0,2" />
+                                <TextBlock Text="{Binding EvacuationSummary}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,0,0,2" />
                                 <DockPanel Margin="0,0,0,2">
                                     <TextBox DockPanel.Dock="Right" Text="{Binding BusCount, UpdateSourceTrigger=PropertyChanged}" Width="35" ToolTip="Buses per request" />
-                                    <TextBlock Text="Buses per request:" FontSize="11" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Buses per request:" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" VerticalAlignment="Center" />
                                 </DockPanel>
                                 <ItemsControl ItemsSource="{Binding Evacuations}" Margin="0,0,0,10">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:EvacuationRow}">
-                                            <Border x:Name="Row" BorderBrush="{StaticResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,2" Margin="0,0,0,2">
+                                            <Border x:Name="Row" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,2" Margin="0,0,0,2">
                                                 <StackPanel>
                                                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                                                     <TextBlock Text="{Binding Progress}" FontSize="11" TextWrapping="Wrap" />
-                                                    <TextBlock FontSize="10" Foreground="{StaticResource MutedTextBrush}">
+                                                    <TextBlock FontSize="10" Foreground="{DynamicResource MutedTextBrush}">
                                                         <Run Text="{Binding Route, Mode=OneWay}" />
                                                         <Run Text="·" />
                                                         <Run Text="{Binding Buses, Mode=OneWay}" />
@@ -1967,7 +1975,7 @@
                                             </Border>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Alarm}" Value="True">
-                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource WarningBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -1986,7 +1994,7 @@
                                 <ItemsControl ItemsSource="{Binding Shelters}" Margin="0,0,0,10">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:ShelterRow}">
-                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,2">
+                                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,2">
                                                 <DockPanel>
                                                     <Button DockPanel.Dock="Right" Content="Security" Padding="5,0" FontSize="11" VerticalAlignment="Center" CommandParameter="{Binding ShelterId}"
                                                             Visibility="{Binding CanSecure, Converter={StaticResource BoolToVisibility}}"
@@ -1995,13 +2003,13 @@
                                                     <StackPanel>
                                                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                                                         <TextBlock Text="{Binding Status}" FontSize="11" />
-                                                        <TextBlock x:Name="Detail" Text="{Binding Detail}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                                        <TextBlock x:Name="Detail" Text="{Binding Detail}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
                                                     </StackPanel>
                                                 </DockPanel>
                                             </Border>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Alarm}" Value="True">
-                                                    <Setter TargetName="Detail" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Detail" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -2015,7 +2023,7 @@
                                 <ItemsControl ItemsSource="{Binding Assets}" Margin="0,0,0,10">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:AssetRow}">
-                                            <Border x:Name="Row" BorderBrush="{StaticResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,2" Margin="0,0,0,2">
+                                            <Border x:Name="Row" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,2" Margin="0,0,0,2">
                                                 <DockPanel>
                                                     <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center">
                                                         <Button Content="Generator" Padding="5,0" FontSize="11" CommandParameter="{Binding SiteId}"
@@ -2030,16 +2038,16 @@
                                                     <StackPanel>
                                                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
                                                         <TextBlock Text="{Binding Status}" FontSize="11" />
-                                                        <TextBlock Text="{Binding Detail}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                                        <TextBlock Text="{Binding Detail}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
                                                     </StackPanel>
                                                 </DockPanel>
                                             </Border>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Alarm}" Value="1">
-                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource WarningBrush}" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Alarm}" Value="2">
-                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource CriticalBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -2056,7 +2064,7 @@
                                 <ItemsControl ItemsSource="{Binding Cyber}" Margin="0,0,0,10">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:CyberRow}">
-                                            <Border x:Name="Row" BorderBrush="{StaticResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,2" Margin="0,0,0,2">
+                                            <Border x:Name="Row" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="3,0,0,1" Padding="5,2" Margin="0,0,0,2">
                                                 <DockPanel>
                                                     <Button DockPanel.Dock="Right" Content="Manual working" Padding="5,0" FontSize="11" VerticalAlignment="Center" CommandParameter="{Binding AttackId}"
                                                             Visibility="{Binding CanFallback, Converter={StaticResource BoolToVisibility}}"
@@ -2070,7 +2078,7 @@
                                             </Border>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Alarm}" Value="True">
-                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource CriticalBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -2096,10 +2104,10 @@
                                             </TextBlock>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Alarm}" Value="1">
-                                                    <Setter TargetName="Line" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Line" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Alarm}" Value="2">
-                                                    <Setter TargetName="Line" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Line" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -2112,7 +2120,7 @@
             </Border>
         </Grid>
 
-        <GridSplitter Grid.Row="3" HorizontalAlignment="Stretch" Background="{StaticResource BorderBrush}"
+        <GridSplitter Grid.Row="3" HorizontalAlignment="Stretch" Background="{DynamicResource BorderBrush}"
                       ResizeDirection="Rows" ToolTip="Drag to resize" />
 
         <!-- ===== Bottom: status boards and history (Appendix D, §6.6) ===== -->
@@ -2171,9 +2179,9 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:ResourceSummary}">
-                                            <TextBlock FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="10,0,0,0">
+                                            <TextBlock FontSize="11" Foreground="{DynamicResource MutedTextBrush}" Margin="10,0,0,0">
                                                 <Run Text="{Binding Group, Mode=OneWay}" />
-                                                <Run Text="{Binding Available, Mode=OneWay}" FontWeight="Bold" Foreground="{StaticResource TextBrush}" /><Run Text="/" /><Run Text="{Binding Total, Mode=OneWay}" />
+                                                <Run Text="{Binding Available, Mode=OneWay}" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" /><Run Text="/" /><Run Text="{Binding Total, Mode=OneWay}" />
                                             </TextBlock>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -2200,10 +2208,10 @@
                                                 <TextBlock Text="{Binding Comms}">
                                                     <TextBlock.Style>
                                                         <Style TargetType="TextBlock">
-                                                            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                                                            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding CommsOk}" Value="False">
-                                                                    <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                                    <Setter Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                                     <Setter Property="FontWeight" Value="Bold" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
@@ -2269,23 +2277,23 @@
                                                         Command="{Binding DataContext.AcknowledgeAlertCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                         CommandParameter="{Binding Id}" />
                                                 <TextBlock DockPanel.Dock="Left" Text="{Binding Time}" Width="40" FontFamily="Consolas"
-                                                           Foreground="{StaticResource MutedTextBrush}" />
+                                                           Foreground="{DynamicResource MutedTextBrush}" />
                                                 <StackPanel>
                                                     <TextBlock x:Name="Title" TextWrapping="Wrap" FontWeight="SemiBold">
                                                         <Run Text="⚠" /> <Run Text="{Binding Title, Mode=OneWay}" />
                                                     </TextBlock>
-                                                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" />
                                                 </StackPanel>
                                             </DockPanel>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Severity}" Value="Critical">
-                                                    <Setter TargetName="Title" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Title" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Severity}" Value="Warning">
-                                                    <Setter TargetName="Title" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Title" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Acknowledged}" Value="True">
-                                                    <Setter TargetName="Title" Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                                                    <Setter TargetName="Title" Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
                                                     <Setter TargetName="Title" Property="FontWeight" Value="Normal" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
@@ -2306,12 +2314,12 @@
                                         <DataTemplate DataType="{x:Type vm:ReportRow}">
                                             <DockPanel Margin="0,0,0,8">
                                                 <TextBlock DockPanel.Dock="Left" Text="{Binding Time}" Width="40" FontFamily="Consolas"
-                                                           Foreground="{StaticResource MutedTextBrush}" />
+                                                           Foreground="{DynamicResource MutedTextBrush}" />
                                                 <StackPanel>
                                                     <TextBlock TextWrapping="Wrap">
                                                         <Run Text="{Binding Source, Mode=OneWay}" FontWeight="SemiBold" />
-                                                        <Run Text="·" Foreground="{StaticResource MutedTextBrush}" />
-                                                        <Run Text="{Binding Incident, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                        <Run Text="·" Foreground="{DynamicResource MutedTextBrush}" />
+                                                        <Run Text="{Binding Incident, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" />
                                                     </TextBlock>
                                                     <TextBlock Text="{Binding Claim, StringFormat=“{0}”}" TextWrapping="Wrap" />
                                                     <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
@@ -2359,7 +2367,7 @@
                 <TabItem.Header>
                     <TextBlock>
                         <Run Text="COMMAND &amp; CONTROL" />
-                        <Run Text="{Binding Command.PendingApprovals, Mode=OneWay, StringFormat=' · {0} awaiting decision'}" Foreground="{StaticResource WarningBrush}" />
+                        <Run Text="{Binding Command.PendingApprovals, Mode=OneWay, StringFormat=' · {0} awaiting decision'}" Foreground="{DynamicResource WarningBrush}" />
                     </TextBlock>
                 </TabItem.Header>
                 <Grid DataContext="{Binding Command}">
@@ -2388,14 +2396,14 @@
                                     <DataTemplate DataType="{x:Type vm:OrderRow}">
                                         <StackPanel Margin="0,0,0,8">
                                             <TextBlock TextWrapping="Wrap">
-                                                <Run Text="{Binding Time, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                <Run Text="{Binding Time, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" />
                                                 <Run Text="{Binding Target, Mode=OneWay}" FontWeight="SemiBold" />
-                                                <Run Text="·" Foreground="{StaticResource MutedTextBrush}" />
+                                                <Run Text="·" Foreground="{DynamicResource MutedTextBrush}" />
                                                 <Run x:Name="State" Text="{Binding Status, Mode=OneWay}" />
                                             </TextBlock>
                                             <TextBlock Text="{Binding Text, StringFormat=“{0}”}" TextWrapping="Wrap" />
                                             <TextBlock Text="{Binding ReadBack}" TextWrapping="Wrap" FontStyle="Italic"
-                                                       Foreground="{StaticResource MutedTextBrush}" />
+                                                       Foreground="{DynamicResource MutedTextBrush}" />
                                             <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
                                                         Visibility="{Binding CanConfirm, Converter={StaticResource BoolToVisibility}}">
                                                 <Button Content="Read-back correct" Padding="6,0" FontSize="11" Margin="0,0,4,0"
@@ -2419,15 +2427,15 @@
                                         </StackPanel>
                                         <DataTemplate.Triggers>
                                             <DataTrigger Binding="{Binding AwaitingReadBack}" Value="True">
-                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                <Setter TargetName="State" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                                 <Setter TargetName="State" Property="Text" Value="Awaiting read-back" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding ReadBackGarbled}" Value="True">
-                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                <Setter TargetName="State" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                 <Setter TargetName="State" Property="Text" Value="Read-back unclear" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding Confirmed}" Value="True">
-                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource OkBrush}" />
+                                                <Setter TargetName="State" Property="Foreground" Value="{DynamicResource OkBrush}" />
                                                 <Setter TargetName="State" Property="Text" Value="Read-back confirmed" />
                                             </DataTrigger>
                                         </DataTemplate.Triggers>
@@ -2460,18 +2468,18 @@
                                     <DataTemplate DataType="{x:Type vm:RequestRow}">
                                         <StackPanel Margin="0,0,0,8">
                                             <TextBlock TextWrapping="Wrap">
-                                                <Run Text="{Binding Time, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                <Run Text="{Binding Time, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" />
                                                 <Run x:Name="State" Text="{Binding Status, Mode=OneWay}" FontWeight="SemiBold" />
                                             </TextBlock>
                                             <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
-                                            <TextBlock Text="{Binding Detail}" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock Text="{Binding Detail}" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" />
                                         </StackPanel>
                                         <DataTemplate.Triggers>
                                             <DataTrigger Binding="{Binding Status}" Value="Denied">
-                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                <Setter TargetName="State" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding Status}" Value="Approved">
-                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource OkBrush}" />
+                                                <Setter TargetName="State" Property="Foreground" Value="{DynamicResource OkBrush}" />
                                             </DataTrigger>
                                         </DataTemplate.Triggers>
                                     </DataTemplate>
@@ -2492,10 +2500,10 @@
                                         <DataTemplate DataType="{x:Type vm:ApprovalRow}">
                                             <StackPanel Margin="0,0,0,10">
                                                 <TextBlock TextWrapping="Wrap">
-                                                    <Run Text="{Binding Time, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <Run Text="{Binding Time, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" />
                                                     <Run x:Name="Subject" Text="{Binding Subject, Mode=OneWay}" FontWeight="SemiBold" />
                                                 </TextBlock>
-                                                <TextBlock Text="{Binding RequestedBy}" Foreground="{StaticResource MutedTextBrush}" />
+                                                <TextBlock Text="{Binding RequestedBy}" Foreground="{DynamicResource MutedTextBrush}" />
                                                 <TextBlock Text="{Binding Details}" TextWrapping="Wrap" />
                                                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
                                                             Visibility="{Binding IsPending, Converter={StaticResource BoolToVisibility}}">
@@ -2506,12 +2514,12 @@
                                                             Command="{Binding DataContext.Command.DenyCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                             CommandParameter="{Binding Id}" />
                                                 </StackPanel>
-                                                <TextBlock Text="{Binding Status}" Foreground="{StaticResource MutedTextBrush}"
+                                                <TextBlock Text="{Binding Status}" Foreground="{DynamicResource MutedTextBrush}"
                                                            Visibility="{Binding IsPending, Converter={x:Static vm:Converters.FalseToVisible}}" />
                                             </StackPanel>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding IsPending}" Value="True">
-                                                    <Setter TargetName="Subject" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Subject" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -2536,16 +2544,16 @@
                                     <DataTemplate DataType="{x:Type vm:HospitalRow}">
                                         <DockPanel Margin="0,0,0,4" ToolTip="{Binding Note}">
                                             <TextBlock DockPanel.Dock="Right" Text="{Binding Reported}" FontFamily="Consolas"
-                                                       Foreground="{StaticResource MutedTextBrush}" Margin="6,0,0,0" />
+                                                       Foreground="{DynamicResource MutedTextBrush}" Margin="6,0,0,0" />
                                             <TextBlock x:Name="Load" DockPanel.Dock="Right" Text="{Binding Load}" FontFamily="Consolas" Margin="6,0,0,0" />
                                             <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                                         </DockPanel>
                                         <DataTemplate.Triggers>
                                             <DataTrigger Binding="{Binding NearFull}" Value="True">
-                                                <Setter TargetName="Load" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                <Setter TargetName="Load" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding OnDiversion}" Value="True">
-                                                <Setter TargetName="Load" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                <Setter TargetName="Load" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                 <Setter TargetName="Load" Property="Text" Value="DIVERTING" />
                                             </DataTrigger>
                                         </DataTemplate.Triggers>
@@ -2566,12 +2574,12 @@
                                     <DataTemplate DataType="{x:Type vm:NotificationRow}">
                                         <StackPanel Margin="0,0,0,8">
                                             <TextBlock>
-                                                <Run Text="{Binding Time, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                <Run Text="{Binding Time, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" />
                                                 <Run Text="{Binding Recipient, Mode=OneWay}" FontWeight="SemiBold" />
                                             </TextBlock>
                                             <TextBlock Text="{Binding Message, StringFormat=“{0}”}" TextWrapping="Wrap" />
                                             <TextBlock Text="{Binding Reply}" TextWrapping="Wrap" FontStyle="Italic"
-                                                       Foreground="{StaticResource MutedTextBrush}" />
+                                                       Foreground="{DynamicResource MutedTextBrush}" />
                                         </StackPanel>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
@@ -2604,7 +2612,7 @@
                         <CheckBox Content="Show ground truth (instructor / AAR)" IsChecked="{Binding ShowTruth}" Margin="12,0,0,0"
                                   VerticalAlignment="Center" />
                         <TextBlock Text="Double-click a line to see the COP at that moment." Margin="16,0,0,0" VerticalAlignment="Center"
-                                   Foreground="{StaticResource MutedTextBrush}" FontSize="11" />
+                                   Foreground="{DynamicResource MutedTextBrush}" FontSize="11" />
                     </StackPanel>
 
                     <ListBox ItemsSource="{Binding Entries}" FontFamily="Consolas" FontSize="12"
@@ -2617,17 +2625,17 @@
                                         <ColumnDefinition Width="200" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="{Binding Time}" Foreground="{StaticResource MutedTextBrush}" />
+                                    <TextBlock Text="{Binding Time}" Foreground="{DynamicResource MutedTextBrush}" />
                                     <TextBlock x:Name="Category" Grid.Column="1" Text="{Binding Category}" />
                                     <TextBlock x:Name="Text" Grid.Column="2" Text="{Binding Text}" TextWrapping="Wrap" />
                                 </Grid>
                                 <DataTemplate.Triggers>
                                     <DataTrigger Binding="{Binding Important}" Value="True">
-                                        <Setter TargetName="Category" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                        <Setter TargetName="Category" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding IsTruth}" Value="True">
-                                        <Setter TargetName="Category" Property="Foreground" Value="#C792EA" />
-                                        <Setter TargetName="Text" Property="Foreground" Value="#C792EA" />
+                                        <Setter TargetName="Category" Property="Foreground" Value="{DynamicResource TruthBrush}" />
+                                        <Setter TargetName="Text" Property="Foreground" Value="{DynamicResource TruthBrush}" />
                                     </DataTrigger>
                                 </DataTemplate.Triggers>
                             </DataTemplate>
@@ -2640,8 +2648,8 @@
             <TabItem DataContext="{Binding Instructor}" Visibility="{Binding DataContext.ShowInstructorBoard, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
                 <TabItem.Header>
                     <TextBlock>
-                        <Run Text="INSTRUCTOR · GROUND TRUTH" Foreground="#C792EA" />
-                        <Run Text="{Binding Summary, Mode=OneWay}" Foreground="{StaticResource WarningBrush}" />
+                        <Run Text="INSTRUCTOR · GROUND TRUTH" Foreground="{DynamicResource TruthBrush}" />
+                        <Run Text="{Binding Summary, Mode=OneWay}" Foreground="{DynamicResource WarningBrush}" />
                     </TextBlock>
                 </TabItem.Header>
                 <Grid>
@@ -2655,7 +2663,7 @@
                     <Border Grid.Column="0" Style="{StaticResource Panel}" BorderThickness="0,0,1,0">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Top" Text="TRUTH vs COP (what command does not know)" Style="{StaticResource PanelHeader}" />
-                            <TextBlock DockPanel.Dock="Bottom" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,6,0,0"
+                            <TextBlock DockPanel.Dock="Bottom" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,6,0,0"
                                        Text="Instructor and AAR only. Ground-truth map layers are under GROUND TRUTH (INSTRUCTOR) in the layer panel." />
                             <Grid>
                                 <ListBox ItemsSource="{Binding Divergences}">
@@ -2669,19 +2677,19 @@
                                                 <TextBlock x:Name="Topic" Text="{Binding Topic}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,8,0" />
                                                 <StackPanel Grid.Column="1">
                                                     <TextBlock TextWrapping="Wrap">
-                                                        <Run Text="Truth:" Foreground="#C792EA" /> <Run Text="{Binding Truth, Mode=OneWay}" />
+                                                        <Run Text="Truth:" Foreground="{DynamicResource TruthBrush}" /> <Run Text="{Binding Truth, Mode=OneWay}" />
                                                     </TextBlock>
-                                                    <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}">
+                                                    <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}">
                                                         <Run Text="COP:" /> <Run Text="{Binding Cop, Mode=OneWay}" />
                                                     </TextBlock>
                                                 </StackPanel>
                                             </Grid>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding Severity}" Value="Unknown">
-                                                    <Setter TargetName="Topic" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                    <Setter TargetName="Topic" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding Severity}" Value="Lagging">
-                                                    <Setter TargetName="Topic" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                    <Setter TargetName="Topic" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
@@ -2706,11 +2714,11 @@
                                         <DataTemplate DataType="{x:Type vm:CascadeRow}">
                                             <DockPanel Margin="0,0,0,6">
                                                 <TextBlock DockPanel.Dock="Left" Text="{Binding Time}" Width="62" FontFamily="Consolas"
-                                                           Foreground="{StaticResource MutedTextBrush}" />
+                                                           Foreground="{DynamicResource MutedTextBrush}" />
                                                 <StackPanel>
-                                                    <TextBlock Text="{Binding Cause}" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock Text="{Binding Cause}" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" />
                                                     <TextBlock TextWrapping="Wrap">
-                                                        <Run Text="→" Foreground="#C792EA" /> <Run Text="{Binding Effect, Mode=OneWay}" />
+                                                        <Run Text="→" Foreground="{DynamicResource TruthBrush}" /> <Run Text="{Binding Effect, Mode=OneWay}" />
                                                     </TextBlock>
                                                 </StackPanel>
                                             </DockPanel>
@@ -2735,7 +2743,7 @@
                                     <DataTemplate DataType="{x:Type vm:WorldFact}">
                                         <StackPanel Margin="0,0,0,6">
                                             <TextBlock Text="{Binding Label}" FontWeight="SemiBold" />
-                                            <TextBlock Text="{Binding Value}" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock Text="{Binding Value}" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" />
                                         </StackPanel>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>

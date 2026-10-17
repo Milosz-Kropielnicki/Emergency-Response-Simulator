@@ -27,7 +27,7 @@ Emergency Response Simulator/
 └─ Emergency Response Simulator.Tests       xUnit
 hazard-models/                              Python plume service + tests
 database/                                   local PostgreSQL setup script
-docs/                                       instructor and observer guides (Phase 12)
+docs/                                       instructor, observer and participant guides (Phases 12, 21)
 standards/samples/                          illustrative CAP, EDXL-HAVE and NIEM documents to import (Phase 20)
 ```
 
@@ -1640,6 +1640,78 @@ COP, IAP, C2, GIS, AVL, plume, comms and the review are separate systems behind 
 The hub now serves **GIS**, **plume** and **integration** as modules, beside C2, IAP, control, review, instructor and assessment. A networked client with no GIS database of its own takes the map's layers from the server's.
 
 **Tests:** `StandardsTests`, `ApiTests`.
+
+## UI/UX & accessibility (Phase 21)
+
+Usability under pressure. The participant's side is in [docs/Participant-Guide.md](docs/Participant-Guide.md): workspaces, display settings, shortcuts, voice commands and the field companion.
+
+### Display settings (`Accessibility/`)
+
+**⚙ Display** in the header (Ctrl+,). The settings are kept per machine in `%LOCALAPPDATA%\EmergencyResponseSimulator\display.json` (or the `ERS_SETTINGS` folder) and never reach the server. `DisplayService` applies them to the whole application, before the first window opens:
+
+- **Themes:** Dark, Light, **Night operations** (red on black at low brightness, with the map dimmed, to keep dark adaptation), and High contrast. The windows refer to the palette's brushes as `DynamicResource`, so a theme change reaches every element at once. A brush held by a sealed style is frozen and couldn't be recoloured in place.
+- **Colour vision:** Standard, red–green safe (Okabe–Ito), blue–yellow safe. These cover the interface's status colours and the map's (`MapStyles.Palette`): agencies, hot, warm and cold zones, triage, plume, congestion, and the rings for comms lost and committed.
+- **Reading font:** Standard, dyslexia-friendly (OpenDyslexic → Lexend → Verdana), hyperlegible (Atkinson Hyperlegible → Verdana). Fallbacks mean nothing has to be installed.
+- **Size:** 100–200%, as a layout scale on every window.
+- **Language:** English, Gaeilge, Polski (`Localization`, bound in XAML as `{acc:Loc Key}`, switching live). It covers the header, the main tabs, display settings, shortcut names and voice messages. English is the fallback for any missing string. The Irish and Polish strings are a first translation, to be reviewed by native speakers. Exercise content (radio, reports, what players type) stays in English.
+
+**Contrast, checked by the tests:**
+
+- Every theme and colour-vision palette keeps text, muted text, accent, status and truth colours at **WCAG AA (4.5:1)** on every surface. High contrast keeps text at AAA (7:1).
+- A protanopia and deuteranopia simulation (Viénot, Brettel and Mollon) shows the problem: with the standard palette, a deuteranope sees critical red and OK green as almost the same. It also shows the red–green palettes keep critical and OK, fire and EMS, hot and cold, and immediate and delayed apart.
+- Night operations stays red-dominant and far dimmer than day.
+
+### Screen readers
+
+- Every button whose content starts with a symbol or emoji has an `AutomationProperties.Name` (the tests check every window's XAML). The workspace picker and the display controls are named too.
+- The command outcome line is a **live region**, announced as each result arrives.
+- Buttons show keyboard focus.
+- The hard-coded colours that remained in the windows are now themed brushes: overlays, the replay banner, the selection highlight, alternate rows, and the instructor's ground-truth purple.
+
+### Shortcuts and voice commands
+
+- **Shortcuts** (`Hotkeys`): 16 actions with defaults (F5 start or pause, Ctrl+Shift+N night operations, F1 the list, and so on), each overridable in the settings.
+  - Letters and digits always need Ctrl or Alt, so nothing interferes with typing.
+  - A clash, a gesture WPF can't parse, or the push-to-talk key is refused with a reason, and the default kept.
+- **Voice commands** (`VoiceCommands`, `VoiceCommandListener`):
+  - "Simulator, …" followed by one of about forty phrases: the clock, speed, panels ("show health"), windows, acknowledging the oldest alert, night or day mode.
+  - Windows' offline recogniser (`System.Speech`) loads only that grammar and acts above 60% confidence.
+  - The wake word keeps radio talk out, and listening pauses while push-to-talk is held.
+  - Off by default. The commands are English.
+
+### Multi-monitor dashboards
+
+Any right-panel tab pops out into its own window (Ctrl+Shift+P, or "Simulator, pop out"). Its content moves there with its data context, and closing the window puts it back. **Save this layout** stores the pop-outs' places per workspace, and choosing the workspace reopens them. `Dashboards.Fit` brings any saved place back onto the desktop as it is now, so a layout saved with a second monitor never opens off-screen.
+
+### Role workspaces, hardened
+
+The Phase 11 role workspaces, now checked and customisable:
+
+- **`RoleWorkspaces.Resolve`** decides what a workspace may show *this* user, whatever was picked:
+  - The **instructor's board** appears only where the instructor's tools are (standalone, or the instructor's client). Before this, a networked trainee choosing *Full layout* or *Instructor* got it.
+  - **Assessment** appears only for assessors, and the **session** tab only in a networked session.
+  - Focus and board never land on something hidden.
+  - It runs again when the user's role changes.
+- **`RoleWorkspaces.Customise`** applies the user's choice of panels and focus. It can only choose among the panels the role's default could show, it can't add the instructor's board, it always keeps the desk and the session tab, and it drops names it doesn't know.
+- **`RoleWorkspaces.Problems`** checks a definition: focus and board shown, no duplicates, desk and session present, assessment only for assessors, no instructor board in a player's workspace, and only real map layers. The built-in workspaces are held to none.
+- **Documented:** the participant guide has every role's workspace, and how to customise it and pop panels out.
+
+### The field companion (`Server/Field`)
+
+A mobile web app the server serves at **/field/** (embedded in the server assembly). It is installable on a phone's home screen, opens offline (a service worker), and is translated into English, Irish and Polish. It has large touch targets, follows the phone's light or dark setting, has a red night mode, and has a live status line for screen readers.
+
+- **Join:** with the session code, a name and a unit's callsign. That gets a token (`X-Field-Token`) that speaks for that unit only. No API key is needed. Units run by an AI agency's own control room can't be joined.
+- **From the field:**
+  - reports (with the phone's location if the user ticks it; queued on the phone with no signal);
+  - status (en route, on scene, working, transporting, available, out of service; never *dispatched*, which is control's);
+  - **ICS 211 check-in**: on scene with a crew count, and a confirmed check-in report;
+  - **PAR** answers to an open PAR, with names of anyone missing;
+  - order acknowledgements with a read-back;
+  - opt-in position sharing every 30 seconds.
+- **On the COP:** each arrives as a perceived event from the `field` source, through the session's command gate. Reports are signed "*Engine 12 (Ciara Byrne, field app)*" and carry the unit. Nothing is accepted before the exercise starts or after it ends.
+- **API:** `POST /api/v1/field/join`, then `GET /me` (the unit, its incident, its orders and any open PAR) and `POST /report`, `/status`, `/checkin`, `/par`, `/orders/{id}/acknowledge`, `/position`.
+
+**Tests:** `AccessibilityTests`, `FieldCompanionTests`.
 
 ## Local setup
 

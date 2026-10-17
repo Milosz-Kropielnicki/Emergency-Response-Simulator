@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0F1419">
+  <title>ERS Field</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="field.css">
+</head>
+<body>
+  <a class="skip" href="#main" data-t="skip">Skip to the main content</a>
+  <header>
+    <h1><span aria-hidden="true">🚒</span> <span data-t="title">Field companion</span></h1>
+    <div class="tools">
+      <label class="visually-hidden" for="language" data-t="language">Language</label>
+      <select id="language">
+        <option value="en">English</option>
+        <option value="ga">Gaeilge</option>
+        <option value="pl">Polski</option>
+      </select>
+      <button type="button" id="night" aria-pressed="false" data-t="night">Night</button>
+    </div>
+  </header>
+
+  <!-- What happened: read out by screen readers. -->
+  <p id="status" role="status" aria-live="polite"></p>
+  <p id="queue" class="muted" hidden></p>
+
+  <main id="main">
+    <!-- Joining: the session's code, your name and your unit's callsign. -->
+    <section id="join" aria-labelledby="join-heading">
+      <h2 id="join-heading" data-t="joinHeading">Join the exercise</h2>
+      <form id="join-form">
+        <label for="code" data-t="code">Session code</label>
+        <input id="code" name="code" autocomplete="off" autocapitalize="characters" required maxlength="6" inputmode="text">
+        <label for="name" data-t="name">Your name</label>
+        <input id="name" name="name" autocomplete="name" required maxlength="40">
+        <label for="callsign" data-t="callsign">Your unit's callsign</label>
+        <input id="callsign" name="callsign" required maxlength="40" placeholder="Engine 12">
+        <button type="submit" class="primary" data-t="joinButton">Join</button>
+      </form>
+    </section>
+
+    <section id="unit" hidden aria-labelledby="unit-heading">
+      <h2 id="unit-heading"><span id="callsign-label"></span> · <span id="unit-status"></span></h2>
+      <p id="incident" class="muted"></p>
+      <p id="tasking"></p>
+
+      <div id="par" class="card alert" hidden>
+        <h3 data-t="parHeading">PAR: account for your crew</h3>
+        <p id="par-reason"></p>
+        <form id="par-form">
+          <label for="accounted" data-t="accounted">Crew accounted for</label>
+          <input id="accounted" type="number" min="0" max="60" inputmode="numeric" required>
+          <label for="missing" data-t="missing">Missing (names, comma between)</label>
+          <input id="missing" autocomplete="off">
+          <button type="submit" class="primary" data-t="sendPar">Send PAR</button>
+        </form>
+      </div>
+
+      <h3 data-t="ordersHeading">Orders</h3>
+      <ul id="orders" class="list"></ul>
+
+      <h3 data-t="statusHeading">Status</h3>
+      <div class="buttons" id="statuses" role="group" aria-labelledby="status-group">
+        <span id="status-group" class="visually-hidden" data-t="statusHeading">Status</span>
+        <button type="button" data-status="EnRoute" data-t="EnRoute">En route</button>
+        <button type="button" data-status="OnScene" data-t="OnScene">On scene</button>
+        <button type="button" data-status="Operating" data-t="Operating">Working</button>
+        <button type="button" data-status="Transporting" data-t="Transporting">Transporting</button>
+        <button type="button" data-status="Available" data-t="Available">Available</button>
+        <button type="button" data-status="OutOfService" data-t="OutOfService">Out of service</button>
+      </div>
+
+      <h3 data-t="checkinHeading">Check in at the incident (ICS 211)</h3>
+      <form id="checkin-form" class="inline">
+        <label for="crew" data-t="crew">Crew with you</label>
+        <input id="crew" type="number" min="1" max="60" value="4" inputmode="numeric" required>
+        <button type="submit" class="primary" data-t="checkIn">Check in</button>
+      </form>
+
+      <h3 data-t="reportHeading">Field report</h3>
+      <form id="report-form">
+        <label for="report" data-t="reportLabel">What you see</label>
+        <textarea id="report" rows="4" maxlength="1000" required></textarea>
+        <label class="check"><input type="checkbox" id="with-location"> <span data-t="withLocation">Include my location</span></label>
+        <button type="submit" class="primary" data-t="sendReport">Send report</button>
+      </form>
+
+      <label class="check"><input type="checkbox" id="share-position"> <span data-t="sharePosition">Share my position every 30 seconds</span></label>
+      <p class="muted" data-t="privacy">Your location is sent only when you choose, and only to this exercise.</p>
+      <button type="button" id="leave" class="quiet" data-t="leave">Leave</button>
+    </section>
+  </main>
+  <script src="field.js"></script>
+</body>
+</html>

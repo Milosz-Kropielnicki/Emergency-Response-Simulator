@@ -96,6 +96,9 @@ public sealed class SessionRuntime : IAsyncDisposable
     public EventFeed Feed { get; }
     public CommandGate Gate { get; } = new();
 
+    /// <summary>Phones in the field speaking for this session's units (Phase 21).</summary>
+    public Field.FieldCompanion Field { get; } = new();
+
     /// <summary>The session's radio voice (Phase 11 M7).</summary>
     public VoiceRouter Voice { get; private set; } = null!;
 

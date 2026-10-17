@@ -1,3 +1,4 @@
+using Emergency_Response_Simulator.Accessibility;
 using Emergency_Response_Simulator.Core.Model;
 
 namespace Emergency_Response_Simulator.ViewModels;
@@ -71,6 +72,76 @@ public static class RoleWorkspaces
     public static IReadOnlyList<RoleWorkspace> Choices() => [Full, .. All];
 
     public static RoleWorkspace For(UserRole role) => All.First(w => w.Role == role);
+
+    // ---- Hardening (Phase 21) ----
+
+    /// <summary>What a workspace may show this user, and where it opens.</summary>
+    public sealed record Effective(IReadOnlySet<WorkspacePanel> Panels, WorkspacePanel Focus, IReadOnlySet<WorkspaceBoard> Boards, WorkspaceBoard Board);
+
+    /// <summary>
+    /// What a workspace shows this user, whatever was picked or customised. The instructor's board only where the
+    /// instructor's tools are (standalone, or the instructor's own client): a trainee choosing the full or the instructor
+    /// layout doesn't get it. Assessment only for assessors; the session tab only in a networked session. Focus and board
+    /// never land on something hidden. An empty set falls back to the desk.
+    /// </summary>
+    public static Effective Resolve(RoleWorkspace workspace, bool assessor, bool instructorTools, bool networked)
+    {
+        var panels = workspace.Panels
+            .Where(p => p != WorkspacePanel.Assess || assessor)
+            .Where(p => p != WorkspacePanel.Session || networked)
+            .ToHashSet();
+        if (panels.Count == 0) panels.Add(WorkspacePanel.Desk);
+        var focus = panels.Contains(workspace.Focus) ? workspace.Focus : AllPanels.First(panels.Contains);
+
+        var boards = workspace.Boards.Where(b => b != WorkspaceBoard.Instructor || instructorTools).ToHashSet();
+        if (boards.Count == 0) boards.Add(WorkspaceBoard.Status);
+        boards.Add(WorkspaceBoard.Status); // the status boards are everyone's
+        var board = boards.Contains(workspace.Board) ? workspace.Board : AllBoards.First(boards.Contains);
+        return new Effective(panels, focus, boards, board);
+    }
+
+    /// <summary>
+    /// A role's workspace as the user customised it (Display settings). Only panels and boards the role's default could
+    /// show can be chosen, so a customisation never widens what a role sees; the desk and the session tab are always kept;
+    /// names that don't parse are dropped. Null: the default.
+    /// </summary>
+    public static RoleWorkspace Customise(RoleWorkspace basis, WorkspaceCustomisation? custom)
+    {
+        if (custom is null) return basis;
+        var allowed = basis.Role is null || basis.Role == UserRole.Instructor ? AllPanels.ToHashSet() : AllPanels.Where(p => p != WorkspacePanel.Assess || Roles.IsAssessor(basis.Role.Value)).ToHashSet();
+        var panels = custom.Panels
+            .Select(n => Enum.TryParse<WorkspacePanel>(n, out var p) ? p : (WorkspacePanel?)null)
+            .OfType<WorkspacePanel>()
+            .Where(allowed.Contains)
+            .Append(WorkspacePanel.Desk).Append(WorkspacePanel.Session)
+            .Distinct().OrderBy(p => p).ToList();
+        var focus = Enum.TryParse<WorkspacePanel>(custom.Focus, out var f) && panels.Contains(f) ? f : panels.Contains(basis.Focus) ? basis.Focus : panels[0];
+        var board = Enum.TryParse<WorkspaceBoard>(custom.Board, out var b) && basis.Boards.Contains(b) ? b : basis.Board;
+        return basis with { Panels = panels, Focus = focus, Board = board };
+    }
+
+    public static WorkspaceCustomisation Describe(RoleWorkspace workspace) =>
+        new([.. workspace.Panels.Select(p => p.ToString())], workspace.Focus.ToString(), workspace.Board.ToString());
+
+    /// <summary>What is wrong with a workspace definition: the built-in ones are held to none.</summary>
+    public static IReadOnlyList<string> Problems(RoleWorkspace workspace)
+    {
+        var problems = new List<string>();
+        if (!workspace.Panels.Contains(workspace.Focus)) problems.Add($"{workspace.Name}: opens on {workspace.Focus}, which it doesn't show.");
+        if (!workspace.Boards.Contains(workspace.Board)) problems.Add($"{workspace.Name}: opens on the {workspace.Board} board, which it doesn't show.");
+        if (workspace.Panels.Distinct().Count() != workspace.Panels.Count) problems.Add($"{workspace.Name}: a panel is listed twice.");
+        if (workspace.Role is { } role)
+        {
+            if (!workspace.Panels.Contains(WorkspacePanel.Desk)) problems.Add($"{workspace.Name}: no desk.");
+            if (!workspace.Panels.Contains(WorkspacePanel.Session)) problems.Add($"{workspace.Name}: no session tab.");
+            if (workspace.Panels.Contains(WorkspacePanel.Assess) && !Roles.IsAssessor(role)) problems.Add($"{workspace.Name}: assessment is for assessors.");
+            if (workspace.Boards.Contains(WorkspaceBoard.Instructor) && role != UserRole.Instructor && role != UserRole.Observer)
+                problems.Add($"{workspace.Name}: the instructor's board in a player's workspace.");
+        }
+        foreach (var layer in workspace.Layers.Keys.Where(k => !MapLayerKeys.All.Contains(k)))
+            problems.Add($"{workspace.Name}: no map layer {layer}.");
+        return problems;
+    }
 
     private static RoleWorkspace Of(UserRole role, string purpose, WorkspacePanel[] panels, WorkspacePanel focus, WorkspaceBoard board,
         bool layerPanel = true, WorkspaceBoard[]? boards = null, params (string Key, bool On)[] layers) =>

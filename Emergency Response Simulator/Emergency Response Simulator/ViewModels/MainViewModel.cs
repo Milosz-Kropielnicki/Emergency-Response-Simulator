@@ -140,8 +140,8 @@ public partial class MainViewModel : ObservableObject
 
     // ---- Role workspaces (Phase 11 M3) ----
 
-    /// <summary>Default layouts per role over the same COP; a player can pick another at any time.</summary>
-    public IReadOnlyList<RoleWorkspace> Workspaces { get; }
+    /// <summary>Default layouts per role over the same COP, as this user customised them; a player can pick another at any time.</summary>
+    [ObservableProperty] private IReadOnlyList<RoleWorkspace> _workspaces;
 
     [ObservableProperty] private RoleWorkspace? _selectedWorkspace;
 
@@ -174,12 +174,16 @@ public partial class MainViewModel : ObservableObject
             : "OBSERVING · read-only" + (Session.SeesTruth ? " · with ground truth" : "") +
               (Assessment.Following?.Id is not null ? $" · following {Assessment.Following.Label}" : "");
         ShowAssess = Assessment.IsAssessor && (SelectedWorkspace?.Panels.Contains(WorkspacePanel.Assess) ?? true);
+        // Joining or a role change can take the instructor's tools away: the board goes with them.
+        if (SelectedWorkspace is { } workspace) ShowInstructorBoard = Effective(workspace).Boards.Contains(WorkspaceBoard.Instructor);
     }
 
     partial void OnSelectedWorkspaceChanged(RoleWorkspace? value)
     {
         if (value is null) return;
-        bool Shows(WorkspacePanel panel) => value.Panels.Contains(panel);
+        // Hardened (Phase 21): what the workspace may show this user, not just what it lists.
+        var effective = Effective(value);
+        bool Shows(WorkspacePanel panel) => effective.Panels.Contains(panel);
         ShowComms = Shows(WorkspacePanel.Comms);
         ShowIncident = Shows(WorkspacePanel.Incident);
         ShowUnit = Shows(WorkspacePanel.Unit);
@@ -191,11 +195,11 @@ public partial class MainViewModel : ObservableObject
         ShowLogistics = Shows(WorkspacePanel.Logistics);
         ShowHealth = Shows(WorkspacePanel.Health);
         ShowProtection = Shows(WorkspacePanel.Protection);
-        ShowAssess = Assessment.IsAssessor && Shows(WorkspacePanel.Assess);
-        ShowCommandBoard = value.Boards.Contains(WorkspaceBoard.Command);
-        ShowInstructorBoard = value.Boards.Contains(WorkspaceBoard.Instructor);
-        RightPanelTab = (int)value.Focus;
-        BottomPanelTab = (int)value.Board;
+        ShowAssess = Shows(WorkspacePanel.Assess);
+        ShowCommandBoard = effective.Boards.Contains(WorkspaceBoard.Command);
+        ShowInstructorBoard = effective.Boards.Contains(WorkspaceBoard.Instructor);
+        RightPanelTab = (int)effective.Focus;
+        BottomPanelTab = (int)effective.Board;
         IsRightPanelOpen = true;
         IsLeftPanelOpen = value.LayerPanel;
         foreach (var (key, on) in value.Layers)

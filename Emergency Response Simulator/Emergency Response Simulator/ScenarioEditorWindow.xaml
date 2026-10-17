@@ -3,13 +3,13 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:Emergency_Response_Simulator.ViewModels"
         Title="Scenario Editor &amp; Training" Width="1320" Height="860" MinWidth="1000" MinHeight="600"
-        Background="{StaticResource BackgroundBrush}" Foreground="{StaticResource TextBrush}" FontSize="12"
+        Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextBrush}" FontSize="12"
         WindowStartupLocation="CenterOwner">
     <Window.Resources>
         <Style x:Key="Header" TargetType="TextBlock">
             <Setter Property="FontSize" Value="10" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
             <Setter Property="Margin" Value="0,8,0,2" />
         </Style>
         <Style TargetType="Button">
@@ -18,7 +18,7 @@
         </Style>
     </Window.Resources>
     <DockPanel Margin="12">
-        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,6,0,0" />
+        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,6,0,0" />
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="320" />
@@ -47,21 +47,21 @@
                     <TextBox Text="{Binding Author, UpdateSourceTrigger=PropertyChanged}" />
                     <DockPanel Margin="0,8,0,2">
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                            <Button Content="▲" Command="{Binding MoveUpCommand}" Padding="4,0" />
-                            <Button Content="▼" Command="{Binding MoveDownCommand}" Padding="4,0" />
-                            <Button Content="+ Step" Command="{Binding AddStepCommand}" />
+                            <Button Content="▲" AutomationProperties.Name="Move the step up" Command="{Binding MoveUpCommand}" Padding="4,0" />
+                            <Button Content="▼" AutomationProperties.Name="Move the step down" Command="{Binding MoveDownCommand}" Padding="4,0" />
+                            <Button AutomationProperties.Name="Step" Content="+ Step" Command="{Binding AddStepCommand}" />
                             <Button Content="Remove" Command="{Binding RemoveStepCommand}" />
                         </StackPanel>
                         <TextBlock Text="STEPS" Style="{StaticResource Header}" Margin="0" VerticalAlignment="Center" />
                     </DockPanel>
                 </StackPanel>
-                <ListBox ItemsSource="{Binding Steps}" SelectedItem="{Binding SelectedStep}" Background="{StaticResource PanelBrush}"
-                         Foreground="{StaticResource TextBrush}" BorderBrush="{StaticResource BorderBrush}">
+                <ListBox ItemsSource="{Binding Steps}" SelectedItem="{Binding SelectedStep}" Background="{DynamicResource PanelBrush}"
+                         Foreground="{DynamicResource TextBrush}" BorderBrush="{DynamicResource BorderBrush}">
                     <ListBox.ItemTemplate>
                         <DataTemplate DataType="{x:Type vm:StepEntry}">
                             <StackPanel Margin="0,2">
                                 <TextBlock Text="{Binding Id}" FontWeight="SemiBold" />
-                                <TextBlock Text="{Binding Summary}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" MaxWidth="290" />
+                                <TextBlock Text="{Binding Summary}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" MaxWidth="290" />
                             </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
@@ -82,7 +82,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBox Text="{Binding Id, UpdateSourceTrigger=PropertyChanged}" ToolTip="The step's id: other steps refer to it" />
                         <TextBox Grid.Column="2" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" ToolTip="What the instructor sees in the script" />
-                        <CheckBox Grid.Column="4" Content="Optional" IsChecked="{Binding Optional}" VerticalAlignment="Center" Foreground="{StaticResource TextBrush}"
+                        <CheckBox Grid.Column="4" Content="Optional" IsChecked="{Binding Optional}" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"
                                   ToolTip="Extra pressure: held back while adaptive difficulty finds the trainees struggling (level 1–2)" />
                     </Grid>
 
@@ -100,7 +100,7 @@
                                   ToolTip="Fired: it went off. Expired: its condition wasn't met in its window (the other branch)." />
                     </WrapPanel>
                     <WrapPanel Visibility="{Binding IsCondition, Converter={StaticResource BoolToVisibility}}">
-                        <CheckBox Content="unless (wait for it to be false)" IsChecked="{Binding Negate}" VerticalAlignment="Center" Margin="0,0,8,4" Foreground="{StaticResource TextBrush}" />
+                        <CheckBox Content="unless (wait for it to be false)" IsChecked="{Binding Negate}" VerticalAlignment="Center" Margin="0,0,8,4" Foreground="{DynamicResource TextBrush}" />
                         <ComboBox ItemsSource="{Binding DataContext.Conditions, RelativeSource={RelativeSource AncestorType=Window}}" SelectedItem="{Binding Condition}" Width="190" Margin="0,0,6,4" />
                         <TextBlock Text="value" VerticalAlignment="Center" Margin="0,0,4,4" />
                         <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Width="40" Margin="0,0,6,4" />
@@ -112,19 +112,19 @@
                     </WrapPanel>
 
                     <DockPanel Margin="0,8,0,2">
-                        <Button DockPanel.Dock="Right" Content="+ Inject" Command="{Binding AddActionCommand}" />
+                        <Button AutomationProperties.Name="Inject" DockPanel.Dock="Right" Content="+ Inject" Command="{Binding AddActionCommand}" />
                         <TextBlock Text="WHAT HAPPENS" Style="{StaticResource Header}" Margin="0" VerticalAlignment="Center" />
                     </DockPanel>
                     <ItemsControl ItemsSource="{Binding Actions}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:ActionEntry}">
-                                <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="6" Margin="0,0,0,6" Background="{StaticResource PanelBrush}">
+                                <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="6" Margin="0,0,0,6" Background="{DynamicResource PanelBrush}">
                                     <StackPanel>
                                         <DockPanel>
                                             <Button DockPanel.Dock="Right" Content="Remove" Command="{Binding RemoveCommand}" />
                                             <ComboBox ItemsSource="{Binding Templates}" SelectedItem="{Binding Template}" DisplayMemberPath="Name" Margin="0,0,6,4" />
                                         </DockPanel>
-                                        <TextBlock Text="{Binding Template.Description}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,4" />
+                                        <TextBlock Text="{Binding Template.Description}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" Margin="0,0,0,4" />
                                         <ItemsControl ItemsSource="{Binding Parameters}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate DataType="{x:Type vm:ParameterEntry}">
@@ -176,12 +176,12 @@
                     </UniformGrid>
                     <DockPanel Margin="0,4,0,0">
                         <TextBox DockPanel.Dock="Right" Text="{Binding MeanMinutes, UpdateSourceTrigger=PropertyChanged}" Width="40" ToolTip="Average minutes between random events at level 3" />
-                        <CheckBox Content="Random events, every ~ min:" IsChecked="{Binding RandomEvents}" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center" />
+                        <CheckBox Content="Random events, every ~ min:" IsChecked="{Binding RandomEvents}" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center" />
                     </DockPanel>
                     <WrapPanel Margin="16,2,0,0">
-                        <CheckBox Content="weather" IsChecked="{Binding RandomWeather}" Foreground="{StaticResource TextBrush}" Margin="0,0,8,0" />
-                        <CheckBox Content="equipment" IsChecked="{Binding RandomEquipment}" Foreground="{StaticResource TextBrush}" Margin="0,0,8,0" />
-                        <CheckBox Content="new incidents" IsChecked="{Binding RandomIncidents}" Foreground="{StaticResource TextBrush}" />
+                        <CheckBox Content="weather" IsChecked="{Binding RandomWeather}" Foreground="{DynamicResource TextBrush}" Margin="0,0,8,0" />
+                        <CheckBox Content="equipment" IsChecked="{Binding RandomEquipment}" Foreground="{DynamicResource TextBrush}" Margin="0,0,8,0" />
+                        <CheckBox Content="new incidents" IsChecked="{Binding RandomIncidents}" Foreground="{DynamicResource TextBrush}" />
                     </WrapPanel>
 
                     <TextBlock Text="CHECK AND SAVE" Style="{StaticResource Header}" />
@@ -193,19 +193,19 @@
                     <ItemsControl ItemsSource="{Binding Problems}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding}" Foreground="{StaticResource CriticalBrush}" TextWrapping="Wrap" FontSize="11" Margin="0,1" />
+                                <TextBlock Text="{Binding}" Foreground="{DynamicResource CriticalBrush}" TextWrapping="Wrap" FontSize="11" Margin="0,1" />
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
                     <TextBlock Text="THIS SESSION" Style="{StaticResource Header}" />
                     <WrapPanel>
-                        <Button Content="▶ Run in this session" Command="{Binding RunCommand}" FontWeight="SemiBold"
+                        <Button AutomationProperties.Name="Run in this session" Content="▶ Run in this session" Command="{Binding RunCommand}" FontWeight="SemiBold"
                                 ToolTip="Its steps join the script, timed from now; its weather and training take effect" />
                         <Button Content="Apply training only" Command="{Binding ApplyTrainingCommand}" ToolTip="Set difficulty and random events now, without loading steps" />
-                        <Button Content="⟳" Command="{Binding RefreshTrainingCommand}" ToolTip="Read the level and score now" />
+                        <Button Content="⟳" AutomationProperties.Name="Refresh the level and score" Command="{Binding RefreshTrainingCommand}" ToolTip="Read the level and score now" />
                     </WrapPanel>
-                    <TextBlock Text="{Binding TrainingStatus}" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                    <TextBlock Text="{Binding TrainingStatus}" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" />
                 </StackPanel>
             </ScrollViewer>
         </Grid>

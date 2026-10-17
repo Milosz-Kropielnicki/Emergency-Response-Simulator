@@ -2,13 +2,13 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Data Standards &amp; NIMS" Width="1180" Height="800" MinWidth="900" MinHeight="560"
-        Background="{StaticResource BackgroundBrush}" Foreground="{StaticResource TextBrush}" FontSize="12"
+        Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextBrush}" FontSize="12"
         WindowStartupLocation="CenterOwner">
     <Window.Resources>
         <Style x:Key="Header" TargetType="TextBlock">
             <Setter Property="FontSize" Value="10" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
             <Setter Property="Margin" Value="0,8,0,2" />
         </Style>
         <Style TargetType="Button">
@@ -16,16 +16,16 @@
             <Setter Property="Margin" Value="0,0,4,4" />
         </Style>
     </Window.Resources>
-    <TabControl Margin="12" Background="{StaticResource PanelBrush}">
+    <TabControl Margin="12" Background="{DynamicResource PanelBrush}">
 
         <!-- Exchange: CAP, EDXL, NIEM, HL7 out and in -->
         <TabItem Header="Exchange">
             <DockPanel Margin="8">
-                <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,6,0,0" />
                 <StackPanel DockPanel.Dock="Left" Width="300" Margin="0,0,12,0">
                     <TextBlock Text="STANDARD" Style="{StaticResource Header}" Margin="0,0,0,2" />
                     <ComboBox ItemsSource="{Binding Standards}" SelectedItem="{Binding SelectedStandard}" DisplayMemberPath="Label" />
-                    <TextBlock Text="{Binding StandardDescription}" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0" />
+                    <TextBlock Text="{Binding StandardDescription}" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" Margin="0,4,0,0" />
                     <TextBlock Text="INCIDENT" Style="{StaticResource Header}" />
                     <ComboBox ItemsSource="{Binding Incidents}" SelectedItem="{Binding SelectedIncident}" DisplayMemberPath="Label" />
                     <TextBlock Text="OUT" Style="{StaticResource Header}" Margin="0,12,0,2" />
@@ -42,10 +42,10 @@
                                 ToolTip="Takes in what is pasted in the document box, as the standard selected above" />
                     </WrapPanel>
                     <TextBlock Text="Imports arrive as information received: a report, an alert, a hospital's status or a patient's move. Over the network only the instructor can import."
-                               TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0" />
+                               TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" Margin="0,4,0,0" />
                     <TextBlock Text="WHAT WAS TAKEN IN" Style="{StaticResource Header}" Margin="0,12,0,2" />
-                    <ListBox ItemsSource="{Binding ImportNotes}" Height="220" Background="{StaticResource PanelBrush}" Foreground="{StaticResource TextBrush}"
-                             BorderBrush="{StaticResource BorderBrush}">
+                    <ListBox ItemsSource="{Binding ImportNotes}" Height="220" Background="{DynamicResource PanelBrush}" Foreground="{DynamicResource TextBrush}"
+                             BorderBrush="{DynamicResource BorderBrush}">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding}" TextWrapping="Wrap" Width="270" />

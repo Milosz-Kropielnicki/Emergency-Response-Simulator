@@ -3,10 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:Emergency_Response_Simulator.ViewModels"
         Title="Instructor Console" Width="1180" Height="820" MinWidth="900" MinHeight="560"
-        Background="{StaticResource BackgroundBrush}" Foreground="{StaticResource TextBrush}" FontSize="12">
+        Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextBrush}" FontSize="12">
     <Window.Resources>
         <Style x:Key="Muted" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
         <Style x:Key="Small" TargetType="Button">
@@ -23,10 +23,10 @@
             <TextBlock Text="{Binding Status}" VerticalAlignment="Center" HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" Margin="16,0,0,0">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
-                        <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+                        <Setter Property="Foreground" Value="{DynamicResource OkBrush}" />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding Failed}" Value="True">
-                                <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
@@ -51,7 +51,7 @@
                             <ItemsControl ItemsSource="{Binding Injects}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type vm:InjectRow}">
-                                        <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="2,4">
+                                        <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="2,4">
                                             <DockPanel>
                                                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                                                     <Button Content="Fire now" Style="{StaticResource Small}" IsEnabled="{Binding CanFire}"
@@ -66,19 +66,19 @@
                                                 <TextBlock DockPanel.Dock="Left" Text="{Binding At}" FontFamily="Consolas" Width="52" VerticalAlignment="Top" />
                                                 <StackPanel>
                                                     <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
-                                                    <TextBlock x:Name="State" Text="{Binding State}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock x:Name="State" Text="{Binding State}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" />
                                                 </StackPanel>
                                             </DockPanel>
                                         </Border>
                                         <DataTemplate.Triggers>
                                             <DataTrigger Binding="{Binding Status}" Value="Held">
-                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                <Setter TargetName="State" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding Status}" Value="Fired">
-                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource OkBrush}" />
+                                                <Setter TargetName="State" Property="Foreground" Value="{DynamicResource OkBrush}" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding Status}" Value="Skipped">
-                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                <Setter TargetName="State" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                             </DataTrigger>
                                         </DataTemplate.Triggers>
                                     </DataTemplate>
@@ -130,7 +130,7 @@
                         <ItemsControl ItemsSource="{Binding Players}" Margin="0,0,0,8">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type vm:PlayerRow}">
-                                    <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="2,3">
+                                    <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="2,3">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="160" />
@@ -141,26 +141,26 @@
                                             </Grid.ColumnDefinitions>
                                             <StackPanel>
                                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                                                <TextBlock Text="{Binding Role}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                <TextBlock Text="{Binding Role}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" />
                                             </StackPanel>
                                             <StackPanel Grid.Column="1">
                                                 <TextBlock Text="{Binding Commands}" />
-                                                <TextBlock Text="{Binding LastCommand, StringFormat='last {0}'}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                <TextBlock Text="{Binding LastCommand, StringFormat='last {0}'}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" />
                                             </StackPanel>
                                             <TextBlock x:Name="Idle" Grid.Column="2" Text="{Binding Idle}" ToolTip="Since their last command (simulation time)" />
                                             <!-- Their role's desk (Phase 12): what waits for them now -->
                                             <TextBlock x:Name="Desk" Grid.Column="3" Text="{Binding Desk, StringFormat='desk: {0}'}" TextWrapping="Wrap"
                                                        ToolTip="{Binding Oldest, StringFormat='Waiting longest: {0}'}" />
-                                            <TextBlock Grid.Column="4" Text="{Binding LastAction}" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock Grid.Column="4" Text="{Binding LastAction}" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" />
                                         </Grid>
                                     </Border>
                                     <DataTemplate.Triggers>
                                         <DataTrigger Binding="{Binding IsIdle}" Value="True">
-                                            <Setter TargetName="Idle" Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                            <Setter TargetName="Idle" Property="Foreground" Value="{DynamicResource WarningBrush}" />
                                             <Setter TargetName="Idle" Property="FontWeight" Value="SemiBold" />
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding IsOverloaded}" Value="True">
-                                            <Setter TargetName="Desk" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                            <Setter TargetName="Desk" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                             <Setter TargetName="Desk" Property="FontWeight" Value="SemiBold" />
                                         </DataTrigger>
                                     </DataTemplate.Triggers>
@@ -170,11 +170,11 @@
                     </StackPanel>
                     <DockPanel Grid.Row="1">
                         <TextBlock DockPanel.Dock="Top" Text="ACTIVITY (latest first)" Style="{StaticResource PanelHeader}" />
-                        <ListBox ItemsSource="{Binding Feed}" Background="{StaticResource PanelBrush}" Foreground="{StaticResource TextBrush}" BorderThickness="0">
+                        <ListBox ItemsSource="{Binding Feed}" Background="{DynamicResource PanelBrush}" Foreground="{DynamicResource TextBrush}" BorderThickness="0">
                             <ListBox.ItemTemplate>
                                 <DataTemplate DataType="{x:Type vm:FeedRow}">
                                     <TextBlock TextWrapping="Wrap">
-                                        <Run Text="{Binding Time, Mode=OneWay}" FontFamily="Consolas" Foreground="{StaticResource MutedTextBrush}" />
+                                        <Run Text="{Binding Time, Mode=OneWay}" FontFamily="Consolas" Foreground="{DynamicResource MutedTextBrush}" />
                                         <Run Text="{Binding Who, Mode=OneWay}" FontWeight="SemiBold" />
                                         <Run Text="{Binding Text, Mode=OneWay}" />
                                     </TextBlock>
@@ -189,7 +189,7 @@
                             <ItemsControl ItemsSource="{Binding Alerts}" Margin="0,0,0,10">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <TextBlock Text="{Binding}" Foreground="{StaticResource WarningBrush}" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" />
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -276,7 +276,7 @@
                             <ItemsControl ItemsSource="{Binding AiRoles}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type vm:AiRoleRow}">
-                                        <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="2,4">
+                                        <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="2,4">
                                             <DockPanel>
                                                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                                                     <Button x:Name="Give" Content="Give" Style="{StaticResource Small}" Visibility="{Binding Givable, Converter={StaticResource BoolToVisibility}}"
@@ -290,10 +290,10 @@
                                                 <StackPanel>
                                                     <TextBlock>
                                                         <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
-                                                        <Run x:Name="State" Text="{Binding State, Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                        <Run x:Name="State" Text="{Binding State, Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" />
                                                     </TextBlock>
-                                                    <TextBlock Text="{Binding Covers}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
-                                                    <TextBlock Text="{Binding System}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock Text="{Binding Covers}" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding System}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" />
                                                 </StackPanel>
                                             </DockPanel>
                                         </Border>
@@ -301,7 +301,7 @@
                                             <DataTrigger Binding="{Binding Human}" Value="True">
                                                 <Setter TargetName="Take" Property="Visibility" Value="Collapsed" />
                                                 <Setter TargetName="Back" Property="Visibility" Value="Visible" />
-                                                <Setter TargetName="State" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                                <Setter TargetName="State" Property="Foreground" Value="{DynamicResource AccentBrush}" />
                                             </DataTrigger>
                                         </DataTemplate.Triggers>
                                     </DataTemplate>
@@ -319,8 +319,8 @@
                                         <Border Style="{StaticResource Panel}" Margin="0,0,0,6" Padding="8">
                                             <StackPanel>
                                                 <TextBlock>
-                                                    <Run Text="{Binding Role, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" />
-                                                    <Run Text="{Binding Since, StringFormat=' · since {0}', Mode=OneWay}" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <Run Text="{Binding Role, Mode=OneWay}" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" />
+                                                    <Run Text="{Binding Since, StringFormat=' · since {0}', Mode=OneWay}" Foreground="{DynamicResource MutedTextBrush}" />
                                                 </TextBlock>
                                                 <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Margin="0,2,0,4" />
                                                 <DockPanel Visibility="{Binding HasQuantity, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,4">

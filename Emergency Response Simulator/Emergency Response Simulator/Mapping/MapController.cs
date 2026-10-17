@@ -331,6 +331,13 @@ public sealed class MapController
 
     private bool IsOn(string key) => _viewModel.FindLayerToggle(key)?.IsOn == true;
 
+    /// <summary>Redraws every dynamic layer, e.g. after the colour palette changed (Phase 21).</summary>
+    public void Restyle()
+    {
+        RefreshOperational();
+        RefreshTruth();
+    }
+
     private void RefreshOperational()
     {
         _zones.Features = _cop.Zones

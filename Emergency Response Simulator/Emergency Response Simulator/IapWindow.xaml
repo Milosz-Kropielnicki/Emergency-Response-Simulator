@@ -4,7 +4,7 @@
         xmlns:vm="clr-namespace:Emergency_Response_Simulator.ViewModels"
         xmlns:iap="clr-namespace:Emergency_Response_Simulator.ViewModels.Iap"
         Title="Incident Action Plan Builder" Width="1320" Height="860" MinWidth="1000" MinHeight="600"
-        Background="{StaticResource BackgroundBrush}" Foreground="{StaticResource TextBrush}" FontSize="12"
+        Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextBrush}" FontSize="12"
         WindowStartupLocation="CenterOwner">
     <Window.Resources>
         <!-- Form fields that stay usable whatever the plan's status (period form, return comments, progress). -->
@@ -47,23 +47,23 @@
 
         <Style x:Key="SectionTitle" TargetType="TextBlock" BasedOn="{StaticResource PanelHeader}">
             <Setter Property="FontSize" Value="12" />
-            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
         </Style>
         <Style x:Key="Hint" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="Margin" Value="0,0,0,8" />
         </Style>
         <Style x:Key="Card" TargetType="Border">
-            <Setter Property="Background" Value="{StaticResource PanelBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PanelBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="3" />
             <Setter Property="Padding" Value="10" />
             <Setter Property="Margin" Value="0,0,0,10" />
         </Style>
         <Style x:Key="ColumnHeader" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="Margin" Value="0,0,6,4" />
         </Style>
@@ -72,7 +72,7 @@
         <Style x:Key="HiddenTab" TargetType="TabItem">
             <Setter Property="Visibility" Value="Collapsed" />
             <!-- Section content inherits its text colour from the (hidden) tab item. -->
-            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
         </Style>
     </Window.Resources>
 
@@ -84,7 +84,7 @@
         </Grid.RowDefinitions>
 
         <!-- ===== Header: incident, period, version, status and workflow ===== -->
-        <Border Grid.Row="0" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="14,10">
+        <Border Grid.Row="0" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="14,10">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -93,7 +93,7 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Margin="0,0,24,0">
                     <TextBlock Text="INCIDENT ACTION PLAN" FontWeight="Bold" FontSize="15" />
-                    <TextBlock Text="{Binding IncidentLabel}" Foreground="{StaticResource MutedTextBrush}" />
+                    <TextBlock Text="{Binding IncidentLabel}" Foreground="{DynamicResource MutedTextBrush}" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
                             Visibility="{Binding HasIncident, Converter={StaticResource BoolToVisibility}}">
@@ -104,9 +104,9 @@
                     <StackPanel Margin="12,0,0,0" VerticalAlignment="Center" Visibility="{Binding HasPlan, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock x:Name="StatusLine" Text="{Binding PlanStatus}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="420" />
                         <TextBlock FontSize="11">
-                            <Run Text="{Binding ErrorCount, Mode=OneWay, StringFormat='{}{0} error(s)'}" Foreground="{StaticResource CriticalBrush}" />
-                            <Run Text="·" Foreground="{StaticResource MutedTextBrush}" />
-                            <Run Text="{Binding WarningCount, Mode=OneWay, StringFormat='{}{0} warning(s)'}" Foreground="{StaticResource WarningBrush}" />
+                            <Run Text="{Binding ErrorCount, Mode=OneWay, StringFormat='{}{0} error(s)'}" Foreground="{DynamicResource CriticalBrush}" />
+                            <Run Text="·" Foreground="{DynamicResource MutedTextBrush}" />
+                            <Run Text="{Binding WarningCount, Mode=OneWay, StringFormat='{}{0} warning(s)'}" Foreground="{DynamicResource WarningBrush}" />
                         </TextBlock>
                     </StackPanel>
                 </StackPanel>
@@ -117,9 +117,9 @@
                             Visibility="{Binding CanSubmit, Converter={StaticResource BoolToVisibility}}" />
                     <Button Content="Submit for approval" Command="{Binding SubmitCommand}"
                             Visibility="{Binding CanSubmit, Converter={StaticResource BoolToVisibility}}" />
-                    <Button Content="Approve" Command="{Binding ApproveCommand}" BorderBrush="{StaticResource OkBrush}"
+                    <Button Content="Approve" Command="{Binding ApproveCommand}" BorderBrush="{DynamicResource OkBrush}"
                             Visibility="{Binding CanDecide, Converter={StaticResource BoolToVisibility}}" />
-                    <Button Content="Brief: push assignments" Command="{Binding BriefCommand}" BorderBrush="{StaticResource AccentBrush}"
+                    <Button Content="Brief: push assignments" Command="{Binding BriefCommand}" BorderBrush="{DynamicResource AccentBrush}"
                             Visibility="{Binding CanBrief, Converter={StaticResource BoolToVisibility}}" />
                     <Button Content="New version" Command="{Binding NewVersionCommand}"
                             Visibility="{Binding CanNewVersion, Converter={StaticResource BoolToVisibility}}"
@@ -138,17 +138,17 @@
             </Grid.ColumnDefinitions>
 
             <!-- Section navigation with compliance badges. -->
-            <Border Grid.Column="0" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
+            <Border Grid.Column="0" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
                 <StackPanel>
                     <ListBox ItemsSource="{Binding Sections}" SelectedIndex="{Binding SelectedSection}" Margin="0,8,0,0">
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="{x:Type iap:SectionItem}">
                                 <DockPanel Margin="6,5" LastChildFill="True">
-                                    <Border DockPanel.Dock="Right" Background="{StaticResource CriticalBrush}" CornerRadius="7" Padding="5,0" Margin="4,0,0,0"
+                                    <Border DockPanel.Dock="Right" Background="{DynamicResource CriticalBrush}" CornerRadius="7" Padding="5,0" Margin="4,0,0,0"
                                             Visibility="{Binding Errors, Converter={x:Static vm:Converters.PositiveToVisible}}" ToolTip="Errors">
                                         <TextBlock Text="{Binding Errors}" FontSize="10" Foreground="White" FontWeight="Bold" />
                                     </Border>
-                                    <Border DockPanel.Dock="Right" Background="{StaticResource WarningBrush}" CornerRadius="7" Padding="5,0" Margin="4,0,0,0"
+                                    <Border DockPanel.Dock="Right" Background="{DynamicResource WarningBrush}" CornerRadius="7" Padding="5,0" Margin="4,0,0,0"
                                             Visibility="{Binding Warnings, Converter={x:Static vm:Converters.PositiveToVisible}}" ToolTip="Warnings">
                                         <TextBlock Text="{Binding Warnings}" FontSize="10" Foreground="Black" FontWeight="Bold" />
                                     </Border>
@@ -162,7 +162,7 @@
                 </StackPanel>
             </Border>
 
-            <TabControl Grid.Column="1" SelectedIndex="{Binding SelectedSection}" Background="{StaticResource BackgroundBrush}" Foreground="{StaticResource TextBrush}"
+            <TabControl Grid.Column="1" SelectedIndex="{Binding SelectedSection}" Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextBrush}"
                         ItemContainerStyle="{StaticResource HiddenTab}">
 
                 <!-- 0: Period & situation -->
@@ -215,9 +215,9 @@
                             </StackPanel>
 
                             <StackPanel Grid.Column="2" Visibility="{Binding HasPlan, Converter={StaticResource BoolToVisibility}}">
-                                <Border Style="{StaticResource Card}" BorderBrush="{StaticResource WarningBrush}"
+                                <Border Style="{StaticResource Card}" BorderBrush="{DynamicResource WarningBrush}"
                                         Visibility="{Binding ReturnNote, Converter={x:Static vm:Converters.TextToVisible}}">
-                                    <TextBlock Text="{Binding ReturnNote}" TextWrapping="Wrap" Foreground="{StaticResource WarningBrush}" />
+                                    <TextBlock Text="{Binding ReturnNote}" TextWrapping="Wrap" Foreground="{DynamicResource WarningBrush}" />
                                 </Border>
                                 <Border Style="{StaticResource Card}">
                                     <StackPanel>
@@ -286,7 +286,7 @@
                                                     <ItemsControl ItemsSource="{Binding Operational}" Margin="30,8,0,0">
                                                         <ItemsControl.ItemTemplate>
                                                             <DataTemplate DataType="{x:Type iap:OperationalEntry}">
-                                                                <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="2,0,0,0" Padding="10,4,0,4" Margin="0,0,0,10">
+                                                                <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="2,0,0,0" Padding="10,4,0,4" Margin="0,0,0,10">
                                                                     <StackPanel>
                                                                         <DockPanel>
                                                                             <TextBlock DockPanel.Dock="Left" Text="{Binding Number}" FontWeight="SemiBold" Width="34" VerticalAlignment="Center" />
@@ -391,11 +391,11 @@
                                                             </Grid.ColumnDefinitions>
                                                             <StackPanel>
                                                                 <TextBlock Text="{Binding Label}" />
-                                                                <TextBlock Text="{Binding Staff}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                                <TextBlock Text="{Binding Staff}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" />
                                                             </StackPanel>
                                                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                                 <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" ToolTip="Leave empty: the IC retains the function" />
-                                                                <TextBlock Text="{Binding CopHolder}" FontSize="10" Foreground="{StaticResource WarningBrush}"
+                                                                <TextBlock Text="{Binding CopHolder}" FontSize="10" Foreground="{DynamicResource WarningBrush}"
                                                                            Visibility="{Binding CopHolder, Converter={x:Static vm:Converters.TextToVisible}}" />
                                                             </StackPanel>
                                                         </Grid>
@@ -459,7 +459,7 @@
                                                 </ItemsControl.ItemsPanel>
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate>
-                                                        <Polyline Points="{Binding}" Stroke="{StaticResource MutedTextBrush}" StrokeThickness="1.2" />
+                                                        <Polyline Points="{Binding}" Stroke="{DynamicResource MutedTextBrush}" StrokeThickness="1.2" />
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
@@ -478,13 +478,13 @@
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate DataType="{x:Type iap:OrgNode}">
                                                         <Grid Width="{Binding Width}" Height="{Binding Height}">
-                                                            <Rectangle x:Name="Frame" Fill="{StaticResource PanelRaisedBrush}" Stroke="{StaticResource AccentBrush}"
+                                                            <Rectangle x:Name="Frame" Fill="{DynamicResource PanelRaisedBrush}" Stroke="{DynamicResource AccentBrush}"
                                                                        StrokeThickness="1.2" RadiusX="3" RadiusY="3" />
                                                             <StackPanel Margin="7,4">
                                                                 <DockPanel>
                                                                     <TextBlock x:Name="SpanText" DockPanel.Dock="Right" Text="{Binding Span}" FontSize="9"
-                                                                               Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
-                                                                    <TextBlock Text="{Binding Title}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
+                                                                               Foreground="{DynamicResource MutedTextBrush}" VerticalAlignment="Center" />
+                                                                    <TextBlock Text="{Binding Title}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
                                                                 </DockPanel>
                                                                 <TextBlock x:Name="NameText" Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                                                                 <ItemsControl ItemsSource="{Binding Members}" Margin="0,3,0,0">
@@ -493,7 +493,7 @@
                                                                             <TextBlock x:Name="Member" Text="{Binding Text}" FontSize="10" Height="15" TextTrimming="CharacterEllipsis" />
                                                                             <DataTemplate.Triggers>
                                                                                 <DataTrigger Binding="{Binding HasProblem}" Value="True">
-                                                                                    <Setter TargetName="Member" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                                                    <Setter TargetName="Member" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                                                 </DataTrigger>
                                                                             </DataTemplate.Triggers>
                                                                         </DataTemplate>
@@ -503,15 +503,15 @@
                                                         </Grid>
                                                         <DataTemplate.Triggers>
                                                             <DataTrigger Binding="{Binding IsVacant}" Value="True">
-                                                                <Setter TargetName="Frame" Property="Stroke" Value="{StaticResource BorderBrush}" />
+                                                                <Setter TargetName="Frame" Property="Stroke" Value="{DynamicResource BorderBrush}" />
                                                                 <Setter TargetName="Frame" Property="StrokeDashArray" Value="4 3" />
-                                                                <Setter TargetName="Frame" Property="Fill" Value="{StaticResource PanelBrush}" />
-                                                                <Setter TargetName="NameText" Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                                                                <Setter TargetName="Frame" Property="Fill" Value="{DynamicResource PanelBrush}" />
+                                                                <Setter TargetName="NameText" Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
                                                                 <Setter TargetName="NameText" Property="FontWeight" Value="Normal" />
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding IsOverloaded}" Value="True">
-                                                                <Setter TargetName="Frame" Property="Stroke" Value="{StaticResource CriticalBrush}" />
-                                                                <Setter TargetName="SpanText" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                                <Setter TargetName="Frame" Property="Stroke" Value="{DynamicResource CriticalBrush}" />
+                                                                <Setter TargetName="SpanText" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                             </DataTrigger>
                                                         </DataTemplate.Triggers>
                                                     </DataTemplate>
@@ -561,7 +561,7 @@
                                 <ItemsControl ItemsSource="{Binding Assignments}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type iap:AssignmentEntry}">
-                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,4">
+                                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,4">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="150" />
@@ -573,12 +573,12 @@
                                                     </Grid.ColumnDefinitions>
                                                     <StackPanel VerticalAlignment="Center">
                                                         <TextBlock Text="{Binding Callsign}" FontWeight="SemiBold" />
-                                                        <TextBlock Text="{Binding UnitType}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                        <TextBlock Text="{Binding UnitType}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" />
                                                     </StackPanel>
                                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,6,0">
                                                         <TextBlock Text="{Binding CopStatus}" TextTrimming="CharacterEllipsis" />
                                                         <TextBlock Text="{Binding Problem, StringFormat='⚠ {0}'}" FontSize="10" TextWrapping="Wrap"
-                                                                   Foreground="{StaticResource CriticalBrush}"
+                                                                   Foreground="{DynamicResource CriticalBrush}"
                                                                    Visibility="{Binding Problem, Converter={x:Static vm:Converters.TextToVisible}}" />
                                                     </StackPanel>
                                                     <ComboBox Grid.Column="2" IsEditable="True" Margin="0,0,6,0" VerticalAlignment="Center"
@@ -715,7 +715,7 @@
                                                 </Grid.ColumnDefinitions>
                                                 <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,4,0" />
                                                 <TextBox Grid.Column="1" Text="{Binding TravelMinutes, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,4,0" />
-                                                <TextBlock Grid.Column="2" Text="{Binding Distance}" VerticalAlignment="Center" Foreground="{StaticResource MutedTextBrush}" />
+                                                <TextBlock Grid.Column="2" Text="{Binding Distance}" VerticalAlignment="Center" Foreground="{DynamicResource MutedTextBrush}" />
                                                 <TextBox Grid.Column="3" Text="{Binding Capabilities, UpdateSourceTrigger=PropertyChanged}" />
                                                 <Button Grid.Column="4" Style="{StaticResource RemoveButton}" />
                                             </Grid>
@@ -881,7 +881,7 @@
                                     <StackPanel>
                                         <TextBlock Text="APPROVAL" Style="{StaticResource SectionTitle}" />
                                         <TextBlock Text="{Binding PlanTitle}" FontWeight="SemiBold" />
-                                        <TextBlock Text="{Binding PlanStatus}" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,8" />
+                                        <TextBlock Text="{Binding PlanStatus}" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" Margin="0,0,0,8" />
 
                                         <StackPanel Visibility="{Binding CanSubmit, Converter={StaticResource BoolToVisibility}}">
                                             <TextBlock Style="{StaticResource Hint}" Text="The Planning Section submits the draft; errors must be fixed first. Warnings go to the IC with the plan." />
@@ -891,7 +891,7 @@
                                         <StackPanel Visibility="{Binding CanDecide, Converter={StaticResource BoolToVisibility}}">
                                             <TextBlock Style="{StaticResource Hint}" Text="As Incident Commander: approve the plan to put it in force, or return it with what to change." />
                                             <Button Content="Approve: put the plan in force" Command="{Binding ApproveCommand}" HorizontalAlignment="Left" Margin="0,0,0,8"
-                                                    BorderBrush="{StaticResource OkBrush}" />
+                                                    BorderBrush="{DynamicResource OkBrush}" />
                                             <TextBox Style="{StaticResource FreeTextBox}" Text="{Binding ReturnComments, UpdateSourceTrigger=PropertyChanged}"
                                                      ToolTip="What the planner should change" />
                                             <Button Content="Return for revision" Command="{Binding ReturnPlanCommand}" HorizontalAlignment="Left" Margin="0,4,0,0" />
@@ -901,7 +901,7 @@
                                             <TextBlock Style="{StaticResource Hint}"
                                                        Text="Briefing pushes the plan to the COP: staffs positions, forms groups, dispatches planned units that are available, places units in their groups and orders every unit whose assignment changed since the last briefing." />
                                             <Button Content="Brief: push assignments" Command="{Binding BriefCommand}" HorizontalAlignment="Left" Margin="0"
-                                                    BorderBrush="{StaticResource AccentBrush}" />
+                                                    BorderBrush="{DynamicResource AccentBrush}" />
                                         </StackPanel>
                                     </StackPanel>
                                 </Border>
@@ -916,16 +916,16 @@
                                         <ListBox.ItemTemplate>
                                             <DataTemplate DataType="{x:Type iap:IssueRow}">
                                                 <DockPanel Margin="0,2">
-                                                    <TextBlock x:Name="Mark" DockPanel.Dock="Left" Text="▲" Width="16" Foreground="{StaticResource WarningBrush}" />
+                                                    <TextBlock x:Name="Mark" DockPanel.Dock="Left" Text="▲" Width="16" Foreground="{DynamicResource WarningBrush}" />
                                                     <StackPanel>
                                                         <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
-                                                        <TextBlock Text="{Binding Section}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                                        <TextBlock Text="{Binding Section}" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" />
                                                     </StackPanel>
                                                 </DockPanel>
                                                 <DataTemplate.Triggers>
                                                     <DataTrigger Binding="{Binding IsError}" Value="True">
                                                         <Setter TargetName="Mark" Property="Text" Value="●" />
-                                                        <Setter TargetName="Mark" Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                        <Setter TargetName="Mark" Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                     </DataTrigger>
                                                 </DataTemplate.Triggers>
                                             </DataTemplate>
@@ -941,7 +941,7 @@
                                     <TextBlock DockPanel.Dock="Top" Text="THE PLAN AS IT WILL BE BRIEFED" Style="{StaticResource SectionTitle}" />
                                     <TextBox Style="{StaticResource FreeTextBox}" Text="{Binding DocumentText, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas"
                                              VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" VerticalContentAlignment="Top"
-                                             Background="{StaticResource BackgroundBrush}" BorderThickness="0" />
+                                             Background="{DynamicResource BackgroundBrush}" BorderThickness="0" />
                                 </DockPanel>
                             </Border>
                         </Grid>
@@ -951,17 +951,17 @@
         </Grid>
 
         <!-- ===== Footer: result of the last action ===== -->
-        <Border Grid.Row="2" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="14,5">
+        <Border Grid.Row="2" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="14,5">
             <DockPanel>
-                <TextBlock DockPanel.Dock="Right" Foreground="{StaticResource WarningBrush}" Text="● Unsaved changes"
+                <TextBlock DockPanel.Dock="Right" Foreground="{DynamicResource WarningBrush}" Text="● Unsaved changes"
                            Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisibility}}" />
                 <TextBlock Text="{Binding Message}" TextTrimming="CharacterEllipsis">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource OkBrush}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding MessageFailed}" Value="True">
-                                    <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>

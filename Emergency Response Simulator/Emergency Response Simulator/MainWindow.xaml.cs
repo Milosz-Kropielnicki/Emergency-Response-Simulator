@@ -28,6 +28,7 @@ namespace Emergency_Response_Simulator
                 services.GetRequiredService<AvlService>(), configuration.GetSection("Map"),
                 services.GetRequiredService<RoutingService>(), services.GetRequiredService<TrafficFeed>(),
                 services.GetRequiredService<LiveTraffic>());
+            InitialiseAccessibility(services); // Phase 21
             viewModel.IapRequested += (_, _) => ShowIapBuilder();
             viewModel.AarRequested += (_, _) => ShowAar(services);
             viewModel.FormsRequested += (_, _) => ShowForms(services);

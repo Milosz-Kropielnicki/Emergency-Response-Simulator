@@ -1,0 +1,109 @@
+<Window x:Class="Emergency_Response_Simulator.DisplaySettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:acc="clr-namespace:Emergency_Response_Simulator.Accessibility"
+        Title="{acc:Loc Settings.Title}" Width="760" Height="700" MinWidth="560" MinHeight="460"
+        Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextBrush}" FontSize="13"
+        WindowStartupLocation="CenterOwner" AutomationProperties.Name="{acc:Loc Settings.Title}">
+    <Window.Resources>
+        <Style x:Key="Header" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+            <Setter Property="Margin" Value="0,12,0,3" />
+        </Style>
+        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+        </Style>
+    </Window.Resources>
+    <DockPanel Margin="14">
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+            <Button DockPanel.Dock="Right" Content="{acc:Loc Settings.Close}" IsCancel="True" Click="Close_Click" Margin="0" />
+            <TextBlock Text="{Binding Status}" Foreground="{DynamicResource MutedTextBrush}" VerticalAlignment="Center" TextWrapping="Wrap"
+                       AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Status" />
+        </DockPanel>
+        <TabControl SelectedIndex="{Binding SelectedTab}" Background="{DynamicResource PanelBrush}">
+
+            <TabItem Header="{acc:Loc Settings.Display}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12">
+                        <TextBlock Text="{acc:Loc Settings.Theme}" Style="{StaticResource Header}" Margin="0,0,0,3" />
+                        <ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" AutomationProperties.Name="{acc:Loc Settings.Theme}" />
+                        <TextBlock Text="{acc:Loc Settings.Vision}" Style="{StaticResource Header}" />
+                        <ComboBox ItemsSource="{Binding Visions}" SelectedItem="{Binding Vision}" AutomationProperties.Name="{acc:Loc Settings.Vision}" />
+                        <TextBlock Text="{acc:Loc Settings.Font}" Style="{StaticResource Header}" />
+                        <ComboBox ItemsSource="{Binding Fonts}" SelectedItem="{Binding Font}" AutomationProperties.Name="{acc:Loc Settings.Font}" />
+                        <TextBlock Text="{acc:Loc Settings.Scale}" Style="{StaticResource Header}" />
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding Scale, StringFormat={}{0:P0}}" Width="56" TextAlignment="Right" VerticalAlignment="Center" />
+                            <Slider Minimum="1" Maximum="2" SmallChange="0.05" LargeChange="0.25" TickFrequency="0.25" IsSnapToTickEnabled="False"
+                                    Value="{Binding Scale}" AutomationProperties.Name="{acc:Loc Settings.Scale}" />
+                        </DockPanel>
+                        <TextBlock Text="{acc:Loc Settings.Language}" Style="{StaticResource Header}" />
+                        <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" AutomationProperties.Name="{acc:Loc Settings.Language}" />
+                        <CheckBox Content="{acc:Loc Settings.Voice}" IsChecked="{Binding VoiceCommands}" Margin="0,14,0,2" />
+                        <TextBlock Text="{Binding VoiceStatus}" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
+                        <Button Content="{acc:Loc Settings.Apply}" Command="{Binding ApplyCommand}" HorizontalAlignment="Left" Margin="0,14,0,0" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="{acc:Loc Settings.Shortcuts}">
+                <DockPanel Margin="12">
+                    <TextBlock DockPanel.Dock="Top" Text="{acc:Loc Settings.ShortcutsHint}" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" Margin="0,0,0,8" />
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                        <TextBlock Text="{Binding ShortcutProblems}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <Button Content="{acc:Loc Settings.Apply}" Command="{Binding ApplyShortcutsCommand}" />
+                            <Button Content="{acc:Loc Settings.Reset}" Command="{Binding ResetShortcutsCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding Shortcuts}" AutoGenerateColumns="False" HeadersVisibility="Column" CanUserAddRows="False">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Action" Binding="{Binding Label}" IsReadOnly="True" Width="*" />
+                            <DataGridTextColumn Header="Shortcut" Binding="{Binding Gesture, UpdateSourceTrigger=PropertyChanged}" Width="170" />
+                            <DataGridTextColumn Header="Default" Binding="{Binding Default}" IsReadOnly="True" Width="130" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="{acc:Loc Settings.Workspace}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12">
+                        <TextBlock Text="{Binding WorkspaceName}" FontSize="15" FontWeight="SemiBold" />
+                        <TextBlock Text="{acc:Loc Settings.WorkspaceHint}" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" Margin="0,4,0,6" />
+                        <ItemsControl ItemsSource="{Binding Panels}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Name}" IsChecked="{Binding Shown}" IsEnabled="{Binding CanChange}" Width="140" Margin="0,2" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{acc:Loc Settings.Focus}" Style="{StaticResource Header}" />
+                        <ComboBox ItemsSource="{Binding FocusChoices}" SelectedItem="{Binding Focus}" Width="220" HorizontalAlignment="Left"
+                                  AutomationProperties.Name="{acc:Loc Settings.Focus}" />
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button Content="{acc:Loc Settings.Apply}" Command="{Binding SaveWorkspaceCommand}" />
+                            <Button Content="{acc:Loc Settings.Reset}" Command="{Binding ResetWorkspaceCommand}" />
+                        </StackPanel>
+
+                        <TextBlock Text="{acc:Loc Settings.Dashboards}" FontSize="15" FontWeight="SemiBold" Margin="0,20,0,0" />
+                        <TextBlock Text="{acc:Loc Settings.DashboardsHint}" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}" Margin="0,4,0,6" />
+                        <TextBlock Text="{Binding LayoutSummary}" Margin="0,0,0,6" />
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="{acc:Loc Settings.SaveLayout}" Command="{Binding SaveLayoutCommand}" />
+                            <Button Content="{acc:Loc Settings.ClearLayout}" Command="{Binding ClearLayoutCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

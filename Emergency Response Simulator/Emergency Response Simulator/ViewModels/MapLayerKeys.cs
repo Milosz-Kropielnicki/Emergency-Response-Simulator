@@ -39,4 +39,9 @@ public static class MapLayerKeys
     public const string TruthPeople = "truth:people";
     public const string TruthUnits = "truth:units";
     public const string TruthTraffic = "truth:traffic";
+
+    /// <summary>Every key, for checking workspace definitions (Phase 21).</summary>
+    public static IReadOnlySet<string> All { get; } = typeof(MapLayerKeys)
+        .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+        .Where(f => f.IsLiteral).Select(f => (string)f.GetRawConstantValue()!).ToHashSet();
 }
