@@ -178,6 +178,10 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<ICopService>(), sp.GetRequiredService<IEventPublisher>(), sp.GetRequiredService<IC2Service>(),
             sp.GetRequiredService<ISimulationControl>(), sp.GetRequiredService<IRoutingService>(), sp.GetService<IGisService>()));
 
+        // Data standards and interoperability (Phase 20): CAP, EDXL, NIEM and HL7 in and out, and the NIMS check.
+        services.AddSingleton<IIntegrationService>(sp => new IntegrationService(sp.GetRequiredService<ICopService>(), sp.GetRequiredService<IEventPublisher>(),
+            sp.GetRequiredService<ISimulationControl>()));
+
         services.AddHttpClient<IPlumeService, HttpPlumeService>((sp, http) =>
         {
             var options = sp.GetRequiredService<IOptions<HazardModelOptions>>().Value;

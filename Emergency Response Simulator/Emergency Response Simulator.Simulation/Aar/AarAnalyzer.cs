@@ -2,6 +2,7 @@ using Emergency_Response_Simulator.Core.Contracts;
 using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Core.Geo;
 using Emergency_Response_Simulator.Core.Model;
+using Emergency_Response_Simulator.Simulation.Standards;
 using Emergency_Response_Simulator.Simulation.State;
 
 namespace Emergency_Response_Simulator.Simulation.Aar;
@@ -65,6 +66,7 @@ public sealed partial class AarAnalyzer
         var delays = Delays();
         var metrics = Metrics(usage, delays);
         var branches = Branches();
+        var nims = NimsCompliance.Check(_cop, now: End);
         return new AarReport
         {
             SessionId = sessionId,
@@ -83,6 +85,7 @@ public sealed partial class AarAnalyzer
             [
                 .. Findings(metrics, branches), .. HandoverFindings(), .. PoliticalFindings(), .. MediaFindings(), .. PlumeFindings(), .. PublicFindings(),
                 .. LogisticsFindings(), .. HealthFindings(), .. ProtectionFindings(), .. TrainingFindings(),
+                .. NimsFindings(nims),
             ],
             Participants = Participants(),
             Instructor = _instructor,
@@ -94,6 +97,7 @@ public sealed partial class AarAnalyzer
             Health = HealthSummary(),
             Protection = ProtectionSummary(),
             Training = TrainingSummary(),
+            Nims = nims,
         };
     }
 

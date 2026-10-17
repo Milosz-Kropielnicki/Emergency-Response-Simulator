@@ -50,8 +50,10 @@ namespace Emergency_Response_Simulator
             {
                 if (!await ConnectAsync(builder.Configuration)) return;
                 builder.Services.AddSimulationClient(_connection!);
-                // The map's static layers and the road network still come from a GIS database, if this machine has one.
+                // The map's static layers and the road network come from a GIS database, if this machine has one; otherwise the
+                // map's layers come from the server's (Phase 20).
                 if (usingDatabase) builder.Services.AddErsGis(connectionString!);
+                else builder.Services.AddSingleton(RemoteProxy.Create<IGisService>(_connection!, SimulationHubProtocol.Services.Gis));
                 var session = _connection!.Session!;
                 var ticket = _connection.Ticket!;
                 builder.Services.AddSingleton(new DataSourceInfo($"Server {_connection.Options.Server.Authority} · code {session.Code} · {ticket.DisplayName}, {Roles.Name(ticket.Role)}"));
@@ -80,6 +82,7 @@ namespace Emergency_Response_Simulator
             builder.Services.AddSingleton<InstructorViewModel>();
             builder.Services.AddSingleton<AarViewModel>();
             builder.Services.AddSingleton(sp => new ScenarioEditorViewModel(sp.GetRequiredService<IInstructorService>()));
+            builder.Services.AddSingleton(sp => new DataExchangeViewModel(sp.GetRequiredService<IIntegrationService>(), sp.GetRequiredService<ICopService>()));
             builder.Services.AddSingleton(sp => new FormsViewModel(sp.GetRequiredService<IEventStore>(), sp.GetRequiredService<SimulationSession>(),
                 sp.GetRequiredService<CopView>()));
             builder.Services.AddSingleton<MainViewModel>();

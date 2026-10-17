@@ -21,13 +21,14 @@ Emergency Response Simulator/
 ├─ Emergency Response Simulator.Core        entities, events, module contracts (no dependencies but NTS)
 ├─ Emergency Response Simulator.Simulation  engine, world/perceived state, C2, AAR, plume client
 ├─ Emergency Response Simulator.Data        EF Core + PostGIS schema, event store, GIS service
-├─ Emergency Response Simulator.Server      ASP.NET Core + SignalR host for networked sessions (Phase 11)
+├─ Emergency Response Simulator.Server      ASP.NET Core + SignalR host for networked sessions (Phase 11), REST API (Phase 20)
 ├─ Emergency Response Simulator.Client      SignalR client: mirrored event stream, remote service proxies (Phase 11)
 ├─ Emergency Response Simulator             WPF shell (composition root; standalone or client)
 └─ Emergency Response Simulator.Tests       xUnit
 hazard-models/                              Python plume service + tests
 database/                                   local PostgreSQL setup script
 docs/                                       instructor and observer guides (Phase 12)
+standards/samples/                          illustrative CAP, EDXL-HAVE and NIEM documents to import (Phase 20)
 ```
 
 Dependencies point inward: `App → Client, Simulation, Data → Core` and `Server → Simulation, Data → Core`. Simulation and Data do not know about each other; the app (or the server) wires them together. The wire contract both sides share lives in `Simulation/Remote`.
@@ -1540,6 +1541,105 @@ Under **Scenario & training**:
 The HTML and CSV exports include it all.
 
 **Tests:** `ScenarioTests`.
+
+## Data standards & integration (Phase 20)
+
+Interoperability with the systems emergency services already run. Everything here works over the Phase 11 server, so an outside tool talks to a live exercise the same way a trainee's client does.
+
+### NIMS/ICS compliance (`NimsCompliance`, `NimsTerminology`, `NimsResourceTypes`)
+
+The response is checked against NIMS from the COP: what command has set up and said, never the ground truth. Each finding is a **gap** (a requirement not met), an **advisory** (recommended practice), or **met** (so the review says what went right). The score is 100, less 10 per gap and 4 per advisory.
+
+| Area | What is checked |
+|---|---|
+| Organisation | an Incident Commander for every incident with resources; span of control 3–7 for every supervisor; Operations staffed once more than 7 resources are committed; a Safety Officer for hazardous work (hazmat, explosion, collapse, active threat, a hot zone or a Mayday); unified command where several agencies' resources are at the incident; an Incident Command Post, and a Staging Area past 10 resources |
+| Forms | an approved IAP within an hour of each operational period starting; its ICS 202–208 complete (the Phase 8 compliance rules); a safety message (ICS 208) and hospitals in the medical plan (ICS 206); decisions logged with their reasons |
+| Terminology | **plain language**: ten-codes, "code 3", signal codes and Q-codes in what command says on the radio, each with what to say instead |
+| Resource typing | every unit typed to the NIMS Resource Typing Library (Engine, Fire, Type 1; Ambulance Ground Team (ALS); SWAT/Tactical Team; Bomb Squad/Explosives Team, and so on) |
+
+**Terminology:**
+
+- The NIMS titles of the Command and General Staff.
+- A **crosswalk** from the terms used here (Ireland's Framework for Major Emergency Management, and the Gold/Silver/Bronze some services use) to NIMS: On-Site Co-ordinator → unified command lead, Silver → Incident Commander, rendezvous point → Staging Area, inner cordon → hot zone, Casualty Clearing Station → Treatment Area.
+
+Positions, units and exports all use the NIMS term. The check runs from **🔗 Standards** (NIMS/ICS compliance tab), over the API (`/nims`), and at the end of the session in the review: up to four gaps appear among the findings, and a **NIMS/ICS compliance** section lists every finding with its reference. The HTML and CSV exports include it.
+
+### Data standards (`IIntegrationService`, `Simulation/Standards`)
+
+| Standard | Out (from the COP) | In (as information received) |
+|---|---|---|
+| **CAP 1.2** | each evacuation and shelter-in-place zone (with its polygon), public-health alert and public statement; several travel in an EDXL-DE envelope | an outside warning (the met service, another agency) becomes a report from that agency and an alert to command; a repeat of the same alert is ignored |
+| **EDXL-DE 1.0** | the whole picture in one envelope: CAP, HAVE, RM and SitRep | unwraps it and takes each CAP, HAVE or NIEM content in turn |
+| **EDXL-HAVE 1.0** | each hospital: EMS traffic (normal, advisory at 90% load, closed on diversion), emergency department places, specialist beds (burn, paediatric, psychiatric; major trauma as adult critical care) | a hospital's own report updates its places, diversion and specialist beds; a hospital not yet on the picture is added if it gives its location |
+| **EDXL-RM 1.0** | each open resource request, its resource **typed to NIMS** | (out only) |
+| **EDXL-SitRep 1.0** | the incidents, casualties, deaths, resources committed and on scene, open requests, and the drafted situation summary; report numbers count up | (out only) |
+| **NIEM 5.0** | an incident exchange: NIEM Core for incidents (identification, category, status, date, location, address) and units (identification, NIMS type, owner, location), with priority, unit status and assignment in the exchange's own namespace | a CAD or records system's incidents, each as a report from that system at its location, for command to act on |
+| **HL7 v2.5.1** | ADT to each receiving hospital: A05 pre-admit (on the way), A04 (registered at ED), A02 (transferred), A03 with disposition 20 (died). Triage tag as the patient and visit number, triage category in OBX, injury in DG1 | hospitals' ADT messages move patients on the tracking board: A01/A04 arrival, A02 transfer, A03 death, A08 re-triage. Each message gets an **ACK**: AA, or AE with the reason |
+
+**Exercise markings:**
+
+- CAP and EDXL-DE carry status **Exercise**.
+- HL7 messages carry processing id **T** (training).
+
+No live system will treat them as real.
+
+**What an import is:** what an outside system says arrives as **perceived** events from the `integration` source, stamped with whoever brought it in. Command still decides what to do with it, and the ground truth is untouched.
+
+**Who can import:**
+
+- Standalone: anyone at the machine.
+- Networked: the instructor, or an API key allowed to feed data.
+
+Exports come from the COP, so a trainee's export holds only what command knows.
+
+**The NIEM exchange** is built the way an IEPD is, on NIEM Core 5.0 elements, but it is the simulator's own exchange. It hasn't been validated against a published IEPD, so a receiving system may need a mapping.
+
+**Samples:** `standards/samples/` has an exercise wind warning (CAP), a hospital going on diversion (HAVE) and a neighbouring CAD's incident (NIEM). All are illustrative; import them from **🔗 Standards** to see each path.
+
+### API-first: the REST API (`Server/Api`)
+
+Beside the SignalR hub, the server serves a REST API at `/api/v1`. `GET /api/v1` (no key needed) describes the modules, the standards and every route.
+
+- **Keys:** each outside system has an API key in `Server:ApiKeys`:
+  - `Name`: how it appears in the record;
+  - `Key`: at least 16 characters, sent as `X-Api-Key` or a bearer token;
+  - `Role`: Observer by default;
+  - `Feed`: may bring data in.
+
+  Like the instructor PIN, keys live only in the server's configuration (`appsettings.Local.json` or the command line).
+- **As a participant:** the first time a key touches a session, it joins as "*Name* (API)" in its role, so everything it does is attributed to it in the record and the decision log. A key never holds a role against a person, and never counts as filling one.
+- **Same rules as the hub:** service calls go through the same authoriser, permission matrix and command gate as a client's.
+  - An observer key reads and exports.
+  - An Operations key may declare a hot zone but not submit a reimbursement claim.
+  - Only a feed key (or the instructor) imports.
+  - The review waits for the end of the session unless the key is the instructor's.
+- **Status codes:** 401 without a valid key, 403 when refused, 404 for an unknown session, service or method, 400 when the service rejects the arguments, 422 when an import takes nothing in.
+- **JSON** is camelCase, with enums as names and geometries as WKT. COP objects come flat: no back-references, with latitude and longitude, and each unit carries its NIMS type.
+
+| Route | |
+|---|---|
+| `GET /sessions` | the server's sessions (the join code only for an instructor key) |
+| `GET /sessions/{id}/cop[/incidents, /units, /zones, /hospitals, /alerts, /reports, /resource-requests, /patients, /weather]` | the perceived picture |
+| `GET` / `POST /sessions/{id}/avl` | latest AVL fixes; an outside tracker's fixes in, by callsign |
+| `GET /sessions/{id}/comms/channels`, `/comms/log` | channels and the log |
+| `GET /sessions/{id}/iap/plans[/{planId}]`, `/iap/forms/{form}?format=text\|html\|json` | plans and every ICS form |
+| `GET /sessions/{id}/gis/layers[/{key}/features?bbox=]`, `/plume/substances`, `POST /plume/predict` | GIS and the dispersion model, through the server |
+| `GET /sessions/{id}/events?after=` | the event stream the key may see, for tools that keep their own copy |
+| `GET` / `POST /sessions/{id}/standards/{key}`, `GET /nims` | standards out and in; the NIMS check |
+| `POST /sessions/{id}/services/{module}/{method}` | any contract method, arguments as a JSON array, exactly as the hub's `Call` |
+
+### Modular services
+
+COP, IAP, C2, GIS, AVL, plume, comms and the review are separate systems behind their contracts. `ServiceModules` lists each one:
+
+- the question it answers;
+- its contract;
+- its event source;
+- how a client gets it: in the event stream, as calls on the server, or both.
+
+The hub now serves **GIS**, **plume** and **integration** as modules, beside C2, IAP, control, review, instructor and assessment. A networked client with no GIS database of its own takes the map's layers from the server's.
+
+**Tests:** `StandardsTests`, `ApiTests`.
 
 ## Local setup
 

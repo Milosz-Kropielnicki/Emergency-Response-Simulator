@@ -82,4 +82,7 @@ public static class EventSources
 
     /// <summary>Observers' and the instructor's assessment notes (Phase 11 M6).</summary>
     public const string Assessment = "assessment";
+
+    /// <summary>Data from outside systems in a standard format: CAP, EDXL, NIEM, HL7, AVL feeds (Phase 20).</summary>
+    public const string Integration = "integration";
 }

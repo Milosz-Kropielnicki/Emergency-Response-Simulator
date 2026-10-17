@@ -328,6 +328,9 @@ public sealed class AarReport
     /// <summary>The scenario, difficulty, random events and incidents within the incident (Phase 19).</summary>
     public AarTraining Training { get; init; } = AarTraining.None;
 
+    /// <summary>The response checked against NIMS/ICS at the end, from the COP (Phase 20).</summary>
+    public NimsReport Nims { get; init; } = NimsReport.Empty;
+
     /// <summary>The decisions one participant made (everyone's with null).</summary>
     public IEnumerable<AarDecision> DecisionsOf(Guid? participantId) =>
         participantId is { } id ? Decisions.Where(d => d.ActorId == id) : Decisions;

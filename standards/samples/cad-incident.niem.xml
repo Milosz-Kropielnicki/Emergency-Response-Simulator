@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ILLUSTRATIVE EXERCISE MESSAGE: a neighbouring service's CAD passes on an incident. Import it as NIEM: it arrives as a
+     report from "Neighbouring CAD (exercise)" at the location given, for command to create an incident from or link. -->
+<ers:IncidentExchange xmlns:nc="http://release.niem.gov/niem/niem-core/5.0/"
+                      xmlns:structures="http://release.niem.gov/niem/structures/5.0/"
+                      xmlns:ers="urn:ers:niem:incident-exchange:1.0">
+  <nc:DocumentCreationDate><nc:DateTime>2026-10-08T14:05:00+00:00</nc:DateTime></nc:DocumentCreationDate>
+  <ers:ExchangeSender>Neighbouring CAD (exercise)</ers:ExchangeSender>
+  <nc:Incident structures:id="incident-cad-77">
+    <nc:ActivityIdentification><nc:IdentificationID>CAD-2026-0077</nc:IdentificationID></nc:ActivityIdentification>
+    <nc:ActivityName>Gas smell at apartment block</nc:ActivityName>
+    <nc:ActivityCategoryText>UtilityFailure</nc:ActivityCategoryText>
+    <nc:ActivityStatus><nc:StatusText>Reported</nc:StatusText></nc:ActivityStatus>
+    <nc:ActivityDate><nc:DateTime>2026-10-08T14:03:00+00:00</nc:DateTime></nc:ActivityDate>
+    <nc:ActivityDescriptionText>Residents report a strong smell of gas on the stairwell</nc:ActivityDescriptionText>
+    <nc:IncidentLocation>
+      <nc:LocationAddress><nc:AddressFullText>Grand Canal Square, Dublin 2</nc:AddressFullText></nc:LocationAddress>
+      <nc:Location2DGeospatialCoordinate>
+        <nc:GeographicCoordinateLatitude><nc:LatitudeDegreeValue>53.3394</nc:LatitudeDegreeValue></nc:GeographicCoordinateLatitude>
+        <nc:GeographicCoordinateLongitude><nc:LongitudeDegreeValue>-6.2384</nc:LongitudeDegreeValue></nc:GeographicCoordinateLongitude>
+      </nc:Location2DGeospatialCoordinate>
+    </nc:IncidentLocation>
+    <ers:IncidentPriorityText>High</ers:IncidentPriorityText>
+  </nc:Incident>
+</ers:IncidentExchange>

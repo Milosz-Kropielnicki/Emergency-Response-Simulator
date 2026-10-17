@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ILLUSTRATIVE EXERCISE MESSAGE: St. James's (in the demo roster) reports its emergency department closed to ambulances.
+     Import it as EDXL-HAVE: the hospital goes on diversion on the COP with 2 of 40 places free, and its burns beds update. -->
+<HospitalStatus xmlns="urn:oasis:names:tc:emergency:EDXL:HAVE:1.0" xmlns:gml="http://www.opengis.net/gml">
+  <Hospital>
+    <Organization>
+      <OrganizationInformation>
+        <OrganizationID></OrganizationID>
+        <OrganizationName>St. James's Hospital</OrganizationName>
+      </OrganizationInformation>
+      <OrganizationGeoLocation><gml:Point><gml:pos>53.3415 -6.2949</gml:pos></gml:Point></OrganizationGeoLocation>
+    </Organization>
+    <EmergencyDepartmentStatus>
+      <EMSTraffic>
+        <EMSTrafficStatus>Closed</EMSTrafficStatus>
+        <EMSTrafficReason>ED at capacity after the Barrow Street fire</EMSTrafficReason>
+      </EMSTraffic>
+    </EmergencyDepartmentStatus>
+    <HospitalBedCapacityStatus>
+      <BedCapacity>
+        <BedType>EmergencyDepartment</BedType>
+        <Capacity><CapacityStatus>VacantAvailable</CapacityStatus><AvailableCount>2</AvailableCount><BaselineCount>40</BaselineCount></Capacity>
+      </BedCapacity>
+      <BedCapacity>
+        <BedType>Burn</BedType>
+        <Capacity><CapacityStatus>NotAvailable</CapacityStatus><AvailableCount>0</AvailableCount><BaselineCount>6</BaselineCount></Capacity>
+      </BedCapacity>
+    </HospitalBedCapacityStatus>
+    <LastUpdateTime>2026-10-08T14:20:00+00:00</LastUpdateTime>
+  </Hospital>
+</HospitalStatus>

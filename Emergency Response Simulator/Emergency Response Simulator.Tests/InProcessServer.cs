@@ -95,6 +95,14 @@ internal sealed class InProcessServer : IAsyncDisposable
         return connection;
     }
 
+    /// <summary>An HTTP client for the REST API (Phase 20), sending <paramref name="apiKey"/> if given.</summary>
+    public HttpClient Http(string? apiKey = null)
+    {
+        var client = _app.GetTestServer().CreateClient();
+        if (apiKey is not null) client.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+        return client;
+    }
+
     /// <summary>Someone joins the session with its code.</summary>
     public async Task<SimulationConnection> JoinAsync(string name, UserRole role, bool feed = true, string? pin = null, bool voiceConsent = true)
     {

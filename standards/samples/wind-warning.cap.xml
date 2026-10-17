@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ILLUSTRATIVE EXERCISE MESSAGE, not a real warning. Import it as CAP (🔗 Standards, or POST /api/v1/sessions/{id}/standards/cap):
+     it arrives as a report from the met service and a warning alert. -->
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>EXERCISE-WIND-0001</identifier>
+  <sender>met-service.example</sender>
+  <sent>2026-10-08T13:30:00+00:00</sent>
+  <status>Exercise</status>
+  <msgType>Alert</msgType>
+  <scope>Public</scope>
+  <info>
+    <category>Met</category>
+    <event>Wind warning</event>
+    <responseType>Prepare</responseType>
+    <urgency>Expected</urgency>
+    <severity>Moderate</severity>
+    <certainty>Likely</certainty>
+    <senderName>National met service (exercise)</senderName>
+    <headline>Orange wind warning for Dublin, gusts to 110 km/h from 16:00</headline>
+    <description>Southwesterly winds veering westerly, with gusts of 90 to 110 km/h, strongest near the coast.</description>
+    <instruction>Secure loose objects. Expect fallen trees and debris on roads.</instruction>
+    <area>
+      <areaDesc>Dublin city and county</areaDesc>
+      <circle>53.344,-6.26 20</circle>
+    </area>
+  </info>
+</alert>

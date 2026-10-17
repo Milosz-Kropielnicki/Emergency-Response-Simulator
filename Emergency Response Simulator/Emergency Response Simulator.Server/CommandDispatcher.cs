@@ -10,8 +10,9 @@ namespace Emergency_Response_Simulator.Server;
 
 /// <summary>
 /// Runs a client's call on the server's own service (Phase 11 M1). Only methods declared on the contract interfaces
-/// can be reached, so the hub mirrors <see cref="IC2Service"/>, <see cref="IIapService"/>, <see cref="ISimulationControl"/>
-/// and <see cref="IAarService"/> one for one, and a method added to a contract is callable without touching the hub.
+/// can be reached, so the hub mirrors <see cref="IC2Service"/>, <see cref="IIapService"/>, <see cref="ISimulationControl"/>,
+/// <see cref="IAarService"/>, the GIS, plume and integration services (Phase 20) and the rest one for one, and a method added
+/// to a contract is callable without touching the hub. The same table serves the REST API (Phase 20).
 /// The services validate every command against the server's live COP exactly as they do in a standalone session.
 /// Arguments and results travel as JSON in the <see cref="WireJson"/> format; cancellation tokens are the connection's,
 /// and progress reporters are not carried.
@@ -26,6 +27,9 @@ public sealed class CommandDispatcher
         [SimulationHubProtocol.Services.Aar] = typeof(IAarService),
         [SimulationHubProtocol.Services.Instructor] = typeof(IInstructorService),
         [SimulationHubProtocol.Services.Assessment] = typeof(IAssessmentService),
+        [SimulationHubProtocol.Services.Gis] = typeof(IGisService),
+        [SimulationHubProtocol.Services.Plume] = typeof(IPlumeService),
+        [SimulationHubProtocol.Services.Integration] = typeof(IIntegrationService),
     };
 
     private static readonly Dictionary<(string Service, string Method, int Args), MethodInfo> Methods = BuildTable();
@@ -81,7 +85,8 @@ public sealed class CommandDispatcher
             return null;
         }
 
-        var instance = session.Services.GetRequiredService(Contracts[service]);
+        var instance = session.Services.GetService(Contracts[service])
+                       ?? throw new HubException($"This server has no {service} service: {(service == SimulationHubProtocol.Services.Gis ? "it has no GIS database" : "it isn't configured")}.");
         var values = new List<object?>();
         var index = 0;
         foreach (var parameter in target.GetParameters())
@@ -112,6 +117,7 @@ public sealed class CommandDispatcher
         }
 
         var done = service is SimulationHubProtocol.Services.C2 or SimulationHubProtocol.Services.Iap or SimulationHubProtocol.Services.Instructor
+                   or SimulationHubProtocol.Services.Integration
             ? await session.Gate.RunAsync(Run, cancellationToken)
             : await Run();
 

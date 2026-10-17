@@ -167,6 +167,17 @@
                             </DataGrid>
                         </StackPanel>
 
+                        <!-- NIMS/ICS compliance (Phase 20) -->
+                        <StackPanel Visibility="{Binding HasNims, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="NIMS/ICS COMPLIANCE" Style="{StaticResource PanelHeader}" />
+                            <DataGrid ItemsSource="{Binding NimsFigures}" Margin="0,0,0,12" HorizontalAlignment="Left" Width="720">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Area" Binding="{Binding Category}" Width="180" />
+                                    <DataGridTextColumn Header="" Binding="{Binding Amount}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+
                         <!-- Scenario and training (Phase 19) -->
                         <StackPanel Visibility="{Binding HasTraining, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="SCENARIO &amp; TRAINING" Style="{StaticResource PanelHeader}" />

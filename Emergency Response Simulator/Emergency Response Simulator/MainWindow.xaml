@@ -76,6 +76,8 @@
                     <Button Content="🧩 Scenarios" Command="{Binding OpenScenariosCommand}" Margin="0,0,8,0"
                             Visibility="{Binding IsConsoleAvailable, Converter={StaticResource BoolToVisibility}}"
                             ToolTip="Scenario editor: design scenarios with triggers, branches and injects, save them to the library, run them now; difficulty and random events" />
+                    <Button Content="🔗 Standards" Command="{Binding OpenDataExchangeCommand}" Margin="0,0,8,0"
+                            ToolTip="Data standards and NIMS: export or import CAP, EDXL, NIEM and HL7; check the response against NIMS/ICS" />
                     <Button Content="📄 Forms" Command="{Binding OpenFormsCommand}" Margin="0,0,8,0"
                             ToolTip="ICS forms 201–220, the IAP package, situation reports and the decision log" />
                     <Button Content="📊 AAR" Command="{Binding OpenAarCommand}" Margin="0,0,8,0"

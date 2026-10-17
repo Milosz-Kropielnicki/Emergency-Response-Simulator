@@ -36,6 +36,15 @@ public static class SimulationHubProtocol
 
         /// <summary>Live assessment (Phase 11 M6): observers and the instructor.</summary>
         public const string Assessment = "assessment";
+
+        /// <summary>Static GIS layers and spatial queries (Phase 20): the server's database, for clients without one.</summary>
+        public const string Gis = "gis";
+
+        /// <summary>The hazard-dispersion model (Phase 20), through the server.</summary>
+        public const string Plume = "plume";
+
+        /// <summary>Data standards and the NIMS check (Phase 20).</summary>
+        public const string Integration = "integration";
     }
 }
 

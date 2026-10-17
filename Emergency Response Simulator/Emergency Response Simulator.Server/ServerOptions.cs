@@ -1,3 +1,5 @@
+using Emergency_Response_Simulator.Server.Api;
+
 namespace Emergency_Response_Simulator.Server;
 
 /// <summary>Bound from the "Server" configuration section.</summary>
@@ -28,4 +30,10 @@ public sealed class ServerOptions
 
     /// <summary>How long a session's join code lets new people in (participants already in can always come back).</summary>
     public TimeSpan JoinCodeLifetime { get; set; } = TimeSpan.FromHours(12);
+
+    /// <summary>
+    /// Outside systems allowed to use the REST API (Phase 20), each with its key, the role it acts in and whether it may
+    /// feed data in. Empty: the API answers only its index. Like the PIN, keys belong in the server's configuration only.
+    /// </summary>
+    public List<ApiKeyOptions> ApiKeys { get; set; } = [];
 }

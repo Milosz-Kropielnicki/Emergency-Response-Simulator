@@ -8,6 +8,7 @@ using Emergency_Response_Simulator.Simulation.Remote;
 using Emergency_Response_Simulator.Simulation.Scenarios;
 using Emergency_Response_Simulator.Simulation.State;
 using Emergency_Response_Simulator.Simulation.Systems;
+using Emergency_Response_Simulator.Server.Api;
 using Emergency_Response_Simulator.Server.Voice;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.SignalR;
@@ -40,6 +41,12 @@ public sealed class ParticipantRecord
     public bool VoiceConsent { get; set; }
 
     public CommandActor Actor => new(Id, Role, Name);
+
+    /// <summary>
+    /// An outside system calling the REST API (Phase 20) rather than a person: it never holds a role exclusively, never
+    /// counts as filling one, and has no connection to drop.
+    /// </summary>
+    public ApiClient? Api { get; init; }
 }
 
 /// <summary>
@@ -153,6 +160,27 @@ public sealed class SessionRuntime : IAsyncDisposable
     }
 
     // ---- Participants ----
+
+    /// <summary>
+    /// The participant an outside system acts as through the REST API (Phase 20): joined once per API key, the first time
+    /// it touches the session, so what it does is attributed to it in the record like anyone else's commands.
+    /// </summary>
+    public async Task<ParticipantRecord> ExternalAsync(ApiClient client)
+    {
+        ParticipantRecord participant;
+        lock (_lock)
+        {
+            if (_participants.Values.FirstOrDefault(p => p.Api?.Name == client.Name) is { } known) return known;
+            participant = new ParticipantRecord
+            {
+                Id = Guid.NewGuid(), Name = $"{client.Name} (API)", Role = client.Role, Api = client,
+                Token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
+            };
+            _participants[participant.Id] = participant;
+        }
+        await PublishAsync(new ParticipantJoined(participant.Id, participant.Name, participant.Role), participant);
+        return participant;
+    }
 
     /// <summary>The instructor who opened the session joins it first and records that it opened.</summary>
     public async Task<JoinTicket> OpenAsync(string instructorName, string connectionId, bool voiceConsent = false)
@@ -347,7 +375,7 @@ public sealed class SessionRuntime : IAsyncDisposable
                 continue;
             }
             var cop = _services.GetRequiredService<ICopService>();
-            var filled = Participants.Where(p => p.Present).Select(p => p.Role).ToHashSet();
+            var filled = Participants.Where(p => p.Present && p.Api is null).Select(p => p.Role).ToHashSet();
             await Gate.RunAsync(async () =>
             {
                 var items = RoleBriefing.For(handover.Role, cop, filled.Contains);
@@ -386,7 +414,7 @@ public sealed class SessionRuntime : IAsyncDisposable
     }
 
     private ParticipantRecord? HolderOf(UserRole role, Guid? except = null) =>
-        Roles.IsExclusive(role) ? _participants.Values.FirstOrDefault(p => p.Present && p.Role == role && p.Id != except) : null;
+        Roles.IsExclusive(role) ? _participants.Values.FirstOrDefault(p => p.Present && p.Api is null && p.Role == role && p.Id != except) : null;
 
     private JoinTicket TicketFor(ParticipantRecord p) => new(Id, Code, p.Id, p.Token, p.Name, p.Role, p.Truth);
 

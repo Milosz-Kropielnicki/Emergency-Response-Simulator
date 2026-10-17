@@ -214,6 +214,14 @@ These are the parts the simulation plays:
 
 > **Steering tip:** Adaptive difficulty is the instructor's assistant, not a replacement: watch the score in the editor, and if a team is drowning at level 1 hold the script too. For a debrief on scene safety, fire **secondary device** ten minutes after crews arrive, and see whether anyone pulls them back before the fuse runs out.
 
+**Data standards and NIMS** (Phase 20). Open **🔗 Standards** in the header.
+- **Bring outside information in:** a met service warning (CAP), a hospital's bed status (EDXL-HAVE), a neighbouring CAD's incident (NIEM) or a hospital's patient message (HL7). It arrives as information received, as a real one would. Only you can import in a networked session; `standards/samples/` has one of each to try.
+- **Export:** the team's warnings as CAP, hospital availability as HAVE, resource requests as EDXL-RM, a situation report as EDXL-SitRep, the incidents as NIEM, patient notifications as HL7. All are marked as exercise or training traffic.
+- **NIMS/ICS check:** command, span of control, Safety Officer, unified command, ICP and staging, an approved IAP per period, plain language on the radio, and resource typing. The *terminology* tab maps the terms used here (On-Site Co-ordinator, Silver, rendezvous point) to NIMS.
+- **Outside tools:** with an API key in the server's configuration, a dashboard or a CAD bridge can read the exercise over the REST API (`/api/v1`) and, if allowed, feed it. It shows in the session as "*Name* (API)".
+
+> **Steering tip:** An inject arrives through the console, but a document arrives the way a real one would. Import the sample HAVE half an hour in and St. James's goes on diversion. See who notices before the next ambulance is sent there.
+
 **Evacuation, shelter & infrastructure** (Phase 17). The EVAC & INFRA tab is where Operations, Logistics, Liaison, Planning and Safety work it.
 - **Evacuation:** the gardaí report each zone's population, how many are out and when it will be clear. Without a route people go straight out, downwind included. Buses carry those on foot; traffic control points keep the cars moving. Re-entry sends everyone home: if the hazard is still there, or the ground is contaminated, that is recorded.
 - **Rest centres:** a quarter of evacuees (more of the elderly) need one. Until one opens they have nowhere to go, and the desk says so. A centre needs meals, water and bedding from the incident's stock, staff to register people, and security once it fills.
@@ -250,6 +258,7 @@ These are the parts the simulation plays:
    - **Participants:** roles over time, commands, decision ratings, observer ratings, and combined score and level.
    - **Observer notes and Competencies:** each player's ratings by competency area.
    - **Legal & liability:** how many significant decisions were logged with their reasons, and each exposure an inquiry would ask about. Some will be marked mitigated: an evacuation without the Garda, vulnerable people left behind, an unguarded zone, a volunteer hurt, an untrue denial, families waiting over an hour.
+   - **NIMS/ICS compliance (Phase 20):** the score and every gap, advisory and requirement met, each with its NIMS reference. Start with the gaps: an incident without an IC, a supervisor with nine reporting to them, a period running on without an approved plan. Then the ten-codes said on the radio.
    - **Scenario & training (Phase 19):** the difficulty the team reached and every adjustment, the random events they got, and how each incident within the incident ended. Read the other numbers against it: a team at level 4 had a harder session than one at level 2.
    - **Forms (📄 Forms, Phase 18):** before the debrief, export every form for the incident in one document. The decision log and each player's ICS 214 show every order, request and approval they gave, when, in which role, and the reason they logged. A command with no reason is the question to ask. The IAP package's cover shows how the plan changed version by version.
    - **Evacuation, shelter & infrastructure:** for each zone how many really got out and when it was clear; rest centres, registration and shortages; infrastructure failures and gas ignitions; ransomware and GPS; run-off and wildlife. Residents sent home to danger, trains run through it, no boil water notice, and pollution not reported to the EPA show under legal & liability.

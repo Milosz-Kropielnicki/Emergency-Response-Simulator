@@ -262,6 +262,12 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenScenarios() => ScenariosRequested?.Invoke(this, EventArgs.Empty);
 
+    /// <summary>Raised when someone opens data standards and the NIMS check (Phase 20).</summary>
+    public event EventHandler? DataExchangeRequested;
+
+    [RelayCommand]
+    private void OpenDataExchange() => DataExchangeRequested?.Invoke(this, EventArgs.Empty);
+
     /// <summary>Raised when someone opens the ICS forms and documentation (Phase 18).</summary>
     public event EventHandler? FormsRequested;
 

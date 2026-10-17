@@ -413,16 +413,24 @@ public class CommsTests
         Assert.Contains(harness.Cop.Reports, r => r.SourceName == "Language line interpreter (Polish)" && r.Claim.Contains("my mother cannot walk, third floor"));
     }
 
-    [Fact]
-    public async Task People_with_little_English_follow_an_English_only_evacuation_order_less_than_a_multilingual_one()
+    /// <summary>
+    /// The incident id seeds the population (who speaks little English, who complies), so each seed is fixed and both runs
+    /// share it: the same people, differing only in the warnings they get.
+    /// </summary>
+    [Theory]
+    [InlineData("3f1c2a7e-0b5d-4e8a-9c61-2d4f6a8b0c11")]
+    [InlineData("8a2b4c6d-1e3f-4a5b-8c7d-9e0f1a2b3c4d")]
+    [InlineData("c0ffee00-1234-4abc-8def-0123456789ab")]
+    public async Task People_with_little_English_follow_an_English_only_evacuation_order_less_than_a_multilingual_one(string seed)
     {
+        var incident = Guid.Parse(seed);
         async Task<int> StayingAsync(bool multilingual)
         {
             var options = new CivilianOptions { PopulationPerIncident = 300, CarOwnership = 0, LimitedEnglish = 1.0 };
             var harness = new TestHarness(new CivilianSystem(new UniformTerrain(0.2), options));
             if (multilingual)
                 await harness.C2.NotifyAsync("Community translation service", "Evacuation warnings needed in Polish, Portuguese and Romanian");
-            await harness.Truth(new WorldIncidentStarted(Guid.NewGuid(), IncidentType.Other, Dublin, 0.2, 0));
+            await harness.Truth(new WorldIncidentStarted(incident, IncidentType.Other, Dublin, 0.2, 0));
             await harness.RunAsync(TimeSpan.FromSeconds(5));
             var zone = Wgs84.Circle(Dublin, 300);
             await harness.C2.DeclareZoneAsync(ZoneType.EvacuationZone, "Evacuation zone", zone);

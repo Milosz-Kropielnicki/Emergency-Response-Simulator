@@ -42,6 +42,11 @@ public static class CommandAuthorizer
                 throw new HubException("The instructor console is the instructor's.");
             case SimulationHubProtocol.Services.Instructor when session.State == SessionState.Ended && !method.StartsWith("List", StringComparison.Ordinal):
                 throw new HubException("The session has ended.");
+            // Data from outside (Phase 20) comes in through the instructor or a system allowed to feed it, while the exercise runs.
+            case SimulationHubProtocol.Services.Integration when IsImport(method) && !instructor && participant.Api is not { Feed: true }:
+                throw new HubException("Only the instructor or an outside system allowed to feed data can bring data in.");
+            case SimulationHubProtocol.Services.Integration when IsImport(method) && session.State != SessionState.Running:
+                throw new HubException(session.State == SessionState.Lobby ? "The exercise hasn't started yet." : "The session has ended.");
             case SimulationHubProtocol.Services.Aar when !participant.Truth && session.State != SessionState.Ended
                                                          && method is nameof(IAarService.BuildReportAsync) or nameof(IAarService.CompareBranchesAsync):
                 throw new HubException("Only the instructor can open the after-action review until the session has ended.");
@@ -52,10 +57,13 @@ public static class CommandAuthorizer
             throw new HubException(refused.Reason);
     }
 
+    /// <summary>Integration methods that change the picture: imports and feeds, as against exports and checks.</summary>
+    public static bool IsImport(string method) => method is nameof(IIntegrationService.ImportAsync) or nameof(IIntegrationService.FeedPositionsAsync);
+
     /// <summary>The matrix's answer for a role in this session, with the roles held by people present as filled.</summary>
     public static PermissionDecision Decide(SessionRuntime session, UserRole role, Type contract, string method)
     {
-        var filled = session.Participants.Where(p => p.Present).Select(p => p.Role).ToHashSet();
+        var filled = session.Participants.Where(p => p.Present && p.Api is null).Select(p => p.Role).ToHashSet();
         return PermissionMatrix.Decide(role, contract, method, filled.Contains);
     }
 }

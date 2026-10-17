@@ -150,6 +150,8 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
 
     public ObservableCollection<CostRow> TrainingFigures { get; } = [];
     [ObservableProperty] private bool _hasTraining;
+    public ObservableCollection<CostRow> NimsFigures { get; } = [];
+    [ObservableProperty] private bool _hasNims;
 
     [ObservableProperty] private bool _hasCompetencies;
     [ObservableProperty] private string _instructorNote = "";
@@ -388,6 +390,8 @@ public sealed partial class AarViewModel(IAarService aar, SimulationSession sess
         Replace(ProtectionFigures, AarExport.ProtectionLines(report.Protection).Select(l => new CostRow(l.Label, l.Value)));
         HasTraining = report.Training.Any;
         Replace(TrainingFigures, AarExport.TrainingLines(report.Training).Select(l => new CostRow(l.Label, l.Value)));
+        HasNims = report.Nims.Findings.Count > 0;
+        Replace(NimsFigures, AarExport.NimsLines(report.Nims).Select(l => new CostRow(l.Label, l.Value)));
         Replace(LogisticsEvents, logistics.Outages
             .Select(o => (o.From, Row: new AarLogisticsRow(Clock(o.From), $"{Supplies.Name(o.Kind)} ran out", o.Incident,
                 o.To is { } to ? AarAnalyzer.Duration(to - o.From) : "to the end",

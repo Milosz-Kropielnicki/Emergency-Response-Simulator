@@ -32,6 +32,7 @@ namespace Emergency_Response_Simulator
             viewModel.AarRequested += (_, _) => ShowAar(services);
             viewModel.FormsRequested += (_, _) => ShowForms(services);
             viewModel.ScenariosRequested += (_, _) => ShowScenarios(services);
+            viewModel.DataExchangeRequested += (_, _) => ShowDataExchange(services);
             viewModel.ConsoleRequested += (_, _) => ShowConsole(services);
             // Push-to-talk (Phase 11 M7): held down, the radio transmits; anywhere in the window, even while typing.
             PreviewKeyDown += async (_, e) =>
@@ -105,6 +106,25 @@ namespace Emergency_Response_Simulator
                 if (_scenarioWindow.WindowState == WindowState.Minimized)
                     _scenarioWindow.WindowState = WindowState.Normal;
                 _scenarioWindow.Activate();
+            }
+        }
+
+        private DataExchangeWindow? _dataExchangeWindow;
+
+        /// <summary>One data-standards window; asking again brings it to the front (Phase 20).</summary>
+        private void ShowDataExchange(IServiceProvider services)
+        {
+            if (_dataExchangeWindow is null)
+            {
+                _dataExchangeWindow = new DataExchangeWindow(services.GetRequiredService<DataExchangeViewModel>()) { Owner = this };
+                _dataExchangeWindow.Closed += (_, _) => _dataExchangeWindow = null;
+                _dataExchangeWindow.Show();
+            }
+            else
+            {
+                if (_dataExchangeWindow.WindowState == WindowState.Minimized)
+                    _dataExchangeWindow.WindowState = WindowState.Normal;
+                _dataExchangeWindow.Activate();
             }
         }
 

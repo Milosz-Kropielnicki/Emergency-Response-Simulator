@@ -2,6 +2,7 @@ using Emergency_Response_Simulator.Core.Events;
 using Emergency_Response_Simulator.Data;
 using Emergency_Response_Simulator.Simulation.EventStore;
 using Emergency_Response_Simulator.Simulation.Remote;
+using Emergency_Response_Simulator.Server.Api;
 using Emergency_Response_Simulator.Server.Voice;
 using Microsoft.Extensions.Options;
 
@@ -35,6 +36,7 @@ public static class ServerHost
         builder.Services.AddSingleton<SessionManager>();
         builder.Services.AddSingleton<CommandDispatcher>();
         builder.Services.AddHostedService<Broadcaster>();
+        builder.Services.AddSingleton<ApiKeys>(); // the REST API's callers (Phase 20)
 
         // Voice (Phase 11 M7): recordings on disk with a retention period; Whisper transcription when its model is there.
         builder.Services.Configure<VoiceOptions>(builder.Configuration.GetSection(VoiceOptions.SectionName));
@@ -51,11 +53,13 @@ public static class ServerHost
         var app = builder.Build();
         app.UseWebSockets();
         app.MapHub<SimulationHub>(SimulationHubProtocol.Path);
+        app.MapErsApi();
         app.MapGet("/", (SessionManager sessions) => Results.Text(
             "Emergency Response Simulator server.\n" + string.Join('\n', sessions.All.Select(s =>
                 $"{s.Title} [{s.State}] code {s.Code}: {s.Participants.Count(p => p.Present)} participant(s)"))));
-        app.Logger.LogInformation("Simulation server: event store {Store}; clients connect to {Path}",
-            inMemory ? "in-memory (development)" : "PostgreSQL", SimulationHubProtocol.Path);
+        app.Logger.LogInformation("Simulation server: event store {Store}; clients connect to {Path}; REST API at {Api} ({Keys} key(s))",
+            inMemory ? "in-memory (development)" : "PostgreSQL", SimulationHubProtocol.Path, ApiEndpoints.Base,
+            app.Services.GetRequiredService<IOptions<ServerOptions>>().Value.ApiKeys.Count);
         return app;
     }
 }
